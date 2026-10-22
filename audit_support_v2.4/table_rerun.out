@@ -1,0 +1,14 @@
+{"N": 600, "class_band": 0.03, "EVPI_U": 288723, "act_at_mu": [0.0, 0.0], "act_lo": [1.0, -3.0], "act_hi": [0.0, 0.0]}
+{"N": 4000, "class_band": 0.03, "EVPI_U": 1924817, "act_at_mu": [0.0, 0.0], "act_lo": [1.0, -3.0], "act_hi": [0.0, 0.0]}
+{"N": 600, "class_band": 0.1, "EVPI_U": 685086, "act_at_mu": [0.0, 2.0], "act_lo": [0.0, -3.0], "act_hi": [0.0, 1.0]}
+{"N": 4000, "class_band": 0.1, "EVPI_U": 4567240, "act_at_mu": [0.0, 2.0], "act_lo": [0.0, -3.0], "act_hi": [0.0, 1.0]}
+{"N": 600, "class_band": 1.0, "EVPI_U": 1523168, "act_at_mu": [4.0, 7.0], "act_lo": [0.0, -3.0], "act_hi": [6.0, 8.0]}
+{"N": 4000, "class_band": 1.0, "EVPI_U": 10154452, "act_at_mu": [4.0, 7.0], "act_lo": [0.0, -3.0], "act_hi": [6.0, 8.0]}
+{"band": 0.03, "N": 600, "class_sq": 126.0, "EVPI": 288723, "bestD": 4, "bestK": 1, "se": 1.02, "EVSI": 154, "cost": 294336, "ops": 25000.0, "net": -319182.0, "ratio": 0.0, "old_mde_3cyc": 2.01, "old_verdict": "Recommend"}
+{"band": 0.03, "N": 1000, "class_sq": 210.0, "EVPI": 481204, "bestD": 4, "bestK": 1, "se": 0.79, "EVSI": 2889, "cost": 490560, "ops": 25000.0, "net": -512671.0, "ratio": 0.01, "old_mde_3cyc": 1.56, "old_verdict": "Recommend"}
+{"band": 0.03, "N": 2000, "class_sq": 420.0, "EVPI": 962409, "bestD": 4, "bestK": 1, "se": 0.56, "EVSI": 47860, "cost": 981120, "ops": 25000.0, "net": -958260.0, "ratio": 0.05, "old_mde_3cyc": 1.1, "old_verdict": "Recommend"}
+{"band": 0.03, "N": 4000, "class_sq": 840.0, "EVPI": 1924817, "bestD": 4, "bestK": 1, "se": 0.4, "EVSI": 297318, "cost": 1962240, "ops": 25000.0, "net": -1689922.0, "ratio": 0.15, "old_mde_3cyc": 0.78, "old_verdict": "Recommend"}
+{"band": 0.1, "N": 600, "class_sq": 126.0, "EVPI": 685086, "bestD": 4, "bestK": 1, "se": 1.02, "EVSI": 7365, "cost": 294336, "ops": 25000.0, "net": -311971.0, "ratio": 0.02, "old_mde_3cyc": 2.01, "old_verdict": "Recommend"}
+{"band": 0.1, "N": 1000, "class_sq": 210.0, "EVPI": 1141810, "bestD": 4, "bestK": 1, "se": 0.79, "EVSI": 54141, "cost": 490560, "ops": 25000.0, "net": -461419.0, "ratio": 0.11, "old_mde_3cyc": 1.56, "old_verdict": "Recommend"}
+{"band": 0.1, "N": 2000, "class_sq": 420.0, "EVPI": 2283620, "bestD": 4, "bestK": 1, "se": 0.56, "EVSI": 395414, "cost": 981120, "ops": 25000.0, "net": -610706.0, "ratio": 0.39, "old_mde_3cyc": 1.1, "old_verdict": "Recommend"}
+{"band": 0.1, "N": 4000, "class_sq": 840.0, "EVPI": 4567240, "bestD": 4, "bestK": 1, "se": 0.4, "EVSI": 1706922, "cost": 1962240, "ops": 25000.0, "net": -280318.0, "ratio": 0.86, "old_mde_3cyc": 0.78, "old_verdict": "Recommend"}

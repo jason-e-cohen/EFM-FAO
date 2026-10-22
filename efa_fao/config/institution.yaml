@@ -1,0 +1,39 @@
+# Institution configuration (synthetic archetype: "Lakeshore College", a small private).
+# Every value here is an input a real engagement would supply through the data request.
+institution:
+  id: lakeshore-synthetic
+  name: Lakeshore College (synthetic)
+  is_synthetic: true
+cycle:
+  historical_cohorts: [2022, 2023, 2024, 2025, 2026]
+  live_cohort: 2027
+  holdout_cohort: 2026          # time-split backtest: fit on earlier cohorts, evaluate on this one
+pricing:
+  tuition_fees:
+    2022: 32400
+    2023: 33400
+    2024: 34400
+    2025: 35400
+    2026: 36500
+    2027: 37600
+  room_board: 12500
+aid_policy:
+  discretionary_step: 1000
+  discretionary_max: 12000
+  max_total_institutional_discount: 0.75   # cap on institutional gift aid as a share of tuition
+  max_cut_per_student_k: 3                 # guardrail: no student's discretionary award falls by more than $3,000
+  merit_grid_ftf:                          # hs_gpa lower bound -> annual award
+    - [3.90, 16000]
+    - [3.70, 14000]
+    - [3.50, 12000]
+    - [3.20, 9000]
+    - [0.00, 5000]
+objective:
+  persistence_years: 4
+privacy:
+  min_cell_size: 10          # suppress any aggregate cell with fewer students
+  protected_attributes: [race_ethnicity, gender]   # audit only; never model inputs for allocation
+experiment:
+  price_test_cohorts: [2023, 2024, 2025, 2026]
+  share_of_eligible: 0.40
+  offsets_usd: [0, 1000, 2000, 3000, 4000]         # positive-only "bonus aid" design

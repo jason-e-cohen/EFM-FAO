@@ -1,0 +1,7 @@
+.DS_Store
+__pycache__/
+*.pyc
+efa_fao/data/synthetic/*.csv
+efa_fao/outputs/
+.venv/
+.pytest_cache/

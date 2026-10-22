@@ -1,0 +1,8 @@
+category,match_patterns_pipe_separated,legacy_equivalent,definition,precedence
+Application-originated,(first_touch_is_application=true),Application,Stealth applicants. Excluded from inquiry-to-application models; included from the admit stage on.,1
+Event or visit,College Fair|Campus Visit|Preview Day|Open House|Tour|Experience Day|Super Saturday|Twilight|Virtual - |High School Visit|Group Visit|Admitted Student|Honors Preview|Scholarship Day|NACAC|OACAC|Comm College Grad|Transfer Fair,Event/Visit,Contact made in person or in a scheduled virtual event.,2
+Inquiry form,"Request for Information|RFI|Landing Page|Web Prospect|Web, Inquiry|Web create account|Net Price Calculator|Scholarship Calculator|Inquiry Card|Facebook Lead|Linkedin|Niche Inquir|Email|Person Record Creation|Master Campus Visit Form",Inquiry/Form,Student-initiated form or digital inquiry.,3
+Referral,Referral|Alumni Referral|Walk-In|Phone Call|Recruiter|Agent|Advising Appointment|Individual Recruitment,Referral/Meeting,Person-to-person contact or counselor referral.,4
+Test-score search,ACT|NRCCUA|Collegeboard Search|College Board|PSAT|SAT Tape|Search Tape|EOS|Test Score Import|TOEFL|Accuplacer|Search Responder,Vendor (score-based),Names bought from test-score searches or responses to those searches.,5
+Purchased list,Encoura|Hobsons|Chegg|Cappex|Campus Explorer|Zinch|CollegeFish|Scoir|Parchment|Niche Lead Delivery|Name Buy|Student Paths|PLAN General|Education Index|Study International,Vendor (other),Names or leads bought from other vendors and aggregators.,6
+Other,(anything unmapped),Other,Unmapped sources go to a review queue; the taxonomy version increments when they are resolved.,9

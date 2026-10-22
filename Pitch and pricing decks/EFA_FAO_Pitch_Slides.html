@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>Frankel Higher Ed — Enrollment Funnel Analysis + Financial Aid Optimization</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @page { size: 1280px 720px; margin: 0; }
+  body { width: 1280px; font-family: Arial, Helvetica, sans-serif; background: #f0f0f0; color: #444; }
+  @media print { body { background: #fff; } .slide { margin-bottom: 0 !important; page-break-after: always; } }
+
+  :root { --navy:#1B3A6B; --gold:#C8A84B; --gold-light:#f5ead0; --gold-dark:#9b7c2a; --line:#e5e5e5; --ink:#444; --muted:#888; }
+
+  .slide { width:1280px; height:720px; background:#fff; display:flex; flex-direction:column; overflow:hidden; margin-bottom:2px; position:relative; }
+  .accent-bar { height:5px; background:var(--navy); flex-shrink:0; }
+  .header-row { display:flex; align-items:center; justify-content:space-between; padding:14px 44px 10px; flex-shrink:0; }
+  .breadcrumb { font-size:10px; font-weight:700; letter-spacing:.15em; color:#aaa; text-transform:uppercase; }
+  .breadcrumb strong { color:var(--navy); }
+  .badge { background:#E8C84A; padding:7px 20px; font-size:11px; font-weight:800; letter-spacing:.06em; color:var(--navy); text-transform:uppercase; }
+  .title { font-size:28px; font-weight:800; color:var(--navy); padding:0 44px 4px; letter-spacing:-.02em; line-height:1.15; flex-shrink:0; }
+  .sub { font-size:11px; font-weight:700; letter-spacing:.13em; color:var(--gold); text-transform:uppercase; padding:2px 44px 14px; flex-shrink:0; }
+
+  .footer { height:34px; display:flex; align-items:center; justify-content:space-between; padding:0 44px; border-top:1px solid var(--line); flex-shrink:0; margin-top:auto; }
+  .footer-left, .footer-right { font-size:9px; color:#bbb; letter-spacing:.06em; }
+  .footer-center { font-size:11px; font-weight:800; color:var(--navy); }
+
+  .lbl { font-size:10px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:var(--gold-dark); margin-bottom:4px; }
+  ul.b { list-style:none; }
+  ul.b li { font-size:13px; line-height:1.4; padding:2.5px 0 2.5px 16px; position:relative; color:var(--ink); }
+  ul.b li::before { content:"•"; position:absolute; left:0; color:var(--navy); font-weight:800; }
+  ul.b li strong { color:var(--navy); }
+
+  /* ---------- Slide 1 ---------- */
+  .panels { display:flex; align-items:stretch; gap:0; padding:0 44px; flex:1; min-height:0; }
+  .panel { flex:1; border:1px solid var(--line); display:flex; flex-direction:column; min-width:0; }
+  .panel-head { padding:12px 20px; }
+  .panel-head.navy { background:var(--navy); color:#fff; }
+  .panel-head.gold { background:var(--gold); color:var(--navy); }
+  .panel-tag { font-size:10px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; opacity:.9; }
+  .panel-q { font-size:18px; font-weight:800; line-height:1.2; margin-top:4px; letter-spacing:-.01em; }
+  .panel-body { padding:14px 20px; display:flex; flex-direction:column; gap:12px; flex:1; }
+  .connector { width:40px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; }
+  .connector .ar { font-size:34px; line-height:1; color:var(--gold); font-weight:800; }
+  .connector .tx { font-size:8.5px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--gold-dark); writing-mode:vertical-rl; transform:rotate(180deg); }
+
+  .stages { display:flex; }
+  .stage { flex:1; text-align:center; font-size:12px; font-weight:800; padding:8px 4px; color:#fff; margin-left:-6px;
+           clip-path:polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%); }
+  .stage:first-child { margin-left:0; clip-path:polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%); }
+  .s1 { background:#1B3A6B; } .s2 { background:#2c5189; } .s3 { background:#4a6ea5; } .s4 { background:#C8A84B; color:var(--navy); }
+
+  .receive { background:var(--gold-light); border-left:4px solid var(--gold); padding:10px 14px; margin-top:auto; }
+  .receive .lbl { margin-bottom:3px; }
+  .receive ul.b li { padding:2px 0 2px 16px; }
+  .note { background:#f7f8fb; border:1px solid #e3e7ef; padding:8px 12px; font-size:12.5px; line-height:1.4; color:var(--ink); }
+  .note strong { color:var(--navy); }
+
+  .why { margin:14px 44px; background:var(--navy); color:#fff; padding:12px 22px; display:flex; align-items:center; gap:22px; flex-shrink:0; }
+  .why .k { font-size:10px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; color:#E8C84A; white-space:nowrap; }
+  .why .items { display:flex; gap:26px; flex:1; }
+  .why .it { flex:1; font-size:12.5px; line-height:1.35; }
+  .why .it strong { color:#E8C84A; display:block; font-size:11px; letter-spacing:.04em; margin-bottom:1px; }
+
+  /* ---------- Slide 2 ---------- */
+  .cols { display:flex; gap:22px; padding:0 44px; flex:1; min-height:0; }
+  .left { flex:0 0 640px; display:flex; flex-direction:column; gap:12px; }
+  .right { flex:1; display:flex; flex-direction:column; gap:12px; min-width:0; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .dg { border:1px solid var(--line); border-top:3px solid var(--navy); padding:10px 14px; }
+  .dg.g { border-top-color:var(--gold); }
+  .dg h4 { font-size:12.5px; font-weight:800; color:var(--navy); margin-bottom:4px; }
+  .dg p { font-size:12px; line-height:1.45; color:var(--ink); }
+  .decide { background:var(--gold-light); border-left:4px solid var(--gold); padding:10px 14px; }
+  .decide p { font-size:12.5px; line-height:1.45; color:var(--ink); }
+  .decide strong { color:var(--navy); }
+  .rc { border:1px solid var(--line); padding:12px 16px; }
+  .rc.navy { border-top:4px solid var(--navy); }
+  .rc.gold { border-top:4px solid var(--gold); }
+  .rc h4 { font-size:14.5px; font-weight:800; color:var(--navy); margin-bottom:4px; letter-spacing:-.01em; }
+  .rc ul.b li { font-size:12.5px; padding:2px 0 2px 16px; }
+
+  .safe { margin:14px 44px; border-left:4px solid var(--gold); background:#fafafa; padding:10px 18px; display:flex; gap:20px; align-items:center; flex-shrink:0; }
+  .safe .k { font-size:10px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:var(--navy); white-space:nowrap; }
+  .safe .txt { font-size:12.5px; line-height:1.45; color:var(--ink); }
+  .safe .txt strong { color:var(--navy); }
+</style>
+</head>
+<body>
+
+<!-- ================= SLIDE 1 ================= -->
+<section class="slide">
+  <div class="accent-bar"></div>
+  <div class="header-row">
+    <div class="breadcrumb"><strong>Frankel Higher Ed</strong> &nbsp;/&nbsp; Enrollment Strategy</div>
+    <div class="badge">EFA + FAO</div>
+  </div>
+  <div class="title">From &ldquo;where do we lose students?&rdquo; to &ldquo;where should the next aid dollar go?&rdquo;</div>
+  <div class="sub">Enrollment Funnel Analysis, then Financial Aid Optimization: a two-phase engagement</div>
+
+  <div class="panels">
+    <!-- Phase 1 -->
+    <div class="panel">
+      <div class="panel-head navy">
+        <div class="panel-tag">Phase 1 &middot; Enrollment Funnel Analysis (EFA) &middot; 8&ndash;10 weeks</div>
+        <div class="panel-q">Who progresses, what predicts it, and who is likely to enroll?</div>
+      </div>
+      <div class="panel-body">
+        <div class="stages">
+          <div class="stage s1">Prospect / Inquiry</div>
+          <div class="stage s2">Applicant</div>
+          <div class="stage s3">Admitted</div>
+          <div class="stage s4">Enrolled</div>
+        </div>
+        <div>
+          <div class="lbl">Questions we answer</div>
+          <ul class="b">
+            <li>Which students and subgroups are most likely to progress to enrollment?</li>
+            <li>Which characteristics and behaviors best predict progress at each stage?</li>
+            <li>Which activities or incentives correlate with progress?</li>
+            <li>How likely is each student in today&rsquo;s funnel to enroll?</li>
+          </ul>
+        </div>
+        <div class="receive">
+          <div class="lbl">You receive</div>
+          <ul class="b">
+            <li><strong>Live dashboard</strong> with full descriptive analysis of your data</li>
+            <li><strong>What-if tests and scenario planning</strong> tied to your institutional goals</li>
+            <li><strong>Likelihood-to-enroll scoring</strong> in scheduled batches, plus regression output</li>
+            <li><strong>Executive-style report</strong> follows the dashboard: findings and recommendations</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><div class="ar">&rsaquo;</div><div class="tx">builds on Phase 1</div></div>
+
+    <!-- Phase 2 -->
+    <div class="panel">
+      <div class="panel-head gold">
+        <div class="panel-tag">Phase 2 &middot; Financial Aid Optimization (FAO) &middot; 4&ndash;6 weeks</div>
+        <div class="panel-q">How should we allocate aid to maximize enrollment?</div>
+      </div>
+      <div class="panel-body">
+        <div class="note"><strong>Standalone follow-on.</strong> Extends the Phase 1 regression to isolate how sensitive specific types of students are to aid offers.</div>
+        <div>
+          <div class="lbl">Questions we answer</div>
+          <ul class="b">
+            <li>How do aid packages, types, and amounts affect enrollment decisions?</li>
+            <li>How should we allocate aid dollars to maximize enrollment for a set budget?</li>
+            <li>Which student groups respond most to aid, and which least?</li>
+          </ul>
+        </div>
+        <div class="receive">
+          <div class="lbl">You receive</div>
+          <ul class="b">
+            <li><strong>Aid optimized for the outcome you choose:</strong> net tuition revenue, win-optimization for key audiences, year-over-year gains among targets, and more</li>
+            <li><strong>What-if tests and aid scenarios</strong> on the same live dashboard</li>
+            <li><strong>Executive-style report</strong> with key findings and recommendations</li>
+            <li><strong>Optional:</strong> suggested optimal package and enrollment probability for each student, in batches</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="why">
+    <div class="k">Why it pays</div>
+    <div class="items">
+      <div class="it"><strong>Understand the drivers</strong>Grow the share of prospects who apply and enroll</div>
+      <div class="it"><strong>Target recruitment</strong>Likelihood scores point staff to the students who most need attention</div>
+      <div class="it"><strong>Plan for the long term</strong>Longitudinal enrollment trends guide recruitment volume</div>
+      <div class="it"><strong>Make each dollar count</strong>Aid optimized for your goals: revenue, key audiences, or year-over-year gains</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-left">frankelagency.com</div>
+    <div class="footer-center">Frankel:</div>
+    <div class="footer-right">1</div>
+  </div>
+</section>
+
+<!-- ================= SLIDE 2 ================= -->
+<section class="slide">
+  <div class="accent-bar" style="background:var(--gold)"></div>
+  <div class="header-row">
+    <div class="breadcrumb"><strong>Frankel Higher Ed</strong> &nbsp;/&nbsp; Enrollment Strategy</div>
+    <div class="badge" style="background:var(--gold-light);color:var(--gold-dark)">Scope + data</div>
+  </div>
+  <div class="title">Scoped to your institution: what we need, and what you get</div>
+  <div class="sub">Student-level data for the 3&ndash;5 most recent years, plus a data dictionary defining every variable and value</div>
+
+  <div class="cols">
+    <div class="left">
+      <div class="grid">
+        <div class="dg">
+          <h4>Institutional data</h4>
+          <p>Student ID &middot; source and date of each inquiry activity &middot; application date &middot; intended or actual term &middot; final admission status &middot; final enrollment status &middot; program &middot; transfer status &middot; student level &middot; athletics</p>
+        </div>
+        <div class="dg">
+          <h4>Student characteristics</h4>
+          <p>Residency &middot; gender &middot; race/ethnicity &middot; age or date of birth &middot; first-generation status &middot; veteran or active-military status</p>
+        </div>
+        <div class="dg">
+          <h4>Academic data</h4>
+          <p>Undergraduate: high school GPA, SAT/ACT, transfer GPA &middot; Graduate: undergraduate GPA, GMAT/GRE</p>
+        </div>
+        <div class="dg g">
+          <h4>Student financial data</h4>
+          <p>FAFSA applied and verification status &middot; income or expected family contribution &middot; aid by type and source: federal grants, Pell, loans, institutional and private scholarships, work-study</p>
+        </div>
+      </div>
+      <div class="decide">
+        <div class="lbl">Decide before we scope</div>
+        <p><strong>How should records be grouped into funnel levels?</strong> Which variable holds final admission status, and how should each category be classified? For example, is &ldquo;Applied Withdrawn&rdquo; an accepted applicant or a denied one? Settling this up front keeps the timeline on track.</p>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="rc navy">
+        <h4>Standard scope</h4>
+        <ul class="b">
+          <li>One student level and type: undergraduate or graduate; freshman or transfer</li>
+          <li>Live dashboard, executive-style report, regression output, and scheduled batch scoring of new records</li>
+        </ul>
+      </div>
+      <div class="rc gold">
+        <h4>Available as follow-on projects</h4>
+        <ul class="b">
+          <li>Financial Aid Optimization (Phase 2)</li>
+          <li>An additional student level or type</li>
+          <li>Longitudinal or in-depth descriptive analysis; geographic analysis; predictive tools</li>
+        </ul>
+      </div>
+      <div class="rc">
+        <h4>Tailored to your institution type</h4>
+        <ul class="b">
+          <li>Open-admissions community colleges, graduate enrollment processes, and other school types each get their own treatment</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="safe">
+    <div class="k">Responsible by design</div>
+    <div class="txt"><strong>Privacy:</strong> hashed student IDs, no names or contact details, and aggregate-only reporting with small cells suppressed. <strong>Aid guardrails:</strong> recommendations stay within the range the evidence supports, no cuts to offers already communicated, and an equity audit with your approval before anything is final.</div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-left">frankelagency.com</div>
+    <div class="footer-center">Frankel:</div>
+    <div class="footer-right">2</div>
+  </div>
+</section>
+
+</body>
+</html>

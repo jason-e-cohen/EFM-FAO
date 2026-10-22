@@ -1,0 +1,72 @@
+table,field,type,required,description,allowed_values_or_notes
+students,student_key,text,Y,"Opaque person key. Client hashes the institutional ID with a salt the client keeps; we never receive names, emails, or raw IDs.",Stable across files and terms
+students,cohort,int,Y,Intended entry year (fall term year for fall entrants).,Four-digit year
+students,entry_term,text,Y,Intended entry term.,"Fall, Spring, Summer"
+students,student_type,text,Y,First-time freshman or transfer. Other types go to separate files.,First-time freshman; Transfer; Other (excluded)
+students,residency,text,Y,Residency for tuition purposes at the time of admission.,In-state; Out-of-state; International; Unknown
+students,region_code,text,Y,State plus first three ZIP digits (ZIP3). Never full ZIP.,e.g. MI-494
+students,first_touch_source_raw,text,Y,Raw origin source label for the earliest recorded contact.,Free text; we map it with the source taxonomy
+students,first_touch_date,date,Y,"Date of earliest recorded contact (converted to days before term start, then dropped).",Must be on or before inquiry_date
+students,first_touch_is_application,bool,Y,True when the application is the first recorded contact (stealth applicant).,Needed to separate stealth applicants from inquiry converters
+students,inquiry_date,date,Y,Date the person became a prospect or inquiry.,Blank only if first_touch_is_application
+students,application_start_date,date,N,Date application was started.,
+students,application_submit_date,date,Y,Date application was submitted (complete).,Blank if never submitted
+students,admit_decision,text,Y,Final admission decision at the term census.,Admitted; Denied; Withdrawn before decision; Incomplete
+students,admit_decision_date,date,Y,Date of the admission decision.,
+students,deposit_date,date,Y,Date enrollment deposit was received.,Blank if no deposit
+students,enrolled_census,bool,Y,Enrolled at the official census date of the entry term.,Single definition of 'enrolled' for all cohorts
+students,withdrawal_date,date,N,"Date of withdrawal before census, if any.",Supports melt analysis
+students,retained_y2,bool,Y,Enrolled at census of the next fall term.,Needed for multi-year NTR; blank for current cohort
+students,retained_y3,bool,N,Enrolled at census two falls later.,
+students,campus_visit_count,int,Y,Number of recorded campus visits before the admit decision.,Counts before the decision date only
+students,event_attended_count,int,N,Number of recorded events attended before the decision date.,
+students,engagement_touches,int,Y,"Count of meaningful two-way contacts (calls, meetings, replies) before the decision date.",Define in the data request call; exclude mass email opens
+students,intended_program,text,Y,Intended major or program at application.,Plus a mapping to broad program areas
+students,hs_gpa,decimal,Y,High school GPA on a 4.0 scale as used for merit awards.,State weighted or unweighted in hs_gpa_type
+students,hs_gpa_type,text,Y,Weighted or unweighted.,
+students,act_composite,int,N,Best ACT composite. Blank if not submitted.,Do not impute
+students,sat_total,int,N,Best SAT total. We convert with the official concordance. Blank if not submitted.,Do not impute
+students,test_optional_flag,bool,Y,Applied under a test-optional policy.,
+students,transfer_gpa,decimal,N,Cumulative GPA at prior institutions (transfers).,
+students,transfer_credits,int,N,Credits accepted at admission (transfers).,
+students,first_gen,bool,Y,First-generation status; blank if unknown (do not code unknown as No).,
+students,race_ethnicity,text,Y,"IPEDS categories. Used for equity audit only, never as a model input for aid allocation.",IPEDS 2-digit categories plus Unknown
+students,gender,text,N,As recorded. Audit only.,
+students,athlete_recruited,bool,Y,Recruited athlete flag.,
+students,sport,text,N,Sport for recruited athletes.,
+students,military_status,text,N,Veteran or active military.,
+students,legacy_status,bool,N,Alumni family connection.,
+fafsa,student_key,text,Y,Same key as students.,
+fafsa,fafsa_received_date,date,Y,Date the first FAFSA record arrived.,Blank if none
+fafsa,need_index_value,int,Y,EFC (aid years through 2023-24) or SAI (2024-25 and later).,SAI can be negative; keep the sign
+fafsa,need_index_type,text,Y,EFC or SAI.,Both indexes are not comparable without this label
+fafsa,dependency_status,text,N,Dependent or independent.,
+fafsa,verification_flag,bool,N,Selected for verification.,
+fafsa,pell_eligible,bool,N,Federal Pell eligibility as packaged.,
+aid_offers,student_key,text,Y,Same key as students.,"One row per student, fund, and package version"
+aid_offers,aid_year,text,Y,Aid year.,e.g. 2026-27
+aid_offers,fund_code,text,Y,Institution's fund code.,Client provides a fund-code crosswalk
+aid_offers,component,text,Y,Standard component we map the fund code to.,inst_merit; inst_need; inst_athletic; inst_discretionary; inst_other; state_grant; pell; seog; external_scholarship; sub_loan; unsub_loan; parent_plus; work_study
+aid_offers,aid_category,text,Y,Gift or self-help.,Grants and scholarships are gift; loans and work-study are self-help
+aid_offers,funding_source,text,Y,"Institutional, federal, state, external.",
+aid_offers,offered_amount,decimal,Y,Annual amount offered.,Never blank; zero if not awarded
+aid_offers,offer_date,date,Y,Date this amount was first communicated to the student.,Required to exclude aid that was not known at the decision date
+aid_offers,package_version,int,Y,Package revision number (1 = first offer).,"Keep every version, not just the final one"
+aid_offers,accepted_amount,decimal,N,Amount the student accepted.,Post-decision; excluded from price models
+aid_offers,disbursed_amount,decimal,N,Amount disbursed.,Post-enrollment; excluded from price models
+aid_offers,renewable_flag,bool,N,Award renews with conditions.,
+aid_offers,renewal_conditions,text,N,GPA or credit requirements.,
+price_test,student_key,text,Y,Same key as students.,Only if a price test was run
+price_test,assignment_date,date,Y,Date the random assignment was made.,
+price_test,arm_offset_usd,int,Y,Bonus aid added to the discretionary award for this student.,"Positive-only design: 0, 1000, 2000, 3000, 4000"
+price_test,randomization_batch,text,Y,Batch label and seed record.,Documented before outcomes were known
+pricing,cohort,int,Y,Entry year.,
+pricing,tuition_fees,decimal,Y,Published tuition and mandatory fees by residency.,One row per residency group if different
+pricing,room_board,decimal,Y,Standard on-campus room and board.,
+pricing,other_coa,decimal,N,"Books, transportation, personal.",
+aid_policy,cohort,int,Y,Entry year the policy applies to.,
+aid_policy,merit_grid,json,Y,"Merit award grid: thresholds (GPA, test) and annual amounts, with effective dates.",Needed for regression discontinuity
+aid_policy,need_grant_formula,text,Y,How institutional need grants are computed.,
+aid_policy,discretionary_budget,decimal,Y,Annual discretionary aid budget and the rules for appeals.,
+aid_policy,discount_rate_target,decimal,N,Board or president target for institutional discount rate.,
+aid_policy,class_size_target,int,Y,Target new-student headcount by student type.,

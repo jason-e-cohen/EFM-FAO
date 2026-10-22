@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>Frankel Higher Ed — Enrollment Funnel Analysis + Financial Aid Optimization</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  @page { size:1280px 720px; margin:0; }
+  body { width:1280px; font-family:Arial, Helvetica, sans-serif; background:#f0f0f0; color:#444; }
+  @media print { body { background:#fff; } .slide { margin-bottom:0 !important; page-break-after:always; } }
+
+  :root { --navy:#1B3A6B; --navy2:#2c5189; --navy3:#4a6ea5; --gold:#C8A84B; --gold-l:#f5ead0; --gold-d:#9b7c2a; --line:#e5e5e5; --ink:#444; --muted:#888; --bg:#f7f8fb; --bg-line:#e3e7ef; }
+
+  .slide { width:1280px; height:720px; background:#fff; display:flex; flex-direction:column; overflow:hidden; margin-bottom:2px; position:relative; }
+  .accent { height:5px; background:var(--navy); flex-shrink:0; }
+  .accent.g { background:var(--gold); }
+  .hdr { display:flex; align-items:center; justify-content:space-between; padding:14px 44px 10px; flex-shrink:0; }
+  .crumb { font-size:10px; font-weight:700; letter-spacing:.15em; color:#aaa; text-transform:uppercase; }
+  .crumb strong { color:var(--navy); }
+  .badge { background:#E8C84A; padding:7px 20px; font-size:11px; font-weight:800; letter-spacing:.06em; color:var(--navy); text-transform:uppercase; }
+  .badge.l { background:var(--gold-l); color:var(--gold-d); }
+  .title { font-size:28px; font-weight:800; color:var(--navy); padding:0 44px 4px; letter-spacing:-.02em; line-height:1.15; flex-shrink:0; }
+  .sub { font-size:11px; font-weight:700; letter-spacing:.13em; color:var(--gold); text-transform:uppercase; padding:2px 44px 16px; flex-shrink:0; }
+  .body { flex:1; min-height:0; padding:0 44px 16px; display:flex; flex-direction:column; gap:16px; }
+  .foot { height:34px; display:flex; align-items:center; justify-content:space-between; padding:0 44px; border-top:1px solid var(--line); flex-shrink:0; }
+  .foot .l, .foot .r { font-size:9px; color:#bbb; letter-spacing:.06em; }
+  .foot .c { font-size:11px; font-weight:800; color:var(--navy); }
+
+  .lbl { font-size:10px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:var(--gold-d); margin-bottom:5px; }
+  h3 { font-size:16px; font-weight:800; color:var(--navy); line-height:1.2; letter-spacing:-.01em; }
+  p.t { font-size:13.5px; line-height:1.45; color:var(--ink); }
+  p.t strong, li strong { color:var(--navy); }
+  ul.b { list-style:none; }
+  ul.b li { font-size:13.5px; line-height:1.45; padding:3px 0 3px 17px; position:relative; }
+  ul.b li::before { content:"•"; position:absolute; left:0; color:var(--navy); font-weight:800; }
+  .note { font-size:11.5px; color:var(--muted); font-style:italic; line-height:1.4; }
+  .band { background:var(--navy); color:#fff; padding:12px 22px; display:flex; align-items:center; gap:20px; flex-shrink:0; }
+  .band .k { font-size:10px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; color:#E8C84A; white-space:nowrap; }
+  .band .x { font-size:14px; line-height:1.4; }
+  .tag { white-space:nowrap; display:inline-block; font-size:9.5px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; padding:3px 8px; background:var(--gold-l); color:var(--gold-d); }
+  .tag.n { background:#e6ebf4; color:var(--navy); }
+
+  /* S1 */
+  .steps { display:flex; gap:0; flex:1; min-height:0; }
+  .st { flex:1; border:1px solid var(--line); border-top:4px solid var(--navy); padding:16px 16px 14px; margin-left:-1px; display:flex; flex-direction:column; gap:8px; position:relative; }
+  .st:first-child { margin-left:0; }
+  .st.g { border-top-color:var(--gold); }
+  .st .num { width:34px; height:34px; border-radius:50%; background:var(--navy); color:#fff; font-weight:800; font-size:16px; display:flex; align-items:center; justify-content:center; }
+  .st.g .num { background:var(--gold); color:var(--navy); }
+  .st h3 { font-size:17px; }
+  .st .tg { margin-top:auto; }
+
+  /* S2 funnel */
+  .two { display:flex; gap:32px; flex:1; min-height:0; }
+  .two .l { flex:0 0 540px; display:flex; flex-direction:column; gap:12px; }
+  .two .r { flex:1; display:flex; flex-direction:column; gap:12px; }
+  .pt { border-left:4px solid var(--navy); background:var(--bg); padding:11px 16px; }
+  .pt.g { border-left-color:var(--gold); }
+  .pt h3 { font-size:15px; margin-bottom:3px; }
+
+  /* S3 flow */
+  .flow { display:flex; align-items:stretch; gap:14px; flex:1; min-height:0; }
+  .col { display:flex; flex-direction:column; gap:12px; }
+  .src { border:1px solid var(--line); border-top:4px solid var(--navy); padding:14px 16px; flex:1; }
+  .src.g { border-top-color:var(--gold); }
+  .src h3 { margin-bottom:5px; }
+  .arr { display:flex; align-items:center; font-size:38px; color:var(--gold); font-weight:800; line-height:1; }
+  .anchor { background:var(--navy); color:#fff; padding:18px 18px; flex:1; display:flex; flex-direction:column; justify-content:center; gap:8px; text-align:center; }
+  .anchor .k { font-size:10px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; color:#E8C84A; }
+  .anchor .h { font-size:20px; font-weight:800; line-height:1.2; }
+  .anchor .d { font-size:12.5px; line-height:1.4; opacity:.9; }
+  .outc { background:var(--gold-l); border-left:4px solid var(--gold); padding:16px 18px; flex:1; display:flex; flex-direction:column; justify-content:center; gap:6px; }
+  .outc h3 { font-size:17px; }
+
+  /* S4 grid */
+  .gridwrap { flex:0 0 520px; display:flex; flex-direction:column; gap:8px; }
+  .heat { display:grid; grid-template-columns:92px repeat(5,1fr); gap:3px; }
+  .heat .h { font-size:10.5px; font-weight:700; color:var(--navy); display:flex; align-items:center; justify-content:center; text-align:center; padding:4px 2px; }
+  .heat .rh { justify-content:flex-start; text-align:left; }
+  .heat .c { height:46px; }
+  .v1{background:#e6ebf4} .v2{background:#c3d0e6} .v3{background:#8fa9d1} .v4{background:#4a6ea5} .v5{background:#1B3A6B}
+  .scale { display:flex; align-items:center; gap:8px; font-size:10.5px; color:var(--muted); }
+  .scale .sw { width:22px; height:10px; }
+  .chips { display:flex; gap:12px; flex-shrink:0; }
+  .chip { flex:1; border:1px solid var(--bg-line); background:var(--bg); padding:9px 12px; font-size:12.5px; line-height:1.4; color:var(--ink); }
+  .chip strong { color:var(--navy); display:block; font-size:12px; margin-bottom:1px; }
+
+  /* S5 cards */
+  .cards2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; flex:1; min-height:0; }
+  .cd { border:1px solid var(--line); border-top:4px solid var(--navy); padding:16px 20px; display:flex; flex-direction:column; gap:7px; }
+  .cd.g { border-top-color:var(--gold); }
+  .cd .top { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .cd h3 { font-size:17px; }
+
+  /* S6 dashboard */
+  .dash { flex:0 0 650px; border:1px solid #cfd6e4; background:#fbfcfe; display:flex; flex-direction:column; }
+  .dash .nav { display:flex; background:var(--navy); }
+  .dash .nav span { font-size:10px; font-weight:700; color:#cfd9ec; padding:8px 11px; letter-spacing:.03em; white-space:nowrap; }
+  .dash .nav span.on { background:#E8C84A; color:var(--navy); }
+  .dash .in { padding:12px 14px; display:flex; flex-direction:column; gap:10px; flex:1; }
+  .kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .kpi { background:#fff; border:1px solid var(--bg-line); padding:8px 10px; }
+  .kpi .n { font-size:10px; font-weight:800; color:var(--navy); letter-spacing:.05em; text-transform:uppercase; margin-bottom:6px; }
+  .bar { height:7px; background:#e8ebf1; margin:3px 0 5px; position:relative; }
+  .bar i { display:block; height:100%; background:var(--navy3); }
+  .bar b { position:absolute; top:-3px; width:2px; height:13px; background:#C8A84B; }
+  .kpi .m { font-size:9px; color:var(--muted); display:flex; justify-content:space-between; }
+  .proj { background:#fff; border:1px solid var(--bg-line); padding:9px 12px; }
+  .proj .n { font-size:10px; font-weight:800; color:var(--navy); letter-spacing:.05em; text-transform:uppercase; margin-bottom:6px; }
+  .rng { height:12px; background:#e8ebf1; position:relative; }
+  .rng .band2 { position:absolute; left:42%; width:24%; top:0; bottom:0; background:rgba(200,168,75,.55); }
+  .rng .pt2 { position:absolute; left:54%; top:-2px; width:3px; height:16px; background:var(--navy); }
+  .wm { text-align:right; font-size:9.5px; color:#aaa; font-style:italic; }
+
+  /* S7 pillars */
+  .pillars { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; flex:1; min-height:0; }
+  .pl { border:1px solid var(--line); border-top:4px solid var(--navy); padding:16px 16px; display:flex; flex-direction:column; gap:8px; }
+  .pl.g { border-top-color:var(--gold); }
+  .pl h3 { font-size:18px; }
+  .pl .s { font-size:12.5px; color:var(--muted); font-style:italic; line-height:1.35; }
+  .pl ul.b li { font-size:13px; }
+
+  /* S8 timeline */
+  .tl { position:relative; padding:30px 0 0; flex-shrink:0; }
+  .tl .line { position:absolute; top:36px; left:0; right:0; height:3px; background:var(--navy3); }
+  .tl .ms { display:flex; position:relative; }
+  .tl .m { flex:1; text-align:center; padding:0 8px; }
+  .tl .dot { width:16px; height:16px; border-radius:50%; background:var(--navy); margin:0 auto 10px; border:3px solid #fff; box-shadow:0 0 0 1px var(--navy); position:relative; }
+  .tl .m.g .dot { background:var(--gold); box-shadow:0 0 0 1px var(--gold); }
+  .tl .when { font-size:10px; font-weight:800; letter-spacing:.1em; color:var(--gold-d); text-transform:uppercase; margin-bottom:3px; }
+  .tl .m h4 { font-size:13.5px; color:var(--navy); line-height:1.25; margin-bottom:3px; }
+  .tl .m p { font-size:12px; color:var(--ink); line-height:1.35; }
+  .recv { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .rv { background:var(--bg); border:1px solid var(--bg-line); padding:12px 14px; }
+  .rv h3 { font-size:14px; margin-bottom:3px; }
+  .rv p { font-size:12.5px; line-height:1.4; }
+
+  /* S9 tiers */
+  .tiers { display:flex; gap:18px; flex:1; min-height:0; }
+  .tier { flex:1; border:1px solid var(--line); display:flex; flex-direction:column; }
+  .tier .th { padding:12px 18px; color:#fff; background:var(--navy); }
+  .tier.g .th { background:var(--gold); color:var(--navy); }
+  .tier .th .k { font-size:10px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; opacity:.9; }
+  .tier .th .h { font-size:19px; font-weight:800; margin-top:2px; }
+  .tier .tb { padding:12px 18px; display:flex; flex-direction:column; gap:10px; }
+  .addons { display:flex; gap:10px; flex-shrink:0; }
+  .ad { flex:1; background:var(--bg); border:1px solid var(--bg-line); padding:9px 12px; font-size:12px; line-height:1.38; color:var(--ink); }
+  .ad strong { display:block; color:var(--navy); font-size:12px; margin-bottom:1px; }
+</style>
+</head>
+<body>
+
+<!-- ============ 1. OVERVIEW ============ -->
+<section class="slide">
+  <div class="accent"></div>
+  <div class="hdr"><div class="crumb"><strong>Frankel Higher Ed</strong> &nbsp;/&nbsp; Enrollment Strategy</div><div class="badge">EFA + FAO</div></div>
+  <div class="title">One partnership: from funnel insight to aid policy to live monitoring</div>
+  <div class="sub">Enrollment Funnel Analysis (EFA) + Financial Aid Optimization (FAO)</div>
+  <div class="body">
+    <div class="steps">
+      <div class="st">
+        <div class="num">1</div><h3>Know your exposure</h3>
+        <p class="t">Where enrollment and revenue depend on financing, including the new federal borrowing limits, by program and student group.</p>
+        <div class="tg"><span class="tag n">Market context</span></div>
+      </div>
+      <div class="st">
+        <div class="num">2</div><h3>Know your funnel</h3>
+        <p class="t">Where prospects leave, what predicts movement, and what the incoming class will look like, with a range.</p>
+        <div class="tg"><span class="tag n">EFA</span></div>
+      </div>
+      <div class="st g">
+        <div class="num">3</div><h3>Measure price sensitivity and response</h3>
+        <p class="t">How much a dollar of aid changes enrollment for your students.</p>
+        <div class="tg"><span class="tag">FAO</span></div>
+      </div>
+      <div class="st g">
+        <div class="num">4</div><h3>Set your aid policy</h3>
+        <p class="t">A scholarship and award policy your staff can apply as offers go out, with budget, class-size, and discount-rate trade-offs in view.</p>
+        <div class="tg"><span class="tag">FAO</span></div>
+      </div>
+      <div class="st">
+        <div class="num">5</div><h3>Steer the cycle</h3>
+        <p class="t">A live view of class, revenue, and spend against last year and plan, with melt risk flagged early.</p>
+        <div class="tg"><span class="tag n">Monitoring</span></div>
+      </div>
+    </div>
+    <div class="band"><div class="k">Frankel&rsquo;s FAO</div><div class="x">A defensible, documented response to <strong style="color:#E8C84A">&ldquo;Where should the next aid dollar go?&rdquo;</strong> and an early warning when the class is off track. One data model, one secure dashboard, reviewed with your team at every step.</div></div>
+  </div>
+  <div class="foot"><div class="l">frankelagency.com</div><div class="c">Frankel:</div><div class="r">1</div></div>
+</section>
+
+<!-- ============ 2. EFA ============ -->
+<section class="slide">
+  <div class="accent"></div>
+  <div class="hdr"><div class="crumb"><strong>Frankel Higher Ed</strong> &nbsp;/&nbsp; Enrollment Strategy</div><div class="badge">Enrollment Funnel Analysis</div></div>
+  <div class="title">See exactly where students leave, and what moves them</div>
+  <div class="sub">Five stages, from first inquiry to enrolled at census</div>
+  <div class="body">
+    <div class="two">
+      <div class="l">
+        <svg viewBox="0 0 560 330" width="100%" role="img" aria-label="Funnel from inquiry to enrolled at census, with deposit-to-census melt highlighted">
+          <g font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="15">
+            <rect x="0"   y="0"   width="480" height="52" fill="#1B3A6B"/>
+            <rect x="34"  y="60"  width="412" height="52" fill="#2c5189"/>
+            <rect x="68"  y="120" width="344" height="52" fill="#4a6ea5"/>
+            <rect x="102" y="180" width="276" height="52" fill="#8fa9d1"/>
+            <rect x="136" y="240" width="208" height="52" fill="#C8A84B"/>
+            <g text-anchor="middle">
+              <text x="240" y="32"  fill="#fff">Inquiry</text>
+              <text x="240" y="92"  fill="#fff">Application</text>
+              <text x="240" y="152" fill="#fff">Admit</text>
+              <text x="240" y="212" fill="#1B3A6B">Deposit</text>
+              <text x="240" y="272" fill="#1B3A6B">Enrolled at census</text>
+            </g>
+          </g>
+          <g font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9b7c2a" font-weight="700">
+            <path d="M388 210 L396 210 L396 266 L388 266" stroke="#9b7c2a" stroke-width="2" fill="none"/>
+            <text x="404" y="234">Melt: deposit to</text>
+            <text x="404" y="250">census, reported as</text>
+            <text x="404" y="266">its own stage</text>
+          </g>
+          <text x="280" y="322" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#888" font-style="italic">Illustrative shape; stage sizes depend on your data</text>
+        </svg>
+      </div>
+      <div class="r">
+        <div class="pt"><h3>Conversion at every stage, by student group</h3><p class="t">A fixed, published set of views by cohort and by segment such as residency, student type, source, and program. Groups under 10 students are protected from breakout views.</p></div>
+        <div class="pt"><h3>What predicts movement</h3><p class="t">The characteristics and behaviors linked to applying and enrolling, with confidence intervals.</p></div>
+        <div class="pt"><h3>A forecast of the incoming class</h3><p class="t">Built from what was known at the student&rsquo;s decision date, checked against your most recent cohort, and shown with a range.</p></div>
+        <div class="pt g"><h3>Your definitions, reconciled up front</h3><p class="t">We settle how records map to funnel stages, such as how to treat applicants who withdrew, before our analysis begins.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><div class="l">frankelagency.com</div><div class="c">Frankel:</div><div class="r">2</div></div>
+</section>
+
+<!-- ============ 3. PRICE RESPONSE ============ -->
+<section class="slide">
+  <div class="accent g"></div>
+  <div class="hdr"><div class="crumb"><strong>Frankel Higher Ed</strong> &nbsp;/&nbsp; Enrollment Strategy</div><div class="badge l">Financial Aid Optimization</div></div>
+  <div class="title">We measure how students respond to price</div>
+  <div class="sub">The foundation of every aid recommendation</div>
+  <div class="body">
+    <p class="t" style="font-size:15px;max-width:1100px"><strong>The question that matters most</strong> is what an extra dollar of aid does to a student&rsquo;s decision to enroll.</p>
+    <div class="flow">
+      <div class="col" style="flex:1.25">
+        <div class="src">
+          <div class="lbl">Randomized test</div>
+          <h3>Our first test: bonus-aid</h3>
+          <p class="t">A random share of eligible admits receive extra aid ($0, $2,000, or $4,000). Nobody receives less than they otherwise would. This test gives us a clean answer to &ldquo;what does a dollar do?&rdquo;</p>
+        </div>
+        <div class="src g">
+          <div class="lbl">Award-rule analysis</div>
+          <h3>Thresholds to guide award rules</h3>
+          <p class="t">Where your merit grid steps up at a GPA or test cutoff, students just above and just below are comparable. We use a threshold test wherever it checks out, in order to refine the award rules.</p>
+        </div>
+      </div>
+      <div class="arr">&rsaquo;</div>
+      <div class="anchor" style="flex:1">
+        <div class="k">Combined</div>
+        <div class="h">A single, anchored price response</div>
+        <div class="d">The output of tests from each source is reported on its own, then combined. We flag when indicators disagree or point in different directions.</div>
+      </div>
+      <div class="arr">&rsaquo;</div>
+      <div class="outc" style="flex:1.1">
+        <div class="lbl">Used for</div>
+        <h3>One transparent model for every segment</h3>
+        <p class="t">Clear directions emerge because we apply the same standards to every prospect, so each recommendation can be explained and defended. Any adjustments you make post-hoc also have a standard reference for the decision.</p>
+      </div>
+    </div>
+    <div class="chips">
+      <div class="chip"><strong>Start with what you have</strong>Tier 1 uses your award rules alone, with a wider range.</div>
+      <div class="chip"><strong>Strengthen with a test</strong>Tier 2 adds the bonus-aid test, approved by your enrollment and financial aid team.</div>
+      <div class="chip"><strong>Sharper every cycle</strong>A standing test narrows the estimate each year.</div>
+    </div>
+  </div>
+  <div class="foot"><div class="l">frankelagency.com</div><div class="c">Frankel:</div><div class="r">3</div></div>
+</section>
+
+<!-- ============ 4. POLICY ============ -->
+<section class="slide">
+  <div class="accent g"></div>
+  <div class="hdr"><div class="crumb"><strong>Frankel Higher Ed</strong> &nbsp;/&nbsp; Enrollment Strategy</div><div class="badge l">Financial Aid Optimization</div></div>
+  <div class="title" style="font-size:26px;line-height:1.12">We help you build a scholarship policy your team can apply, while keeping trade-offs clearly in view</div>
+  <div class="sub">Clear award levels by group and model criteria</div>
+  <div class="body">
+    <div class="two">
+      <div class="gridwrap">
+        <div class="lbl">Policy grid (illustrative layout)</div>
+        <div class="heat">
+          <div class="h"></div><div class="h">Need band 1</div><div class="h">Need band 2</div><div class="h">Need band 3</div><div class="h">Need band 4</div><div class="h">No FAFSA</div>
+          <div class="h rh">Academic index, top fifth</div><div class="c v5"></div><div class="c v5"></div><div class="c v4"></div><div class="c v4"></div><div class="c v4"></div>
+          <div class="h rh">Second fifth</div><div class="c v4"></div><div class="c v4"></div><div class="c v3"></div><div class="c v3"></div><div class="c v3"></div>
+          <div class="h rh">Middle fifth</div><div class="c v4"></div><div class="c v3"></div><div class="c v3"></div><div class="c v2"></div><div class="c v3"></div>
+          <div class="h rh">Fourth fifth</div><div class="c v3"></div><div class="c v2"></div><div class="c v2"></div><div class="c v2"></div><div class="c v2"></div>
+          <div class="h rh">Bottom fifth</div><div class="c v2"></div><div class="c v2"></div><div class="c v1"></div><div class="c v1"></div><div class="c v2"></div>
+        </div>
+        <div class="scale"><span>Lower award</span><span class="sw v1"></span><span class="sw v2"></span><span class="sw v3"></span><span class="sw v4"></span><span class="sw v5"></span><span>Higher award</span></div>
+        <p class="note">Shown for one residency group. The default grid repeats across three residency groups, about 75 cells in all. Shading is a layout example, not a result.</p>
+      </div>
+      <div class="r">
+        <div class="pt"><h3>Applied as offers roll out</h3><p class="t">Offers go out on a rolling basis, so staff can use it at packaging time.</p></div>
+        <div class="pt"><h3>Built around your goals</h3><p class="t">Maximizes expected multi-year net tuition revenue within your discretionary budget, with optional class-size, academic achievement / LSAT, and discount-rate limits.</p></div>
+        <div class="pt"><h3>Scenarios you can compare</h3><p class="t">Budget at 75%, 100%, and 125%; a headcount-maximizing option; and composition requirements, including a class-size floor, where it applies. Each shows class, revenue, spend, and discount rate.</p></div>
+        <div class="pt g"><h3>Every number comes with a range</h3><p class="t">Each scenario is shown if students prove less, about as, or more price-sensitive than estimated, and the budget holds in all three.</p></div>
+      </div>
+    </div>
+    <div class="chips">
+      <div class="chip"><strong>Increases only on communicated offers</strong>Awards on communicated offers can only rise, within the range tested.</div>
+      <div class="chip"><strong>Limits on reductions</strong>No group&rsquo;s award can fall more than a set amount (e.g., $3,000).</div>
+      <div class="chip"><strong>Hard requirements are honored</strong>Students with named scholarships or other hard requirements always keep their current packages.</div>
+    </div>
+  </div>
+  <div class="foot"><div class="l">frankelagency.com</div><div class="c">Frankel:</div><div class="r">4</div></div>
+</section>
+
+<!-- ============ 5. MARKET CONTEXT ============ -->
+<section class="slide">
+  <div class="accent"></div>
+  <div class="hdr"><div class="crumb"><strong>Frankel Higher Ed</strong> &nbsp;/&nbsp; Enrollment Strategy</div><div class="badge">Market context</div></div>
+  <div class="title">Know your market, your exposure, and your price position</div>
+  <div class="sub">Further evidence that informs the decision</div>
+  <div class="body">
+    <div class="cards2">
+      <div class="cd">
+        <div class="top"><h3>Federal loan-limit exposure</h3><span class="tag n">Tier 1</span></div>
+        <p class="t">How many admits, by program, relied on PLUS loans in past cohorts, and how many dollars now sit above the new federal limits? We translate the gap into an enrollment and revenue range.</p>
+        <p class="note">Most relevant for graduate and professional programs and for parent borrowing.</p>
+      </div>
+      <div class="cd">
+        <div class="top"><h3>Where admitted students went instead, and what it cost you</h3><span class="tag">Optional add-on</span></div>
+        <p class="t">A National Student Clearinghouse match, joined to public net-price data, shows which institutions you lose students to and the net-cost gap by student group.</p>
+      </div>
+      <div class="cd g">
+        <div class="top"><h3>What admitted students tell you</h3><span class="tag">Optional add-on</span></div>
+        <p class="t">A short survey of enrolling and non-enrolling admits captures the competing offers they held and the reasons behind their choice.</p>
+      </div>
+      <div class="cd g">
+        <div class="top"><h3>Your price position against peers</h3><span class="tag">Optional add-on</span></div>
+        <p class="t">Sticker and net price by income band against a peer set you approve, plus what-if tests of a tuition change on the admitted pool.</p>
+        <p class="note">Tuition scenarios cover the admit stage only; they do not capture effects on who applies.</p>
+      </div>
+    </div>
+    <div class="band"><div class="k">How we use it</div><div class="x">These views shape strategy and the conversation with your leadership. They stay descriptive: <strong style="color:#E8C84A">they inform the price model&rsquo;s context but never feed its estimates.</strong></div></div>
+  </div>
+  <div class="foot"><div class="l">frankelagency.com</div><div class="c">Frankel:</div><div class="r">5</div></div>
+</section>
+
+<!-- ============ 6. MONITORING ============ -->
+<section class="slide">
+  <div class="accent"></div>
+  <div class="hdr"><div class="crumb"><strong>Frankel Higher Ed</strong> &nbsp;/&nbsp; Enrollment Strategy</div><div class="badge">Live dashboard</div></div>
+  <div class="title">Steer the cycle with a weekly update of class, revenue, and spend</div>
+  <div class="sub">Weekly or biweekly refresh through yield season</div>
+  <div class="body">
+    <div class="two">
+      <div class="dash">
+        <div class="nav"><span class="on">Funnel &amp; pacing</span><span>Scenario planner</span><span>Policy grid</span><span>Market context</span><span>Equity audit</span></div>
+        <div class="in">
+          <div class="kpis">
+            <div class="kpi"><div class="n">Admits</div><div class="bar"><i style="width:82%"></i><b style="left:78%"></b></div><div class="m"><span>vs last year</span><span>vs plan</span></div></div>
+            <div class="kpi"><div class="n">Deposits</div><div class="bar"><i style="width:64%"></i><b style="left:70%"></b></div><div class="m"><span>vs last year</span><span>vs plan</span></div></div>
+            <div class="kpi"><div class="n">Net tuition revenue</div><div class="bar"><i style="width:71%"></i><b style="left:66%"></b></div><div class="m"><span>vs last year</span><span>vs plan</span></div></div>
+            <div class="kpi"><div class="n">Discount rate</div><div class="bar"><i style="width:55%"></i><b style="left:58%"></b></div><div class="m"><span>vs last year</span><span>vs plan</span></div></div>
+            <div class="kpi"><div class="n">Discretionary spend</div><div class="bar"><i style="width:48%"></i><b style="left:52%"></b></div><div class="m"><span>vs last year</span><span>vs plan</span></div></div>
+            <div class="kpi"><div class="n">Melt risk by segment</div><div class="bar"><i style="width:30%"></i><b style="left:40%"></b></div><div class="m"><span>flagged groups</span><span>trend</span></div></div>
+          </div>
+          <div class="proj"><div class="n">Projected census, with range</div><div class="rng"><div class="band2"></div><div class="pt2"></div></div></div>
+          <div class="wm">Illustrative layout; no client data shown. Methodology and trace-back to prior-year data on every view.</div>
+        </div>
+      </div>
+      <div class="r">
+        <div class="pt"><h3>Pacing against last year and planned targets</h3><p class="t">Admits, deposits, revenue, and discretionary spend against the same date last year and against your targets.</p></div>
+        <div class="pt"><h3>A projected census, with a range</h3><p class="t">Current counts by stage, combined with how past classes converted at the same point before the deadline.</p></div>
+        <div class="pt"><h3>Melt flagged early</h3><p class="t">Segment-level risk from signals known at deposit, such as housing application, verification, unmet need, and FAFSA status.</p></div>
+        <div class="pt g"><h3>The right view for each audience</h3><p class="t">The enrollment team sees full detail. Leadership sees headline scenarios, the policy summary, and the equity audit. Student-level lists return only through your secure channel.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><div class="l">frankelagency.com</div><div class="c">Frankel:</div><div class="r">6</div></div>
+</section>
+
+<!-- ============ 7. RESPONSIBLE BY DESIGN ============ -->
+<section class="slide">
+  <div class="accent g"></div>
+  <div class="hdr"><div class="crumb"><strong>Frankel Higher Ed</strong> &nbsp;/&nbsp; Enrollment Strategy</div><div class="badge l">Responsible by design</div></div>
+  <div class="title">Built to be trusted by your leadership and your campus</div>
+  <div class="sub">Aid decisions carry weight for brand equity and reputation. Frankel safeguards all the important decisions.</div>
+  <div class="body">
+    <div class="pillars">
+      <div class="pl">
+        <h3>Fair by design</h3><div class="s">Awards follow policy, not PII.</div>
+        <ul class="b">
+          <li>Race, ethnicity, and gender are <strong>never</strong> model inputs; they are used only to audit results</li>
+          <li>Policy groups use academic, need, and residency attributes only</li>
+          <li>No consumer credit data</li>
+          <li>An equity audit accompanies every recommendation</li>
+        </ul>
+      </div>
+      <div class="pl g">
+        <h3>Private and compliant by design</h3><div class="s">Student records stay in a secure, FERPA-approved environment.</div>
+        <ul class="b">
+          <li>De-identified data with hashed keys; no names, contact details, or full ZIP codes</li>
+          <li>The dashboard shows aggregates only</li>
+          <li>Groups under 10 students are suppressed</li>
+          <li>Raw files deleted at engagement close</li>
+        </ul>
+      </div>
+      <div class="pl">
+        <h3>Honest, everywhere</h3><div class="s">Numbers you can explain and defend.</div>
+        <ul class="b">
+          <li>No number appears without its range or a stated reason it has none</li>
+          <li>Only information known at the decision date enters the models</li>
+          <li>Missing data is never treated as zero</li>
+        </ul>
+      </div>
+      <div class="pl g">
+        <h3>Reviewed, refined, and approved by your team</h3><div class="s">Nothing is applied until you say so.</div>
+        <ul class="b">
+          <li>You and your leadership review every recommendation before implementation</li>
+          <li>Each model release is tested on synthetic data where the right answer is known</li>
+          <li>Each engagement includes a backtest on your own most recent cohort</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><div class="l">frankelagency.com</div><div class="c">Frankel:</div><div class="r">7</div></div>
+</section>
+
+<!-- ============ 8. WORKING TOGETHER ============ -->
+<section class="slide">
+  <div class="accent"></div>
+  <div class="hdr"><div class="crumb"><strong>Frankel Higher Ed</strong> &nbsp;/&nbsp; Enrollment Strategy</div><div class="badge">Working together</div></div>
+  <div class="title">A partnership that follows your enrollment calendar</div>
+  <div class="sub">Phase 1, funnel analysis: about 10 weeks &nbsp;&middot;&nbsp; Phase 2, aid optimization: 4&ndash;6 weeks, following Phase 1</div>
+  <div class="body">
+    <div class="tl">
+      <div class="line"></div>
+      <div class="ms">
+        <div class="m"><div class="dot"></div><div class="when">Start</div><h4>Kickoff and definitions</h4><p>Agree on goals, funnel stages, and data definitions</p></div>
+        <div class="m"><div class="dot"></div><div class="when">Early in Phase 1</div><h4>Data delivered and checked</h4><p>De-identified files; every check and row count shared with you</p></div>
+        <div class="m g"><div class="dot"></div><div class="when">Phase 1: ~10 weeks</div><h4>Funnel analysis complete</h4><p>Where students exit the funnel and what moves them</p></div>
+        <div class="m g"><div class="dot"></div><div class="when">After Phase 1</div><h4>Aid optimization begins</h4><p>Price evidence and aid modeling build on the funnel analysis</p></div>
+        <div class="m g"><div class="dot"></div><div class="when">Phase 2: 4&ndash;6 weeks</div><h4>Aid policy recommendation</h4><p>Scenarios, policy grid, and equity audit, reviewed with you and counsel</p></div>
+        <div class="m"><div class="dot"></div><div class="when">First admit release</div><h4>In-cycle monitoring</h4><p>Weekly or biweekly through census</p></div>
+      </div>
+    </div>
+    <div>
+      <div class="lbl" style="margin-top:6px">What you receive</div>
+      <div class="recv">
+        <div class="rv"><h3>Live dashboard</h3><p>Funnel, pacing, scenarios, policy grid, market context, and equity audit, with a methodology and lineage panel on every view</p></div>
+        <div class="rv"><h3>Scholarship policy document</h3><p>The recommended award levels by group, ready for staff to apply and counsel to review</p></div>
+        <div class="rv"><h3>Executive report</h3><p>Key findings and recommendations, delivered following the dashboard</p></div>
+        <div class="rv"><h3>In-cycle monitoring</h3><p>Pacing, projected census, and melt risk refreshed through yield season</p></div>
+      </div>
+    </div>
+    <div class="band"><div class="k">Then it compounds</div><div class="x">Every cycle adds evidence. Award revisions are logged with date and reason, and a standing price test <strong style="color:#E8C84A">narrows the estimate each year</strong>, so next year&rsquo;s policy rests on more than this year&rsquo;s.</div></div>
+  </div>
+  <div class="foot"><div class="l">frankelagency.com</div><div class="c">Frankel:</div><div class="r">8</div></div>
+</section>
+
+<!-- ============ 9. START WHERE YOU ARE ============ -->
+<section class="slide">
+  <div class="accent g"></div>
+  <div class="hdr"><div class="crumb"><strong>Frankel Higher Ed</strong> &nbsp;/&nbsp; Enrollment Strategy</div><div class="badge l">Getting started</div></div>
+  <div class="title">Start where you are, and grow into the full partnership</div>
+  <div class="sub">Two tiers, so start-up effort matches what you need</div>
+  <div class="body">
+    <div class="tiers">
+      <div class="tier">
+        <div class="th"><div class="k">Tier 1</div><div class="h">Foundation</div></div>
+        <div class="tb">
+          <div><div class="lbl">What you send</div>
+            <ul class="b"><li>Three entering cohorts</li><li>Final aid packages by component, with offer dates where you have them</li><li>Your merit grid</li></ul></div>
+          <div><div class="lbl">What it supports</div>
+            <ul class="b"><li>Funnel analysis and yield forecast</li><li>In-cycle pacing and melt monitoring</li><li>Federal loan-limit exposure</li><li>A first estimate of price sensitivity from your award rules, with a wider range</li></ul></div>
+        </div>
+      </div>
+      <div class="tier g">
+        <div class="th"><div class="k">Tier 2</div><div class="h">Add-on: price testing</div></div>
+        <div class="tb">
+          <div><div class="lbl">What you send</div>
+            <ul class="b"><li>Four to five entering cohorts</li><li>Every package version, with its date</li><li>Merit grid with effective dates, and approval for a price test</li></ul></div>
+          <div><div class="lbl">What it adds</div>
+            <ul class="b"><li>Everything in Tier 1</li><li><strong>A recommended scholarship policy grid</strong> with budget scenarios and an equity audit</li><li>A price estimate anchored in design-based evidence</li></ul></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="lbl">Optional additions</div>
+      <div class="addons">
+        <div class="ad"><strong>In-cycle export</strong>Powers weekly pacing and melt</div>
+        <div class="ad"><strong>Clearinghouse match</strong>Where admits went</div>
+        <div class="ad"><strong>Admitted-student survey</strong>Competing offers and reasons</div>
+        <div class="ad"><strong>Peer set</strong>Net-price comparison</div>
+        <div class="ad"><strong>Neighborhood and consumer context</strong>PRIZM data appended from zip-code references, adding buyer capability and demographic characteristics</div>
+      </div>
+    </div>
+    <div class="band"><div class="k">Next step</div><div class="x">A kickoff conversation to agree on definitions, choose a tier, and scope a pilot cycle. <span style="opacity:.85">Undergraduate first-time and transfer cohorts are in scope now; graduate and professional programs are included in the funnel, pacing, and loan-limit views.</span></div></div>
+  </div>
+  <div class="foot"><div class="l">frankelagency.com</div><div class="c">Frankel:</div><div class="r">9</div></div>
+</section>
+
+</body>
+</html>
