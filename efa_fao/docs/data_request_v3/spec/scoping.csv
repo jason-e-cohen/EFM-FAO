@@ -1,0 +1,13 @@
+group,input,description,provided_by,law,ug,law_extra
+We compute from your data (you confirm),Eligible admits per cohort (N),Admits who are not in an excluded group and are eligible for a discretionary award,Frankel,Y,Y,
+We compute from your data (you confirm),Eligible yield (p),Share of eligible admits who enroll at census,Frankel,Y,Y,
+We compute from your data (you confirm),Annual tuition,Published tuition for the entering class,Frankel,Y,Y,
+We compute from your data (you confirm),Mean institutional award per enrollee,From the final packages,Frankel,Y,Y,
+We compute from your data (you confirm),Award commitment length and persistence,Years the award is committed and the share that renews,Frankel,Y,Y,
+You supply,Class-size band and cap type,"The band you accept around the class target (for example 3, 5 or 10 percent) and whether it is a hard cap or a soft target. Mandatory: the verdict depends on it",Client,Y,Y,
+You supply,Floors and targets,"Minimum awards for groups, and class-profile targets you manage to",Client,Y,Y,", such as median LSAT and UGPA"
+You supply,Who decides,"The VP or Director of Enrollment, or a Dean, who decides whether a test runs",Client,Y,Y,
+You supply,Cycles of use,How many cycles you would use a result for (default 3),Client,Y,Y,
+You supply,Operating cost of a test,Staff time and system cost per cycle of running a test,Client,Y,Y,
+You supply,Blinding,Whether staff can deliver the bonus as a formula line with no test flag in your systems,Client,Y,Y,
+You supply,Offer release batches,Whether offers go out in batches at least three weeks apart (waves are separate only then),Client,Y,N,

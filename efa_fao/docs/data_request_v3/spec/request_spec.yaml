@@ -1,0 +1,292 @@
+# Single source for the client-facing data request (v3).
+# Blocks tagged with `only: law` or `only: undergraduate` appear in that program's document only.
+# A text value may also be a mapping {law: "...", undergraduate: "..."} to vary the wording.
+# Placeholders in square brackets, for example [secure file transfer], stay in the output for the account lead to fill.
+# Python placeholders: {institution}, {program_label}, {contact}, {date}, {due_date}.
+# Sources: v2.1 = efa_fao/docs/04_data_request_v2.md; REF = reference request (Enrollment Funnel and Student Financial Data Request.docx);
+# CDS = Common Data Set 2025-26 template; M = 02_methodology_v2.6.md.
+
+profiles:
+  law:
+    label: "JD program"
+    short: "law"
+    audience: "Admissions and Financial Aid"
+    entering: "entering JD class"
+    people: "applicants and admits"
+  undergraduate:
+    label: "Undergraduate programs"
+    short: "undergraduate"
+    audience: "Enrollment Management and Financial Aid"
+    entering: "entering undergraduate class"
+    people: "applicants and admits"
+
+title: "{institution}: Enrollment Funnel and Financial Aid Data Request (v3)"
+
+header:
+  - ["Program", "{program_label}"]
+  - ["Prepared for", "{institution}, {audience}"]
+  - ["Prepared by", "{contact}"]
+  - ["Date", "{date}"]
+  - ["Response requested by", "{due_date}"]
+
+sections:
+
+  - id: why
+    title: "Why we are asking for more than a typical funnel study"
+    blocks:
+      - p:
+          law: "Two questions drive this engagement. First, where do prospective JD students leave the funnel? Second, how should scholarship dollars be set for the next entering class? The second question depends on knowing what each admit was offered and when, so this request asks for scholarships in components, with dates and every revision, not totals. It also asks for the rules behind your awards. Where those rules contain thresholds, they let us estimate price sensitivity without guesswork. Where they do not, we say so and we do not invent an estimate."
+          undergraduate: "Two questions drive this engagement. First, where do prospective students leave the funnel? Second, what award policy should guide the next discretionary aid dollar? The second question depends on knowing what each student was offered and when, so this request asks for aid in components with dates, not totals. It also asks for the rules behind your awards, which let us learn price sensitivity without guesswork."
+      - p:
+          only: law
+          text: "What you receive depends on the evidence your history contains. Many law schools have no published scholarship threshold. Where we cannot support a price estimate, you receive the funnel analysis, in-cycle pacing and melt monitoring, the ABA Standard 509 market view, a one-page evidence audit, and a written status-quo scholarship grid for you to confirm. We do not recommend a change in price level without design-based evidence."
+      - p: "To keep the start-up effort proportional to what you need, the request comes in two tiers."
+
+  - id: tiers
+    title: "Two tiers"
+    blocks:
+      - table:
+          cols: ["Tier", "What you send", "What it supports"]
+          widths: [1.0, 3.0, 3.0]
+          rows:
+            - only: law
+              cells:
+                - "Tier 1 (minimum)"
+                - "Three entering classes; final scholarship packages by component; offer dates where you have them; your scholarship matrix or index, if you have one; the cycle calendar; ABA 509 filings for the same years"
+                - "Funnel analysis, yield forecast, in-cycle pacing and melt monitoring, the ABA 509 market view, the evidence audit, and a written status-quo grid. A price estimate only if your history holds a usable threshold or policy change"
+            - only: law
+              cells:
+                - "Tier 2 (full)"
+                - "Four to five entering classes; every package version with its date and reason code; renewal history for conditional awards; the grid with effective dates; a price test only where our screen recommends one"
+                - "Everything in Tier 1, plus an optimized scholarship grid where the evidence audit and the screen support it"
+            - only: undergraduate
+              cells:
+                - "Tier 1 (minimum)"
+                - "Three entering cohorts; final aid packages by component; offer dates where you have them; the merit grid; the cycle calendar; your Common Data Set filings for the same years"
+                - "Funnel analysis, yield forecast, in-cycle pacing and melt monitoring, loan-cap exposure, and a first estimate of price sensitivity from the merit grid (with a wider range)"
+            - only: undergraduate
+              cells:
+                - "Tier 2 (full)"
+                - "Four to five cohorts; every package version with its date and reason code; the merit grid with effective dates; a price test"
+                - "Everything in Tier 1, plus a recommended scholarship policy grid with budget scenarios"
+      - p: "You can start at Tier 1 and move to Tier 2 in a later cycle. Three cohorts is the minimum and five is ideal. If you hold more than five years of history, tell us before you pull it, especially if your award policy changed in that period: a policy change is useful evidence."
+
+  - id: files
+    title: "What we need"
+    blocks:
+      - p: "Aid offers are needed for every cohort you send, not only the most recent. We provide an Excel template with the header row, data types and code lists for every file below, so you can see the exact structure before you pull anything (Data_Request_Template). Appendix A lists every field."
+      - special: file_list
+      - p: "Please also send your own data dictionary: each variable you export and every possible value of each coded variable (program codes, decision codes, source labels, fund codes). We map your values to ours with you and return a list of anything we could not map."
+      - p:
+          law: "**Excluded groups:** please flag students whose aid follows rules outside the normal process, such as tuition remission or exchange, employee dependents, stipends and fellowships, named full-tuition scholars, and joint-degree awards. They keep their current packages in every scenario and are reported separately so your class totals still reconcile."
+          undergraduate: "**Excluded groups:** please flag students whose aid follows rules outside the normal process, such as athletes, tuition waivers and exchanges, employee dependents, and named special scholarships. They keep their current packages in every scenario and are reported separately so your class totals still reconcile."
+      - p: "If a field is not recorded, tell us. Do not fill it with zeros or a default."
+
+  - id: definitions
+    title: "Definitions we need to agree on"
+    blocks:
+      - p:
+          law: "Where your ABA Standard 509 report defines a term, we follow it, so your totals reconcile to what you already file. Where it does not, we use the Common Data Set definition, the common higher-education vocabulary for admission and aid terms. Where our analysis needs something neither defines, we say so."
+          undergraduate: "Where a term has a Common Data Set definition, we use it, so your totals reconcile to what you already publish. Where our analysis needs something the Common Data Set does not define, we say so."
+      - special: definitions_table
+
+  - id: components
+    title: "Aid components"
+    blocks:
+      - special: components_table
+      - p:
+          law: "Please also send your fund-code crosswalk (file `fund_crosswalk`) so we can map your codes to these components. For each fund, state its own eligibility rule (need-based, non-need-based or mixed). We classify by the fund rule. If your internal reports count non-need aid used to meet need as need-based, we keep the fund rule and reconcile the difference in QA."
+          undergraduate: "Please also send your fund-code crosswalk (file `fund_crosswalk`) so we can map your codes to these components. For each fund, state its own eligibility rule (need-based, non-need-based or mixed). We classify by the fund rule. Your Common Data Set counts non-need aid that is used to meet need as need-based; we keep the fund rule and reconcile the difference in QA."
+      - p:
+          law: "**Why loans matter now:** Grad PLUS closed to new borrowers on July 1, 2026, and new annual and aggregate caps apply to graduate and professional borrowing. Prior-year PLUS amounts, approvals and denials let us show how many of your admits face a financing gap and what that could mean for enrollment and revenue. Loans are never treated as a price reduction in our models."
+          undergraduate: "**Why loans matter now:** Grad PLUS closed to new borrowers on July 1, 2026, and new annual and aggregate caps apply to graduate and professional borrowing and to Parent PLUS. Prior-year PLUS amounts, approvals and denials let us show how many of your admits, by program, now face a financing gap and what that could mean for enrollment and revenue. Loans are never treated as a price reduction in our models."
+
+  - id: rules
+    title: "Your award rules"
+    blocks:
+      - p:
+          law: "The scholarship matrix or index, where you have one, is the single most valuable document for this study. Awards that change at fixed LSAT, UGPA or index thresholds let us estimate price sensitivity without bias. If you have none, tell us how awards are decided; that is common in law, and it shapes what we can deliver (see Why we are asking). Please send:"
+          undergraduate: "The merit grid is the single most valuable document for this study. Awards that change at fixed GPA or test thresholds let us estimate price sensitivity without bias. Please send:"
+      - bullets:
+          - text: "The matrix or index for each cohort, with exact thresholds and effective dates."
+            only: law
+          - text: "The grid for each cohort, with exact thresholds and effective dates."
+            only: undergraduate
+          - text: "Who decides awards (committee, matrix, discretion, or a mix), and how reconsideration and negotiation requests are received, decided and logged."
+            only: law
+          - text: "How need-based institutional grants are calculated."
+            only: undergraduate
+          - text: "How discretionary awards and appeals are decided, and who decides."
+            only: undergraduate
+          - text: "The exact terms of any conditional or renewable award: the condition (GPA, class rank, credits), the year it is tested, and whether renewal is fixed dollars or a percentage of tuition."
+            only: law
+          - text: "Whether the award is the total institutional scholarship or a supplement added after formula awards, and how stipends above tuition are handled."
+          - text: "The scholarship budget and your targets for discount rate and class size."
+          - text: "The class-size band you accept (for example 3, 5 or 10 percent) and whether the class target is a hard seat cap or a soft target. We need this before we say anything about a price test."
+          - text: "The class-profile targets you manage to, such as median LSAT and UGPA."
+            only: law
+          - text: "Planned tuition changes for the next entering class, if decided."
+          - text: "Any limits you want on change: for example, the largest cut any group's award may take, or minimum awards for particular groups."
+
+  - id: scoping
+    title: "Scoping inputs for the price-test screen"
+    blocks:
+      - p:
+          law: "Before we propose any price test, we run a short value-of-information screen. It can conclude that a test is not worth its cost, and at law-school class sizes and tight class-size bands it often does. The verdict depends on your class-size band, which is why we ask for it up front. We compute the first group of inputs from your data. You confirm them and supply the rest."
+          undergraduate: "Before we propose any price test, we run a short value-of-information screen. It can conclude that a test is not worth its cost. The verdict depends on your class-size band, which is why we ask for it up front. We compute the first group of inputs from your data. You confirm them and supply the rest."
+      - special: scoping_table
+
+  - id: pricetest
+    title: "Optional price test (only where the screen recommends one)"
+    blocks:
+      - p: "A short randomized test of bonus aid for part of the incoming class makes a policy recommendation far more trustworthy. We propose it only where the screen says it pays off, and the decision to run it is yours."
+      - bullets:
+          - text: "**Design:** a random 40% of eligible admits (first-year JD admits, not in an excluded group) receive an additional $0, half of D, or D in scholarship, in a 40% / 20% / 40% split. D is 10% to 15% of tuition, rounded to $1,000. Assignment is balanced within position band and offer wave (position is where an applicant sits relative to your prior three entering classes on LSAT and UGPA)."
+            only: law
+          - text: "**Design:** a random 40% of eligible admits (first-time students, not in an excluded group) receive an additional $0, $2,000, or $4,000 in discretionary aid, in a 40% / 20% / 40% split. Assignment is balanced within need band and residency."
+            only: undergraduate
+          - text: "**Why these amounts:** concentrating bonuses at the ends gives a more precise answer than spreading them evenly, at the same average cost per student."
+          - text: "**Positive only:** nobody receives less than they otherwise would. The bonus is part of the first offer, never a later revision."
+          - text: "**Cost:** an award that renews costs its first-year amount times the number of years it is committed (about three times for a three-year JD award). We report the cost, and the smallest effect the test could detect, before you decide."
+            only: law
+          - text: "**Cost:** an award that renews costs its first-year amount times the number of years it is committed. We report the cost, and the smallest effect the test could detect, before you decide."
+            only: undergraduate
+          - text: "**Keep the test clean:** please do not adjust other discretionary aid for students because of their test assignment. If staff can deliver the bonus as a formula line with no test flag visible in your systems, our estimate is stronger; tell us whether that is possible. We check for offsetting behavior and report it."
+          - text: "**Approvals:** needs sign-off from [financial aid director] and [admissions dean or enrollment VP]. We draft the protocol and the randomization file."
+          - text: "**Timing:** assignment is made before decisions; we record the assignment date and seed. Please send every eligible admit, not only the test students (file `price_test`)."
+          - text: "**Power:** at your size, expect several cycles to reach a precise estimate. We report the smallest effect the test can detect before it starts."
+
+  - id: reference
+    title: "Institutional reference and reconciliation"
+    blocks:
+      - p:
+          law: "Please send your ABA Standard 509 Information Reports for the same years as your cohorts. We reconcile your student-level files to the totals you file, report any difference, and check our yield forecast against your own history. The worksheet `Institutional_Reference` in the template lists the figures; most can be copied from the filings."
+          undergraduate: "Please send your Common Data Set for the same years as your cohorts. We reconcile your student-level files to the totals you publish, report any difference, and check our yield forecast against your own history. The worksheet `Institutional_Reference` in the template lists the figures; most can be copied from your Common Data Set."
+      - special: reference_table
+
+  - id: optional
+    title: "Optional additions"
+    blocks:
+      - bullets:
+          - text: "**In-cycle export:** a weekly or biweekly extract of the `students` and `aid_offers` files during yield season (from first release to census) powers pacing against last year and melt monitoring. We give you a saved query or export spec. Please include the date and reason code for any award revision."
+          - text: "**Activity history:** every recorded activity with its raw source label and date, not only the first (file `activity_log`). It lets us identify the first inquiry type and report source effectiveness."
+          - text: "**Where admitted students went:** a National Student Clearinghouse StudentTracker match for admits who did not enroll, ordered by your office. We join it to public net-price data to show which institutions you lose students to, and at what cost difference."
+            only: undergraduate
+          - text: "**Where admitted students went:** a National Student Clearinghouse StudentTracker match for admits who did not enroll, if you choose to order one. Coverage of JD enrollments is to be confirmed with the Clearinghouse before you order."
+            only: law
+          - text: "**Admitted-student survey:** a short survey of enrolling and non-enrolling admits on competing offers and reasons for their choice, designed and fielded by [our team] with your approval."
+          - text: "**Peer set:** a list of 5 to 10 schools you approve as peers, for the ABA 509 market view and the rank-matched scholarship comparison."
+            only: law
+          - text: "**Peer set:** a list of 8 to 15 institutions you consider peers, for sticker and net-price comparison from public data."
+            only: undergraduate
+          - text: "**Neighborhood context:** if you want neighborhood indicators (for example, educational attainment or median income by Census tract), we supply a script your office runs before removing addresses. Only the resulting indicators are sent to us."
+          - text: "**Neighborhood capacity indicators (ZIP5 add-on):** with your written approval under your data-use agreement, you send a separate file (`zip_key`) with the ZIP5 of each applicant's permanent address at application. We attach neighborhood-level indicators from a licensed or public dataset, replace the ZIP5 with derived fields, and delete the file within 30 days of append QA or at engagement close. We receive no household-level data and no street addresses. Race, ethnicity and gender are never used to build or adjust these indicators. We return a match report. No such indicator enters an award grid without your sign-off at the alignment gate and review with counsel."
+
+  - id: safe
+    title: "How to send data safely"
+    blocks:
+      - bullets:
+          - text: "**No** names, emails, phone numbers, street addresses, full dates of birth, Social Security numbers, external IDs such as LSAC account numbers, or free-text notes. Send age in whole years, not date of birth."
+            only: law
+          - text: "**No** names, emails, phone numbers, street addresses, full dates of birth, Social Security numbers, or free-text notes. Send age in whole years, not date of birth."
+            only: undergraduate
+          - text: "Replace your student ID with a **hashed key**. Use a salted hash and keep the salt; we never need it. Use the same key in every file and every in-cycle export."
+          - text: "`students` carries state and **ZIP3** (first three digits). ZIP5 is sent only in the optional `zip_key` file, through your secure channel."
+          - text: "Dates are welcome (they are converted to days before term start and then discarded)."
+          - text: "Transfer through [secure file transfer]. We delete raw files at engagement close per [retention policy]."
+
+  - id: dowith
+    title: "What we do with the data"
+    blocks:
+      - bullets:
+          - text: "We check structure and logic: duplicate keys, stage order, aid for non-admitted students, offsets outside the protocol, and reconciliation to your published totals. Every check and its row count is reported back to you."
+          - text: "Student-level data stay in our secure compute environment. The dashboard shows aggregates only, with groups smaller than ten suppressed. If you request a student-level list (for example, students at risk of melt), it comes back through your secure channel, not the dashboard."
+          - text: "Race, ethnicity and gender are used to audit results for fairness, never to decide awards."
+          - text: "Recommendations are delivered as a scholarship policy that your staff apply as offers go out: scholarship levels by position band and market, and by need only if you use need in scholarships."
+            only: law
+          - text: "Recommendations are delivered as a scholarship policy (award levels by academic, need, and residency group) that your staff can apply as offers go out."
+            only: undergraduate
+          - text: "No recommendation is published until you and [institution counsel] have reviewed it."
+
+  - id: timeline
+    title: "Timeline"
+    blocks:
+      - table:
+          cols: ["Step", "When"]
+          widths: [4.5, 2.5]
+          rows:
+            - ["Kickoff and definitions call", "[Date]"]
+            - ["Data delivered", "[Date]"]
+            - ["Data quality report back to you", "[Date + 1 week]"]
+            - ["Funnel analysis delivered", "[Date + 6 weeks]"]
+            - only: law
+              cells: ["Evidence audit, 509 market view and price-test screen verdict (one page each)", "[Date + 6 weeks, to confirm]"]
+            - only: law
+              cells: ["Written status-quo scholarship grid for your confirmation", "[Date + 8 weeks, to confirm]"]
+            - only: law
+              cells: ["Optimized scholarship grid, only where the evidence supports it", "[Set after the verdict]"]
+            - only: undergraduate
+              cells: ["Aid policy recommendation delivered (Tier 2)", "[Date + 10 weeks]"]
+            - ["In-cycle monitoring begins", "[First admit release]"]
+
+  - id: checklist
+    title: "Checklist for your team"
+    blocks:
+      - checklist:
+          - "Tier chosen (1 or 2)"
+          - text: "Three entering classes (Tier 1) or four to five (Tier 2), with scholarships for every class"
+            only: law
+          - text: "Three cohorts (Tier 1) or four to five cohorts (Tier 2), with aid for every cohort"
+            only: undergraduate
+          - "Offer dates (Tier 1 where available; Tier 2 every package version with a reason code)"
+          - text: "Scholarship matrix or index with effective dates, or a description of how awards are decided"
+            only: law
+          - text: "Merit grid and need-grant formula"
+            only: undergraduate
+          - "Fund-code crosswalk, with each fund's eligibility rule"
+          - "Cycle calendar: offer batches, deposit deadlines, census date"
+          - "Class-size band, hard cap or soft target, and who decides on a test"
+          - text: "Conditional-award terms and renewal history"
+            only: law
+          - text: "PLUS approval and denial history"
+          - "Excluded-group flags"
+          - "Source labels as recorded, not recoded"
+          - "Single enrolled-at-census definition"
+          - "Your own data dictionary, with every code value"
+          - text: "ABA Standard 509 filings for the same years"
+            only: law
+          - text: "Common Data Set for the same years"
+            only: undergraduate
+          - "Hashed keys, ZIP3 only (ZIP5 only in `zip_key`), no direct identifiers"
+          - "Price test approval (Tier 2, only if the screen recommends one)"
+          - "Optional: in-cycle export, activity history, Clearinghouse match, survey, peer set, `zip_key`"
+          - text: "If `zip_key` is sent: written approval of the transfer under your data-use agreement; which address field is the permanent address at application; signed acknowledgment of the consumer-data purpose statement at the alignment gate"
+
+appendices:
+  - id: appA
+    title: "Appendix A. Field specification"
+    blocks:
+      - p: "Required: Y = send it; C = send it under the condition stated; N = optional; blank row = not requested for this program. Tier: 1 = Tier 1; 2 = Tier 2 only; A = optional add-on. The same specification is in the Excel template and in `data_dictionary_v3` (CSV)."
+      - special: appendix_fields
+  - id: appB
+    title: "Appendix B. Cycle calendar events and code lists"
+    blocks:
+      - special: events_table
+      - p: "Code lists for coded fields are in the Excel template (`Codes` worksheet). Send your own code lists with your data dictionary; we map them."
+
+# Cycle calendar event types (cycle_calendar.event_type)
+events:
+  - ["application_open", "Date applications open.", "CDS C13-C14", "both"]
+  - ["priority_date", "Priority or early consideration deadline, if any.", "CDS C14", "both"]
+  - ["application_deadline", "Application closing date.", "CDS C14", "both"]
+  - ["scholarship_deadline", "Last date to be considered for scholarships, if separate.", "", "both"]
+  - ["aid_form_priority_date", "Priority date for financial aid forms.", "CDS H8", "both"]
+  - ["aid_form_deadline", "Deadline for financial aid forms.", "CDS H8", "both"]
+  - ["decision_batch_release", "Each release of admission decisions or offers. One row per batch; use event_label for the batch name.", "CDS C16; M section 4", "both"]
+  - ["aid_notification", "Date or rolling start for aid notification.", "CDS H9", "both"]
+  - ["reply_deadline", "Date by which students must reply to the offer.", "CDS C17", "both"]
+  - ["deposit_deadline_1", "First enrollment (seat) deposit deadline. Give amount and refund terms.", "CDS C17", "both"]
+  - ["deposit_deadline_2", "Second deposit deadline, if you use two. Give amount and refund terms.", "", "law"]
+  - ["housing_deposit_deadline", "Housing deposit deadline.", "CDS C17", "undergraduate"]
+  - ["census_date", "Official census date of the entry term. Same definition in every year.", "M section 3", "both"]
+  - ["term_start", "First day of classes.", "", "both"]

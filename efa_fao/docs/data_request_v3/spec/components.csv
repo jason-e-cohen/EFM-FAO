@@ -1,0 +1,18 @@
+component,category,law,ug,note
+inst_merit,Gift,Y,Y,Institutional merit award (non-need-based)
+inst_need,Gift,C,Y,Institutional need-based grant
+inst_athletic,Gift,-,Y,Institutional athletic award
+inst_discretionary,Gift,Y,Y,"Institutional discretionary award, including appeals and reconsideration increases"
+inst_other,Gift,Y,Y,"Other institutional gift aid (named, restricted or special-purpose funds)"
+inst_stipend,Gift,Y,-,"Fellowship or stipend amount above tuition. An excluded component in total-award mode"
+inst_remission,Gift,Y,Y,"Tuition waiver, remission or exchange (employee dependents, exchange programs). Excluded group"
+state_grant,Gift,N,Y,State grant
+pell,Gift,-,Y,Federal Pell Grant
+seog,Gift,-,Y,Federal SEOG
+external_scholarship,Gift,Y,Y,"Scholarships from outside sources for which you do not choose the recipient or the amount"
+sub_loan,Self-help,-,Y,Federal Direct Subsidized Loan
+unsub_loan,Self-help,Y,Y,Federal Direct Unsubsidized Loan
+parent_plus,Self-help,-,Y,Parent PLUS
+grad_plus,Self-help,Y,N,Grad PLUS (cohorts before July 1 2026 and grandfathered borrowers)
+private_loan,Self-help,Y,Y,Private or institutional loan
+work_study,Self-help,N,Y,Federal or state work-study and any employment packaged by your institution

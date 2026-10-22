@@ -1,6 +1,6 @@
 # EFA + FAO v2.5: Methodology (lean model, re-review edits merged)
 
-**Status:** Specification. **Draft pending the scoped audit** (`Auditor_Brief_S4_S5_Rereview_v2.4.md`). The audit's corrections will be folded in before sign-off.
+**Status:** Specification. The scoped audit (`Audit_S4_S5_Rereview_v2.4.md`, Claude Fable 5.1, October 21, 2026) held the re-review with minor revisions. Its required edits E1 to E14 are merged below and tagged **[v2.5, E<n>]**. Pending sign-off.
 
 **Version history**
 - **v2.1** replaced the v2 estimator and optimizer with a simpler design after the first independent review (October 2026).
@@ -8,6 +8,7 @@
 - **v2.3** added batch scoring, the policy lookup, geography and targeted objectives, the evidence audit, and the price-test sample-size guide. Tagged **[v2.3]**.
 - **v2.4** added the ABA 509 market layer, program-length horizons, timing by wave, and the boosted-model challenger rule. Tagged **[v2.4]**.
 - **v2.5** merges the required-before-build edits from the S4 and S5 re-review (`S4_S5_Rereview_v2.4.md`; edits S4-1 to S4-14 and S5-1 to S5-10). Changes are tagged **[v2.5]**, with the edit number where one applies. The v2.4 text is kept as `02_methodology_v2.4.md`.
+- **v2.5 audit addendum** merges the audit's required edits E1 to E14 (`CHANGELOG_v2.5.md`, addendum). Tagged **[v2.5, E<n>]**.
 
 Results quoted here come from the v2 build on synthetic data unless marked otherwise. Items marked **[to build]** are not yet implemented.
 
@@ -53,12 +54,12 @@ Undergraduate first-time and transfer cohorts are in scope now. Graduate and pro
 
 **Market reference data (ABA 509) [v2.4; field rules v2.5].** For law schools, the public ABA 509 disclosures are an external reference dataset.
 
-*Field rules [v2.5].* These are inferred from the data and **to be confirmed against the ABA's definitions in the audit**:
+*Field rules [v2.5].* The audit confirmed these against the ABA's Standard 509 report form (headers and footnotes) and the data arithmetic. The ABA's definitions document itself was not read:
 - Grant counts and percentiles cover all full-time JD students in the academic year *before* the report year, and the percentiles are among recipients only. Evidence: Richmond's 75th-percentile grant equals the prior year's tuition in both the 2024 and 2025 reports.
 - LSAT and UGPA percentiles describe matriculants, not admits.
 - Yield = matriculants from the applicant pool ÷ offers.
-- A nonresident tuition of 0 at a private school means "same as resident" and is normalized and flagged.
-- Conditional-scholarship counts lag two years.
+- A nonresident tuition of 0 at a private school means "same as resident" and is normalized and flagged. **[v2.5, E10]** This affects a few private schools (4 of 111 in the 2025 file, Richmond among them).
+- **[v2.5, E10]** Conditional-scholarship counts: report year Y lists the entering classes Y − 1, Y − 2 and Y − 3, and the reduced-or-eliminated count is final after the first year. Cohort labels come from the report year, never from spreadsheet headers (the 2021 and 2022 files carry stale labels). Peers with conditional prevalence above 10% are flagged: their all-class grant distribution understates entering awards.
 - Full-time fields only.
 
 *Uses:*
@@ -119,10 +120,10 @@ In the synthetic world, θ = 1.31. The 1.49 quoted in earlier versions is the ef
      - law and professional default: D = 10% to 15% of tuition, rounded to $1,000.
 
      The middle arm gives a weak check on linearity.
-   - **Analysis population [v2.5, S4-1]:** **every randomized eligible admit**, with eligibles randomized out of the test serving as additional $0 observations (intent to treat). In the synthetic world this cuts the slope's standard error from 0.44 (test students only) to 0.29 at no extra cost. It also removes an upward bias of about 6% that test-only estimators show against θ.
+   - **Analysis population [v2.5, S4-1; revised E1]:** **every randomized eligible admit**, with eligibles randomized out of the test serving as additional $0 observations (intent to treat). This cuts the logit-slope standard error by about 20% (analytic factor 0.76) at no extra cost. **The all-eligible estimate is primary only where staff are blind to test membership** (the bonus is a formula line, with no test flag in the CRM). Otherwise the primary estimate is test-only at dose 0, and the all-eligible estimate is reported as secondary. The reason: the all-eligible estimate is exposed to any staff behavior that differs by test status (a 0.10-logit test-status effect biases it by about 20%), and the test-only estimate is not. Test-only estimators carry no bias against θ when the AME is evaluated at status-quo awards; the 6% to 11% gap seen earlier came from evaluating at received doses.
    - **Estimation:** logit of enrollment on the dose and pre-specified covariates. The effect is computed at dose 0 (status-quo awards), not at the received dose.
    - **Stratified assignment:** randomize within strata (need band × residency for UG; position band × wave for law), using blocked randomization so the arm shares are exact.
-   - **Compliance check:** compare other discretionary aid, reconsideration requests, and revisions between arms and between test and non-test eligibles. The aim is to detect staff offsetting or negotiation spillover.
+   - **Compliance check:** compare other discretionary aid, reconsideration requests, and revisions between arms and between test and non-test eligibles. The aim is to detect staff offsetting or negotiation spillover. **[v2.5, E1]** A yield contrast between the test $0 arm and non-test eligibles cannot detect a test-status effect of the size that matters (SE about 1.5 points at Richmond's size), so it is not the check. The checks that work are the process contrasts above and blinding of staff to membership.
    - **Delivery:** the bonus is always part of the first offer, never a revision.
    - **Offered only where it pays off [v2.2; rule replaced in v2.5]:** see the screen rule below.
 2. **Merit-grid regression discontinuity (secondary, optional).** Used only where a published threshold has a meaningful award jump and passes diagnostics.
@@ -172,7 +173,7 @@ Before proposing a test, audit the client's history for usable price variation. 
 - p is the **eligible population's** baseline yield.
 - D is the top arm in thousands of dollars.
 - n_test is the number of test students over the planned cycles.
-- 0.76 is the analytic gain from the all-eligible analysis (simulation: 0.66).
+- 0.76 is the analytic gain from the all-eligible analysis; simulation in logit units gives 0.80 **[v2.5, E2]**. Use 1.0 in place of 0.76 where the primary estimate is test-only (no staff blinding; see Analysis population).
 - k is the covariate-adjustment factor. **Use k = 0.92 by default, or √(1 − R²) from the client's out-of-time forecast.** The v2.3 value of 0.85 reproduced the prototype only because it used 21% yield where the test population's yield was 17%. The oracle bound in the synthetic world is 0.86.
 
 The smallest detectable effect at 80% power (two-sided, 5%) is about 2.8 × SE. It is reported **for information only**; it does not decide whether to run a test.
@@ -187,8 +188,9 @@ The smallest detectable effect at 80% power (two-sided, 5%) is about 2.8 × SE. 
 **Break-even slope.** β\* = 100 × p × 1,000 / (net tuition per enrollee − mean bonus). It is about 1.1 in the synthetic UG world and about 0.9 to 1.0 at Richmond. Plausible effects sit near break-even in both verticals. The decision therefore turns on which side of break-even the slope falls, not on whether it differs from zero.
 
 **Cost.** Expected cost of the test = M × (test students) × E[p × bonus], where M = Σ_t<H s^t is the award-commitment multiplier (H years, persistence s).
-- For a **capacity-capped** program, induced enrollees displace other admits, so there is no revenue offset.
-- For an **uncapped** program, report the prior-expected net cost and the zero-effect cost.
+- **[v2.5, E6] Capped or banded** (hard cap or class band): expected cost at the prior = M × n_test × E[(p + θ × dose ÷ 100) × bonus]. Induced enrollees carry the bonus too, and there is no revenue offset. At Richmond ($4,000, one cycle) this is about $375k at the prior mean, against $315k at zero effect.
+- **Uncapped:** the prior-expected net cost (it can be negative near break-even).
+- **Both regimes:** the ratio gate and the 5%-of-net-tuition-revenue gate use the **zero-effect cost**, so they stay defined when the expected net cost is negative. Net value uses the regime-appropriate expected cost.
 
 At Richmond (M ≈ 2.92, renewable awards), cost per test student at zero effect is about **$1,226 with D = $4,000 and $2,453 with D = $8,000**, against the year-one-only $420 quoted in v2.3.
 
@@ -201,7 +203,7 @@ The v2.3 rule (recommend a test when the smallest detectable effect is at most a
 - p, eligible yield;
 - tuition, and the mean institutional award per enrollee;
 - award commitment H, persistence s, and the renewal rule;
-- capacity: class band ± %, or "uncapped";
+- capacity: class band ± %, or "uncapped" **[v2.5, E7: a mandatory scoping input; the verdict depends on it]**;
 - floors and targets;
 - the planned top arm D and the test share (default 40%);
 - test cycles K (1 or 2);
@@ -213,28 +215,30 @@ The v2.3 rule (recommend a test when the smallest detectable effect is at most a
 1. **Pool.** Build a projected pool, with cells per section 5, from Tier 1 data where available. Otherwise use a synthetic pool calibrated to public data (509 or IPEDS).
 2. **Prior.** b ~ N(μ0, σ0²), truncated at 0; 21-point quadrature.
 3. **Value matrix.** For each prior node b_i, solve the production optimizer for the best grid a\*(b_i) under the client's constraints. V[i, j] = gain against status quo under b_i of a\*(b_j), with feasibility checked at b_i.
-4. **EVPI** = U × (Σ_i w_i max_j V[i, j] − Σ_i w_i V[i, j0]), where j0 is the grid the two-sided choice rule picks under the prior. **Gate 1:** if EVPI ≤ the cost of the cheapest admissible design, the verdict is **Not recommended**.
-5. **EVSI.** For each design (D, K), compute SE_b in logit units. For 21 b-nodes × 21 z-nodes: b̂ = b_i + z × SE_b; update the posterior; choose the grid with the production two-sided rule at the posterior quantiles; score it at b_i. EVSI = U × (EV_test − EV_no test).
-6. **Net value** = EVSI − cost − F × K.
+4. **EVPI** = U × (Σ_i w_i max_j V[i, j] − Σ_i w_i V[i, j0]), where j0 is the grid the two-sided choice rule picks under the prior. **[v2.5, E5]** j0 may be a reallocation rather than the status quo; V[i, j0] is never dropped. **Gate 1:** if EVPI ≤ the cost of the cheapest admissible design, the verdict is **Not recommended**.
+5. **EVSI.** For each design (D, K), compute SE_b in logit units. For 21 b-nodes × 21 z-nodes: b̂ = b_i + z × SE_b; update the posterior; choose the grid with the production two-sided rule at the posterior quantiles; score it at b_i. EVSI = U × (EV_test − EV_no test). **[v2.5, E4]** Both expectations score every grid by the same function (realized revenue at the true slope, infeasibility uncosted). The production two-sided rule is quantile-based, so EVSI may be **negative**: a narrower posterior loosens the feasibility checks and admits riskier grids. A negative EVSI is reported with its sign, yields **Not recommended**, and triggers a review of the rule's quantile margins. The same preposterior analysis uses the choice-rule objective in section 5 (maximize net tuition revenue at b_M) **[v2.5, E3]**.
+6. **Net value** = EVSI − expected cost − F × K, with the expected cost for the program's regime (see Cost above).
 
 **Verdicts**
 - **Recommend:** all of the following hold.
   - Net value ≥ max($50,000; 0.5% of one cohort's multi-year net tuition revenue).
-  - EVSI ÷ (cost + F × K) ≥ 1.5.
+  - EVSI ÷ (zero-effect cost + F × K) ≥ 1.5.
   - Zero-effect cost ≤ 5% of one cohort's multi-year net tuition revenue.
   - The office can randomize and log; U ≥ 2; the client alignment gate accepts the disclosure.
 - **Optional:** net value > 0, but a threshold or gate above is missed.
 - **Not recommended:** net value ≤ 0, or Gate 1 stops the computation.
 
-**Reported every time:** EVPI, EVSI, cost, the MDE, β\*, and the grid change the test would most likely trigger.
+**Reported every time:** EVPI, EVSI (with its sign), cost, the MDE, β\*, the grid change the test would most likely trigger, and **[v2.5, E7]** the verdict at the client's capacity band and at ±5% and ±10%.
 
 The client's VP or Director of Enrollment, or a Dean, decides per engagement.
 
 *Worked example (Richmond economics, revenue objective, ±3% class band, median-position floor, prior θ ~ N(1.0, 0.5²), U = 3).* The verdict is **Not recommended** at 600, 1,000, 2,000, and 4,000 eligible admits: EVPI is $0.29M to $1.92M, against test costs of $0.32M to $1.99M. At Richmond's own size, EVPI is $0.10M to $0.68M across priors.
 - Under an uncapped scale decision, the same economics give Recommend at every size. The decision space, not N, drives the verdict.
-- Rerun the screen if the client names a slope-sensitive target (for example, a median position).
+- **[v2.5, E7] At a ±3% class band the verdict is Not recommended at every size and prior tested** (four pools, five priors, renewable and one-year bonus, median floor). **The verdict turns on the capacity band:** at ±10%, a five-band Richmond pool gives Optional or Recommend, and at ±5% it is Not recommended under the capped cost and Optional under the net cost (a judgment call on the cost model). The capacity band is therefore a mandatory scoping input.
+- **[v2.5, E7] A position target does not raise the value of a test at the 5% guardrail.** Aid cannot move Richmond's enrolled median, so a target shrinks the admissible set and the test has nothing to decide. The earlier suggestion to rerun the screen when a client names a slope-sensitive target is withdrawn.
+- **[v2.5, E4] Sign of EVSI.** On the five-band Richmond pool at ±3%, EVSI is −$0.12M under the production rule; an unconstrained Bayes rule on the same pool gives EVSI ≥ 0.
 
-These examples use a stylized two-band pool; **to be confirmed in the audit.**
+The audit reproduced the worked-example table to the dollar and extended it (37 verdict runs at N = 650). These runs use **stylized pools**: a two-band pool and five-band pools calibrated to Richmond's 509 profile. They are not results from the production optimizer. **The production screen must run on the real optimizer with a 509-calibrated pool**, and the size of the negative EVSI there is untested.
 
 **Cheaper randomized options (deferred, section 11):**
 - mechanism tests (deposit deadline or award timing), which cost almost nothing in dollars;
@@ -245,7 +249,7 @@ These examples use a stylized two-band pool; **to be confirmed in the audit.**
 Whether price response changes through the cycle is learned from the client's own data, not from outside timing data.
 
 - **Waves:** two by default. Three only if offers are released in at least three batches at least three weeks apart. Randomization is stratified by wave.
-- **Estimation:** pooled across waves. Per-wave slopes are reported as descriptive ranges. At Richmond with one cycle and D = $4,000, the per-wave MDE is about 5.1 points per $1,000, and the MDE for a wave difference is about 7.3.
+- **Estimation:** pooled across waves. Per-wave slopes are reported as descriptive ranges. At Richmond with one cycle and D = $4,000, the per-wave MDE is about 5.1 points per $1,000, and the MDE for a wave difference is about 7.3 (test-only basis; 3.9 and 5.5 with the all-eligible analysis) **[v2.5, E14]**.
 - **Negotiation and reconsideration:** in law, these drive many revisions. They are post-treatment outcomes, logged with reason codes, and never used as price variation. Reconsideration and increase rates by arm are reported as compliance diagnostics.
 - **When a wave slope may change a recommendation:** only if all four hold.
   1. A single early-versus-late contrast was pre-registered with its direction.
@@ -257,7 +261,7 @@ Whether price response changes through the cycle is learned from the client's ow
 ### Anchor [revised v2.5, S4-2]
 
 - **Separate estimates.** The experiment and the discontinuity are reported separately, each converted to a **logit slope on its own sample at status-quo awards**.
-- **Pooling.** The two logit slopes are pooled by inverse variance into the anchor b̂ with SE s. Under the one-slope model both sources estimate the same b, and their AMEs differ only through p(1 − p).
+- **Pooling.** The two logit slopes are pooled by inverse variance into the anchor b̂ with SE s. **[v2.5, E13]** The discontinuity's weight in the pooled anchor is reported beside the anchor and capped at 30%. (If the local slope at the threshold differs from the experiment's, the pooled bias is at most the weight times the difference.) Under the one-slope model both sources estimate the same b, and their AMEs differ only through p(1 − p).
 - **Disagreement flag:** raised when |z| > 1.5 in logit units. On a flag, the sensitivity scenarios widen to span both estimates. After flags in two consecutive cycles, the anchor becomes experiment-only.
 - **Tier 1 without a test:** the anchor is the discontinuity (or qualifying policy change) alone, labeled local. A Tier 1 client with no usable source has **no anchor**.
 
@@ -276,7 +280,7 @@ One slope for everyone, on the logit scale:
 - **Reference award r_c** for the student's cell c: the mean status-quo flexible award among admits in that cell in the recalibration cohort (supplement mode: the discretionary component; total mode: the total institutional scholarship). It is adjusted for known rule changes (tuition, merit grid) to the live year. p\* estimates yield under the status-quo *policy* for students like this one, so r_c is the matching award. Formula awards stay fixed.
 - **Known limitation:** replacing staff targeting within a cell with a flat cell award changes how award and interest move together inside the cell. The first-order model ignores this. Monte Carlo worlds W1 and W16 to W18 measure the error.
 - **b** comes from the anchor.
-- **Conversion test:** the model's AME at status-quo awards on the experiment's eligibles, computed with **recalibrated** p, must match the experiment's own status-quo AME within 5%. The v2.4 "within 1%" check is retired: it tested an identity that holds by construction.
+- **Conversion test:** the model's AME at status-quo awards on the experiment's eligibles, computed with **recalibrated** p, must match the experiment's own status-quo AME within 1.645 × the SE of the difference **[v2.5, E12]**. The acceptance fixture carries a 10% level bias and must fail; the unbiased fixture must pass. The v2.4 "within 1%" check is retired: it tested an identity that holds by construction.
 - **Holdout test:** on the holdout, Σ_c n_c × mean p_i(r_c) falls inside the forecast interval.
 - A single logit slope is not a single percentage-point effect. Students near 50% yield respond most in points, so the model still targets undecided students without estimating segment differences.
 - **Support:**
@@ -377,7 +381,7 @@ The v2 build optimized four-year revenue against a one-year budget. That is no l
 
   buffer = 1.645 × √(Σ p(1 − p) × award²), evaluated at the high scenario
 
-  This targets at most a 5% chance of overrun from enrollment noise alone. At Richmond the buffer is about 12% of first-year scholarship spend.
+  This targets at most a 5% chance of overrun from enrollment noise alone. At Richmond the buffer is about 15% of first-year scholarship spend (award-weighted; 12% would apply only with equal awards) **[v2.5, E9]**.
 - **Class size:** an optional expected class band (floor and ceiling), checked at all three scenarios. The law default is ±3% of the status quo.
 - **Per-student aid cap** as above, and an optional cap on the class-wide discount rate.
 - **Guardrail [v2.5, S5-5]:** no cell's first-offer award falls more than **5% of tuition** below its status-quo level (configurable). That is about $1,900 at Lakeshore and $2,900 at Richmond.
@@ -388,7 +392,7 @@ The v2 build optimized four-year revenue against a one-year budget. That is no l
 
 1. **Scenarios:** b_L = max(0, b̂ − 1.2816 s), b_M = b̂, b_H = b̂ + 1.2816 s.
 2. **Feasibility:** a grid is feasible only if every constraint holds at b_L, b_M **and** b_H.
-3. **Choice:** maximize net tuition revenue at b_M, subject to the gain over the status-quo grid being ≥ 0 at **both** b_L and b_H.
+3. **Choice:** maximize net tuition revenue at b_M, subject to the gain over the status-quo grid being ≥ 0 at **both** b_L and b_H. **[v2.5, E3]** The screen's preposterior analysis uses the same objective, so the screen and the optimizer pick the same grid on a shared fixture.
 
 The v2.4 rule checked only the low scenario. That approves any cut the middle scenario favors, because a cut always gains when students are less sensitive, and the rule never checked the case where they are more sensitive.
 
@@ -399,7 +403,7 @@ The v2.4 rule checked only the low scenario. That approves any cut the middle sc
 
 **No admissible grid.** If no grid beats the status quo under the rule, the output is the documented status-quo grid, the reasons, and the screen's evidence plan.
 
-*Open for the audit:* whether the two-sided rule is so conservative that it nearly always returns the status quo, and whether a minimax-regret or posterior-expected-value rule should replace it.
+*Audit result (Task 2):* the two-sided rule is kept. It binds for level cuts under weak evidence, which is where it should: on the two-band Richmond pool the one-sided rule picks a $1,000 cut whose downside is $0.5M to $1.0M over three cohorts, and the two-sided rule returns the status quo. It is not biased toward the status quo beyond what the pool dictates: it returns the status quo in 5 of 5 priors on the two-band pool, which has no admissible reallocation by construction, and in 0 of 5 on the five-band pool. In the Lakeshore backtest it never binds, because any reallocation gains at any slope there. What loses money in Lakeshore is forecast error, which no slope rule addresses. Posterior expected value without gain tests picks grids that lose at the 10th percentile; minimax regret picks cuts with negative expected value. *Judgment call:* the objective stays at b_M rather than a posterior expectation; what would change it is a Monte Carlo world where the two differ by more than the fair-baseline margin.
 
 ### Increases-only evaluation [v2.5, S5-7]
 
@@ -424,7 +428,9 @@ Each targeted objective is linear and must hold at all three scenarios (k ∈ {L
 | Minimum expected enrollment, segment S | Σ_c∈S n_c p_c^k(a_c) ≥ T_S |
 | Year-over-year gain | T_S = (1 + g_S) × status-quo expected enrollment of S at scenario k |
 | Enrollment weights | maximize NTR_M + Σ_S w_S × expected enrollment of S at b_M, with w_S in dollars per enrollee, stated by the client |
-| Median position (law) | Σ over cells at or above band m of n_c p_c^k ≥ 0.5 × Σ_c n_c p_c^k + 1.645 σ_k, with σ_k = √(Σ n_c p_c(1 − p_c)) |
+| Median position (law) **[v2.5, E8]** | Σ over cells at or above band m of n_c p_c^k ≥ 0.5 × Σ_c n_c p_c^k (the expectation) |
+
+**Median constraint [v2.5, E8].** The constraint is on the expectation only. The 1.645σ margin is dropped from feasibility: when bands are defined on the school's own enrolled class, the status quo sits at exactly 0.5 and would violate the margin, forcing the optimizer to buy position or return infeasible. The probability that the realized median holds is reported separately (from the binomial variance, σ_k = √(Σ n_c p_c(1 − p_c))) and is not a feasibility constraint. At the 5%-of-tuition guardrail, aid alone cannot raise Richmond's median.
 
 **Whitelist [v2.5].**
 - **Allowed:** market tier or CBSA, state, distance band, program, first-generation status, Pell eligibility, residency, student type, academic index or **position band**, and need band.
@@ -579,7 +585,7 @@ Budgets are set on model-predicted spend. The target runtime is at most 30 secon
 | W9 | No grid, no test | 100 | "No anchor," no optimized grid (100%) |
 | W10 | Data-quality faults (missing dates, post-decision awards, duplicates) | 100 | QA catches ≥ 95%; bias within the W0 limit + 5 points |
 | W11 | Planted leak | 100 | Blocked (100%) |
-| W12 | Staff offsetting | 100 | Compliance flag ≥ 80% when the offset ≥ 25% of the bonus |
+| W12 | Staff offsetting. **[v2.5, E1]** Variant: a 0.10-logit test-status effect (staff treat test-cohort admits differently) | 100 | Compliance flag ≥ 80% when the offset ≥ 25% of the bonus. Variant: flagged, or the primary estimate's bias ≤ 10%, in ≥ 90% of seeds |
 | W13 | Merit thresholds move between cohorts | 100 | Per-regime estimate; bias within the limit |
 | W14 | Negotiation interference in the control arm | 100 | Reconsideration flag ≥ 70%; intent-to-treat bias reported |
 | W15 | Retention depends on net cost; non-constant hazard | 100 | Year one unaffected; multi-year error documented |
@@ -695,24 +701,24 @@ Added only when the data support them and the Monte Carlo study shows a gain ove
 
 | ID | Finding | Status |
 |----|---------|--------|
-| F1 | One-sided choice rule tilts toward cuts | Two-sided rule (section 5); audit to test conservatism |
+| F1 | One-sided choice rule tilts toward cuts | Two-sided rule (section 5); audit kept it (A8 to A10): binds for level cuts under weak evidence, inert where any reallocation gains |
 | F2 | Law status quo not representable | Award mode, ladder, cap, horizon, law profile (section 5) |
-| F3 | Screen rule power-based | Value-of-information screen (section 4); audit to stress-test |
+| F3 | Screen rule power-based | Value-of-information screen (section 4); audit reproduced the worked example and stress-tested it (A1 to A7). Not recommended at ±3% under every pool, prior, target and bonus tested; the verdict is conditional on the capacity band (±10% gives Optional or Recommend); EVSI can be negative (E4); cost for capped programs includes induced enrollees (E6) |
 | F4 | Test cost year-one only | Cost × M; no offset when capped |
 | F5 | Estimand undefined | θ at status-quo awards; logit-unit pooling |
 | F6 | Grid baseline undefined (O1) | Cell reference award r_c |
-| F7 | Randomized-out eligibles unused | All-eligible analysis |
+| F7 | Randomized-out eligibles unused | All-eligible analysis, primary only if staff are blind to test membership; otherwise test-only at dose 0 is primary (E1). The "+6% estimand bias" claim is withdrawn (A20); the gain is about 20% in logit units, not 34% (A21) |
 | F8 | Scenario coverage coincidental | Recalibration, cell pooling, Monte Carlo disclosure |
 | F9 | Backtest matches spend with truth | Model-set budgets in validation |
 | F10 | Count noise ignored | Buffer |
 | F11 | Monte Carlo gate miscalibrated | Section 10 |
 | F12 | Sample-size assumptions | k = 0.92, eligible yield, scaled dose |
-| F13 | 509 fields misread | Field rules (section 2); Appendix D; audit to confirm |
+| F13 | 509 fields misread | Field rules (section 2); Appendix D. Audit confirmed all but two: conditional-scholarship lag is one year, not two (A16), and the nonresident-zero rule affects 4 of 111 private schools (A17). The illustration was regenerated (A18). The ABA definitions document itself was not read |
 | F14 | Horizon mismatch in v2 build | Horizon = commitment; config validation |
 | F15 | Conversion test tautological | Replaced |
 | F16 | Wave slopes not estimable | Descriptive; four conditions |
 | F17 | Equity audit stale | Blocked from client use until re-run |
-| F18 | Negotiation interference | W14; compliance diagnostics; disclosure |
+| F18 | Negotiation interference | W14; compliance diagnostics; disclosure. Audit: the all-eligible estimate is fragile to a test-status effect (±0.10 logit gives about ±20% bias) that the yield-contrast compliance check cannot detect (A22); remedy is blinding plus process contrasts, and the W12 variant (E1) |
 | F19 | "Four cohorts" error | Corrected: 1,917 test students over three cohorts (2023 to 2025) |
 | F20 | Guardrail scale | 5% of tuition |
 
@@ -760,6 +766,7 @@ For each peer j and the client's own position q:
 - grant rank equals academic rank;
 - the all-class award distribution stands in for entering awards;
 - positions are measured against matriculants.
+- **[v2.5, E10]** Peers with conditional-scholarship prevalence above 10% are flagged "entering awards understated".
 
 **Validation (synthetic law world).** Twelve peers built from 509-calibrated parameters. Student grants follow g = F⁻¹(Φ(ρ × z_index + √(1 − ρ²) × ε)) for ρ ∈ {0.9, 0.7, 0.5}, with matriculant selection on grant and position. Aggregates are published as the 509 does.
 
@@ -767,16 +774,16 @@ For each peer j and the client's own position q:
 - per-band |bias| ≤ 5% of tuition, and Spearman ≥ 0.8 across bands, at ρ = 0.9 and 0.7;
 - document the failure at ρ = 0.5 and the matriculant-selection bias.
 
-*Illustration (2025 reports):* an applicant at Richmond's 75th position (LSAT 167, UGPA 3.92) sits at about Wake Forest's 66th all-student quantile. That maps to about $43,000 there, against about $51,800 at Richmond.
+*Illustration (2025 reports) [v2.5, E11]:* an applicant at Richmond's 75th position (LSAT 167, UGPA 3.92) sits at position 0.71 at Wake Forest. Applying the rules above gives about $47,100 there, against $55,550 at Richmond (full tuition, since 0.75 ≥ 1 − 0.276), a gap of about $8,450. The values come from the audit's computation of this procedure. **[to build]** Regenerate them from the implemented function, with a unit test for the full-tuition branch (u ≥ 1 − f gives tuition) and for the tail extrapolation.
 
 ## 13. Open issues: status after the S4 and S5 re-review [v2.5]
 
-All issues were ruled on in `S4_S5_Rereview_v2.4.md`. "Applied" means the text above reflects the ruling. Items marked "audit" are pending the scoped audit.
+All issues were ruled on in `S4_S5_Rereview_v2.4.md`. "Applied" means the text above reflects the ruling. The scoped audit is complete (`Audit_S4_S5_Rereview_v2.4.md`); its rulings are in the closed items below.
 
 | ID | Issue | Ruling | Where applied |
 |----|-------|--------|---------------|
 | O1 | Forecast baseline | Changed: cell reference award r_c; forecast has no aid fields | Section 4, Response model |
-| O2 | Weak evidence | Changed: two-sided rule; automatic weak-evidence state | Section 5 (audit: conservatism) |
+| O2 | Weak evidence | Changed: two-sided rule; automatic weak-evidence state. Audit: rule kept | Section 5 |
 | O3 | Uncorrected gains | Changed: fix causes; Monte Carlo disclosure and thresholds | Sections 4, 6, 10 |
 | O4 | Grid scope | Confirmed with additions | Section 5, Policy grid scope |
 | O5 | Anchor population | Changed: estimand θ; logit-unit pooling; widen on flag | Section 4, Estimand and Anchor |
@@ -790,17 +797,17 @@ All issues were ruled on in `S4_S5_Rereview_v2.4.md`. "Applied" means the text a
 | O13 | Consumer segments | Confirmed; release criteria | Section 9 |
 | O14 | Market tier and targets | Changed: cell rule; floors apply to all tiers; infeasibility reporting | Section 5; Appendix C |
 | O15 | Scoring governance | Confirmed with release criteria | Section 7 |
-| O16 | 509 definitions | Confirmed; field rules and procedure | Section 2; Appendix D (audit: definitions) |
+| O16 | 509 definitions | Confirmed, with the lag corrected to one year (audit) | Section 2; Appendix D |
 | O17 | Horizon and conditional awards | Changed: horizon = commitment; conditional modeling deferred | Section 5 |
 | O18 | Wave timing | Changed: descriptive; four conditions | Section 4, Timing |
 | O19 | Boosted challenger margin | Set | Section 11 |
 
-**New open items for the audit:**
-- **A1.** Robustness of the value-of-information verdict for Richmond.
-- **A2.** Practical conservatism of the two-sided rule.
-- **A3.** ABA 509 field definitions.
-- **A4.** The estimand and pooling argument.
-- **A5.** Arithmetic in the Richmond baselines.
+**Items opened for the audit: all closed [v2.5].** These IDs are the audit's task numbers; the audit's findings are numbered A1 to A33 in its own table, so cite them as "audit Task n" or "audit A<n>" to avoid confusion.
+- **A1. Closed.** Value-of-information verdict for Richmond: the table reproduces. Not recommended at ±3% under every pool, prior, target, rule and bonus type tested. Not robust to the class band: at ±10% a five-band pool gives Optional or Recommend. EVSI can be negative. The median-target claim is overturned. Cost for capped programs is understated by 19% unless induced enrollees are included. Edits E3 to E7.
+- **A2. Closed.** Conservatism of the two-sided rule: kept. It is not inert in general and not biased toward the status quo beyond what the pool dictates. Posterior expected value and minimax regret were rejected. Edit E3.
+- **A3. Closed.** ABA 509 field definitions: confirmed from the form and the data, except the conditional-scholarship lag (one year) and the scope of the nonresident-zero rule (4 of 111). The ABA definitions document itself was not read. Edits E10, E11.
+- **A4. Closed, with corrections.** Estimand and pooling: logit-unit pooling holds under the one-slope model. No "+6% bias" exists once the AME is evaluated at status-quo awards, and the all-eligible precision gain is about 20%, not 34%. The all-eligible analysis is fragile to staff test-status effects. The conversion test is under-powered at 5%. Edits E1, E2, E12, E13.
+- **A5. Closed, with corrections.** Richmond baselines, sample-size table, false-fail rates and cost per test student confirmed. Buffer is about 15%, not 12% (E9). The median constraint with a 1.645σ margin cannot be implemented (E8). The per-wave MDE is test-only (E14).
 
 ## 14. Closed decisions [v2.4]
 

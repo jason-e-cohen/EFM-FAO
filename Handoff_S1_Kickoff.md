@@ -77,7 +77,9 @@ Create `CLAUDE.md` in the folder. Keep it under 80 lines. Contents:
 
 ## 4. Phase B: S1, Requirements and user stories
 
-**Inputs:** `02_methodology_v2.5.md` (merged), `01_executive_read` and `03_technical_roadmap` (v2.5), `Audit_S4_S5_Rereview_v2.4.md`, `S4_S5_Rereview_v2.4.md` (with errata), `Richmond_Call_Capture_Sheet.md`, the Pitch deck (current copy), the EAB proposal PDF (for what the client is comparing against).
+**Inputs:** `02_methodology_v2.6.md`, `01_executive_read_v2.6.md` and `03_technical_roadmap_v2.6.md`, `Audit_S4_S5_Rereview_v2.4.md`, `S4_S5_Rereview_v2.4.md` (with errata), `Richmond_Call_Capture_Sheet.md`, the Pitch deck (current copy), the EAB proposal PDF (for what the client is comparing against).
+
+**Amendment input [updated October 22, after adoption].** Jason adopted the consumer ZIP amendment into `02_methodology_v2.6.md` (not separately audited; see `CHANGELOG_v2.6.md`). Use v2.6 (and `01_executive_read_v2.6.md`, `03_technical_roadmap_v2.6.md`) as the inputs in place of v2.5. In S1, list the consumer requirements (ZIP intake via `zip_key`, ZIP index and capacity tier, gates G1 to G4 and P1, report-only P2 to P4, license gate L1) as gated, priority M1 or M2, not MVP. The P4 inconsistency is resolved (report-only everywhere).
 
 **Output:** `S1_Requirements_and_User_Stories.md`. About 5,000 to 7,000 words. Plan mode first: produce the outline and the list of open decisions, get Jason's approval, then write.
 
@@ -131,7 +133,7 @@ Create `CLAUDE.md` in the folder. Keep it under 80 lines. Contents:
 | 1 | Restore the FR table dropped in v2.1 (changelog item 3) | Yes: it is the traceability backbone for S3 and S9 |
 | 2 | Is the Richmond pilot confirmed? | The decision log says "assumed to proceed." S1 will frame Richmond as the first user either way; say if the engagement is not yet signed |
 | 3 | Which pitch copy is current? | Confirm before S1 checks the evidence-state table against it |
-| 4 | Produce a law Tier 1 data request now, or after S2? | Now, in parallel with S1: Richmond cannot send data against the v2.3 request |
+| 4 | Produce a law Tier 1 data request now, or after S2? | Now, in parallel with S1: Richmond cannot send data against the v2.3 request. **[Updated]** This is spec step S2b (Plan of Action, Step 3b, D1 to D5): law Tier 1 first, reconciled to the CDS definitions, full v3 after S2 |
 | 5 | Dashboard scope for the Richmond MVP | S1 proposes views 1, 4 and 5 first; confirm |
 | 6 | Capacity band (from the call) | Decides the Richmond screen verdict; record it as a fixed S1 input |
 

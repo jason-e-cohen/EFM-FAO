@@ -1,0 +1,155 @@
+table,field,type,tier,required,description,allowed_values_or_notes,ref
+students,student_key,text,1,Y,Opaque person key. Hash your institutional ID with a salt you keep. Same key in every file and every in-cycle export.,Stable across files and terms,v2.1; REF
+students,cohort,int,1,Y,Intended entry year (fall-term year for fall entrants).,Four-digit year,v2.1; REF
+students,entry_term,text,1,Y,Intended entry term.,Fall; Spring; Summer,v2.1; REF
+students,actual_entry_cohort,int,1,N,"Actual entry year if different from the intended year (deferral, or entered in another term). Blank if the same.",Four-digit year,REF; CDS C18
+students,actual_entry_term,text,1,N,Actual entry term if different from the intended term. Blank if the same.,Fall; Spring; Summer,REF; CDS C18
+students,student_type,text,1,Y,"What kind of entrant this is. Other types go to a separate file or are excluded. First-time, first-year as defined in CDS (attending any institution for the first time at the undergraduate level). Transfer as defined in CDS.",First-time first-year; Transfer; Other (excluded),v2.1; CDS definitions
+students,student_level,text,1,Y,Level of the program applied to.,Undergraduate; Graduate; Professional,REF
+students,program_code,text,1,Y,"Program or division the student applied to, as you record it. College, school or division within the university, if you use more than one.",Free text with a code list,M section 5; REF
+students,enrollment_load,text,1,Y,Full-time or part-time at entry. Full-time = 12 or more semester or quarter credits per term (CDS definition).,Full-time; Part-time,CDS definitions; 509
+students,intended_program,text,1,Y,Intended major or program of study at application. Plus a mapping to broad program areas.,Free text with a code list,REF; v2.1
+students,residency,text,1,Y,"Residency at application, based on the known physical address at the time of application. In-state, out-of-state, international or unknown, as in CDS C1.",In-state; Out-of-state; International; Unknown,CDS C1; REF; 509
+students,tuition_residency,text,1,N,"Residency class used for billing, only if it differs from `residency`.",Resident; Nonresident,v2.1
+students,region_code,text,1,Y,"State plus the first three ZIP digits (ZIP3), from the permanent address at application. Never the full ZIP. ZIP5 goes only in the optional `zip_key` file.",e.g. VA-232,v2.1; E.3
+students,cbsa_code,text,1,N,"Metropolitan or micropolitan area code. If you send it, produce it with the script we supply, before addresses are removed.",CBSA code or blank,M section 2; v2.1
+students,distance_band,text,1,N,Distance-to-campus band from the same script.,e.g. 0-50 mi; 50-150 mi; 150+ mi,M section 2
+students,first_touch_source_raw,text,1,Y,Raw label for the earliest recorded contact. Do not recode.,Free text; we map it with a versioned source taxonomy,v2.1; REF
+students,first_touch_date,date,1,Y,"Date of the earliest recorded contact (converted to days before term start, then dropped).",On or before inquiry_date,v2.1; REF
+students,first_touch_is_application,bool,1,Y,True when the application is the first recorded contact (stealth applicant).,true; false,v2.1
+students,inquiry_date,date,1,Y,Date the person became a prospect or inquiry.,Blank only if first_touch_is_application,v2.1
+students,application_start_date,date,1,N,Date the application was started.,,v2.1
+students,application_submit_date,date,1,Y,Date the application was complete and actionable (all required items received). As in the CDS definition of applicant.,Blank if never completed,v2.1; CDS definitions
+students,plan_type,text,1,Y,"Admission plan the applicant applied under. As defined in CDS: early decision (binding), early action (non-binding), restrictive early action, regular, rolling.",Early decision; Early action; Restrictive early action; Regular; Rolling,v2.1; CDS C21-C22
+students,admit_decision,text,1,Y,Final admission decision at the term census. Applicants placed on a waiting list and never admitted are their own category.,Admitted; Denied; Waitlisted not admitted; Withdrawn before decision; Incomplete,v2.1; CDS C1-C2
+students,admit_decision_date,date,1,Y,Date of the admission decision (the offer date for admits).,,v2.1
+students,offer_release_batch,text,1,N,Label of the batch or wave in which the decision or offer was released.,e.g. Batch 1 Dec 12,M section 4
+students,waitlist_placed_date,date,1,N,"Date the applicant was placed on the waiting list, if any.",Blank if not waitlisted,CDS C2
+students,waitlist_admit_date,date,1,N,"Date a waitlisted applicant was offered admission, if any.",Blank if not admitted from the list,CDS C2
+students,deposit_date,date,1,Y,Date the first enrollment (seat) deposit was received.,Blank if no deposit,v2.1
+students,enrolled_census,bool,1,Y,Enrolled at the official census date of the entry term. One definition for every cohort. Reconciles to CDS C1 enrolled.,true; false,v2.1; CDS C1; 509
+students,withdrawal_date,date,1,N,"Date of withdrawal before census, if any.",Supports melt analysis,v2.1
+students,retained_y2,bool,1,Y,Enrolled at the census of the next fall term.,Blank for the current cohort,v2.1
+students,retained_y3,bool,1,N,Enrolled at the census two falls later.,,v2.1
+students,campus_visit_count,int,1,Y,Number of recorded campus visits before the admit decision.,Counts before the decision date only,v2.1
+students,event_attended_count,int,1,N,Number of recorded events attended before the decision date.,,v2.1
+students,engagement_touches,int,1,Y,"Count of meaningful two-way contacts (calls, meetings, replies) before the decision date.",Exclude mass-email opens,v2.1
+students,hs_gpa,decimal,1,Y,"High school GPA on a 4.0 scale, as used for merit awards.",Blank if not submitted,v2.1; REF; CDS C11-C12
+students,hs_gpa_type,text,1,Y,Weighted or unweighted.,Weighted; Unweighted,v2.1
+students,hs_class_rank_pct,decimal,1,N,"High school class rank as a percentile, if you collect it.",0-100; blank if not reported,CDS C10
+students,act_composite,int,1,N,Best ACT composite. Blank if not submitted.,Do not impute,v2.1; REF
+students,sat_total,int,1,N,Best SAT total. Blank if not submitted. We convert with the official concordance.,Do not impute,v2.1; REF
+students,test_optional_flag,bool,1,Y,Applied under a test-optional policy.,,v2.1
+students,transfer_gpa,decimal,1,N,Cumulative GPA at prior institutions (transfers).,,v2.1; REF
+students,transfer_credits,int,1,N,Credits accepted at admission (transfers).,,v2.1
+students,first_gen,bool,1,Y,First-generation status. Blank if unknown. Do not code unknown as No.,true; false; blank,v2.1; REF
+students,race_ethnicity,text,1,Y,"IPEDS categories. Used only to audit results for fairness. Never a model input, grid dimension or target.",IPEDS categories plus Unknown,v2.1; REF; CDS B
+students,gender,text,1,Y,As recorded. Used only to audit results for fairness.,As recorded; Unknown,REF; CDS C1
+students,age_at_application,int,1,Y,Age in whole years at the application date. Not the date of birth.,Integer,REF
+students,athlete_recruited,bool,1,Y,Recruited athlete flag.,,v2.1; REF
+students,sport,text,1,N,Sport for recruited athletes.,,v2.1
+students,military_status,text,1,N,Veteran or active military status.,Veteran; Active; Dependent; None; Unknown,v2.1; REF
+students,legacy_status,bool,1,N,Alumni family connection.,,v2.1
+students,housing_applied,bool,1,Y,Applied for campus housing before census.,Used in melt flags,v2.1; M section 7
+students,housing_applied_date,date,1,N,Date the housing application was received.,,v2.1
+students,excluded_group_flag,bool,1,Y,True if the student receives aid under rules outside the normal process.,true; false,v2.1; M section 3
+students,excluded_group_type,text,1,Y,"Why the student is excluded. Recruited athlete, tuition waiver or exchange, employee dependent, named special scholarship, or other.",Free text with a code list,v2.1; M section 3
+fafsa,student_key,text,1,Y,Same key as students.,,
+fafsa,aid_year,text,1,Y,Aid year.,e.g. 2026-27,v2.1
+fafsa,fafsa_applied,bool,1,Y,Applied for federal aid (FAFSA) for this aid year.,true; false,REF
+fafsa,fafsa_received_date,date,1,Y,Date your office received the first FAFSA record.,Blank if none,v2.1
+fafsa,need_index_value,int,1,Y,EFC (aid years through 2023-24) or SAI (2024-25 and later). Keep the sign: SAI can be negative.,Integer,v2.1; REF
+fafsa,need_index_type,text,1,Y,EFC or SAI. The two are not comparable without this label.,EFC; SAI,v2.1
+fafsa,dependency_status,text,1,N,Dependent or independent.,,v2.1
+fafsa,verification_selected,bool,1,N,Selected for verification.,,v2.1; REF
+fafsa,verification_completed_date,date,1,N,Date verification was completed.,Blank if not selected or not completed,v2.1; REF
+fafsa,pell_eligible,bool,1,N,Federal Pell eligibility as packaged.,,v2.1
+fafsa,need_methodology,text,1,N,"Methodology used to determine need for institutional aid. Federal methodology, institutional methodology, or both (CDS H).",FM; IM; Both; None,CDS H
+fafsa,institutional_need_amount,decimal,1,N,"Need as determined by your institutional methodology (CSS Profile or your own form), if you use one.",Blank if not used,v2.1
+fafsa,income_band,text,1,N,"Household income band from the aid application, only where you package on income or no need index exists. Banded, never exact.",e.g. under 30k; 30-60k; 60-110k; over 110k; unknown,REF
+fafsa,coa_budget_total,decimal,1,N,"Cost-of-attendance budget used to package this student, if it varies by student.",,M section 3
+aid_offers,student_key,text,1,Y,"Same key as students. One row per student, fund and package version.",,
+aid_offers,aid_year,text,1,Y,Aid year.,e.g. 2026-27,v2.1
+aid_offers,fund_code,text,1,Y,Your fund code. Send a crosswalk (file `fund_crosswalk`).,,v2.1
+aid_offers,component,text,1,Y,Standard component we map the fund code to. You may leave it blank; we map from the crosswalk.,See the component table,v2.1; M section 3
+aid_offers,offered_amount,decimal,1,Y,"Annual amount offered, in dollars.","Never blank. Zero only if you offered zero. Unknown is blank, never zero",v2.1
+aid_offers,offer_date,date,1,Y,Date this amount was first communicated to the student.,Required to exclude aid not known at the decision date,v2.1
+aid_offers,package_version,int,2,Y,Package revision number (1 = first offer). Tier 1: the final package only. Tier 2: every version.,Keep every version at Tier 2,v2.1
+aid_offers,accepted_amount,decimal,1,N,Amount the student accepted. Post-decision; excluded from price models.,,v2.1
+aid_offers,disbursed_amount,decimal,1,N,Amount disbursed. Post-enrollment; excluded from price models.,,v2.1
+aid_offers,renewable_flag,bool,1,Y,Whether the award renews.,,v2.1; M section 3
+aid_offers,renewal_rule,text,1,C,How the award renews. Fixed dollars or a percentage of tuition.,Fixed dollars; Percent of tuition; Other,M section 3 (v2.5)
+aid_offers,renewal_conditions,text,1,C,"Conditions to keep the award (GPA, class rank, credits), stated exactly. Required if any award is conditional on GPA, credits or similar.",Free text,M section 3
+aid_offers,renewal_threshold,decimal,1,C,Numeric threshold for the condition (for example a minimum GPA).,,M section 3
+aid_offers,commitment_years,int,1,Y,"Number of years the award is committed for. Up to program length, as you elect.",Integer,M section 5 (horizon)
+aid_offers,revision_reason_code,text,2,Y,Why a later version differs from the one before it.,Student request; Documented competing offer; Staff-initiated; Appeal; Other,M section 3 (v2.5)
+aid_offers,revision_requested_date,date,2,N,"Date the student asked for reconsideration, if applicable.",,M section 4
+aid_offers,plus_borrower,text,1,C,For PLUS loans only: who applied. Parent PLUS: the parent. Grad PLUS: the student.,Student; Parent,v2.1
+aid_offers,plus_decision,text,1,C,For PLUS loans only: credit decision.,Approved; Denied; Not applied,v2.1
+aid_offers,plus_decision_date,date,1,C,For PLUS loans only: date of the credit decision.,,v2.1
+fund_crosswalk,fund_code,text,1,Y,"Your fund code, as it appears in aid_offers.",,
+fund_crosswalk,fund_name,text,1,Y,Name of the fund or scholarship.,,
+fund_crosswalk,component,text,1,Y,Standard component (see the component table).,See the component table,M section 3
+fund_crosswalk,aid_category,text,1,Y,Gift or self-help.,Gift; Self-help,v2.1
+fund_crosswalk,funding_source,text,1,Y,Who funds it.,Institutional; Federal; State; External,v2.1
+fund_crosswalk,need_basis,text,1,Y,"The fund's own eligibility rule. Classify by the fund rule, not by CDS H precedence. CDS counts non-need aid used to meet need as need-based; we keep the fund rule and reconcile.",Need-based; Non-need-based; Mixed,CDS H definitions
+fund_crosswalk,discretionary_fund,bool,1,Y,True if staff can award from the fund at their discretion (the flexible pool).,,M section 5
+fund_crosswalk,excluded_group_fund,bool,1,Y,True if awards from the fund follow rules outside the normal process.,,M section 3
+fund_crosswalk,effective_start,date,1,N,First date the fund was used.,,v2.1
+fund_crosswalk,effective_end,date,1,N,"Last date the fund was used, if retired.",,v2.1
+pricing,cohort,int,1,Y,Entry year.,,
+pricing,program_code,text,1,Y,Program the price applies to.,,
+pricing,residency_group,text,1,Y,"Residency group the price applies to, if prices differ.",Resident; Nonresident; All,v2.1
+pricing,tuition_billing_basis,text,1,N,How tuition is billed.,Annual; Per credit; Per term,M section 2 (509 annualization)
+pricing,tuition,decimal,1,Y,"Published annual tuition, in dollars. Full-time, first-year, as in CDS G1.",,v2.1; CDS G1
+pricing,credit_hours_per_year,decimal,1,N,Credit hours billed in a standard full-time year.,,M section 2
+pricing,required_fees,decimal,1,Y,"Mandatory fees that every full-time student pays. CDS G1 definition: required fees only, not optional fees.",,CDS G1
+pricing,food_housing_on,decimal,1,Y,On-campus food and housing. CDS G1: double occupancy and 19 meals a week or the maximum plan.,,CDS G1
+pricing,room_board_other,decimal,1,N,Standard housing and food budget used in your cost of attendance.,,v2.1
+pricing,books_supplies,decimal,1,Y,Average books and supplies.,,CDS G1
+pricing,transportation,decimal,1,Y,Transportation budget. CDS definition: two round trips home for students in institutional housing.,,CDS G1
+pricing,other_coa,decimal,1,N,Personal and other cost-of-attendance items.,,v2.1
+pricing,planned_increase_pct,decimal,1,N,"Planned tuition increase for the next entering class, if decided.",Percent,M section 3 gap
+aid_policy,cohort,int,1,Y,Entry year the policy applies to.,,
+aid_policy,program_code,text,1,Y,Program the policy applies to.,,
+aid_policy,award_mode,text,1,Y,Whether the scholarship award is the whole institutional award or a supplement on top of formula awards.,Total; Supplement,M section 5
+aid_policy,merit_grid,json,1,Y,"The grid, matrix or index that sets awards: thresholds (test, GPA, index) and award amounts, with effective dates.",JSON or an attached table,v2.1; M section 4
+aid_policy,grid_effective_dates,text,2,Y,Effective dates for each version of the grid and any change in thresholds or amounts.,,v2.1; M section 5
+aid_policy,decision_process,text,1,N,"Who decides awards and how: committee, matrix, discretionary, or a mix.",Free text,v2.1
+aid_policy,need_grant_formula,text,1,Y,How institutional need grants are computed.,,v2.1
+aid_policy,discretionary_budget,decimal,1,Y,"Annual discretionary aid budget, and the rules for appeals.",,v2.1
+aid_policy,appeals_reserve,decimal,1,N,"Amount set aside for appeals and reconsideration, if any.",,M section 5
+aid_policy,discount_rate_target,decimal,1,N,Board or president target for the institutional discount rate.,,v2.1
+aid_policy,class_size_target,int,1,Y,Target entering-class headcount by student type.,,v2.1
+aid_policy,capacity_type,text,1,Y,Whether the class target is a hard seat cap or a soft target.,Hard cap; Soft target; Uncapped,M section 4 (E7)
+aid_policy,capacity_band_pct,decimal,1,Y,"Accepted band around the class target, as a percent (for example 3, 5 or 10). Mandatory. The price-test verdict depends on it.",Percent,M section 4 (E7)
+aid_policy,floors_requested,text,1,N,Minimum awards or limits on change for particular groups.,Free text,v2.1; M Appendix C
+aid_policy,guardrail_max_cut_pct,decimal,1,N,"Largest cut any group's award may take, as a percent of tuition.",Default 5% if blank,M section 5
+aid_policy,conditional_scholarships,bool,1,Y,Whether any scholarship is conditional on performance.,,M section 2 (509)
+aid_policy,blind_delivery_possible,bool,2,Y,"Can staff deliver a test bonus as a formula line, with no test flag in the CRM or aid system? This decides whether the all-eligible analysis is primary (methodology section 4).",true; false,M section 4 (E1)
+aid_policy,award_visibility,text,2,Y,Who sees award details and test membership.,Free text,M section 4 (E1)
+cycle_calendar,cohort,int,1,Y,Entry year.,,
+cycle_calendar,event_type,text,1,Y,What the date is.,See the event list in the document,CDS C13-C20; M section 4
+cycle_calendar,event_label,text,1,Y,"Batch or event label, for example the offer batch name.",,
+cycle_calendar,event_date,date,1,Y,The date.,,
+cycle_calendar,deposit_amount,decimal,1,Y,"Deposit amount, for deposit events.",,CDS C17
+cycle_calendar,deposit_refundable,text,1,Y,"Whether and until when the deposit is refundable, for deposit events.",Free text,CDS C17
+award_renewals,student_key,text,2,C,Same key as students.,,
+award_renewals,award_year,int,2,C,Award year (1 = first year).,,
+award_renewals,aid_year,text,2,C,Aid year.,,
+award_renewals,renewed_amount,decimal,2,C,Amount actually renewed for that year.,,
+award_renewals,renewal_status,text,2,C,Outcome of renewal.,Renewed in full; Reduced; Eliminated; Not tested (withdrew or left),M section 5; 509
+award_renewals,renewal_reason,text,2,C,Reason for any reduction or loss.,GPA; Class rank; Credits; Withdrew; Other,M section 5
+price_test,student_key,text,2,Y,"Every eligible admit appears, whether assigned to the test or not.",,
+price_test,in_test,bool,2,Y,True if assigned to the test; false for eligible admits left out.,Needed for the all-eligible analysis,M section 4 (S4-1)
+price_test,assignment_date,date,2,Y,Date the random assignment was made.,,
+price_test,stratum,text,2,Y,Stratum used for blocked randomization. Need band by residency.,,M section 4
+price_test,arm_offset_usd,int,2,Y,"Bonus aid added for this student. Arms $0, $2,000 and $4,000.",Whole dollars,M section 4
+price_test,randomization_batch,text,2,Y,"Batch label and the seed record, documented before outcomes were known.",,
+activity_log,student_key,text,2,N,Same key as students. One row per recorded activity.,,
+activity_log,activity_type,text,2,N,What the activity was.,Inquiry; Visit; Event; Call; Email reply; Application started; Application submitted; Other,REF
+activity_log,activity_source_raw,text,2,N,"Raw source label for the activity (Source 1, Source 2 and so on).",,
+activity_log,activity_date,date,2,N,Date of the activity. Use to identify the first inquiry type.,,
+zip_key,student_key,text,A,N,Same hashed key as the other files.,,E.3
+zip_key,zip5,text,A,N,"ZIP5 of the permanent address at application. Blank if unknown. Used once by the append job, then deleted within 30 days of append QA.",5 digits; blank,E.3
+zip_key,address_type,text,A,N,Which address the ZIP comes from.,Permanent; Current,E.3

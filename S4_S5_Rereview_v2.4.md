@@ -1,5 +1,21 @@
 # EFA + FAO v2.4: S4 and S5 Re-review
 
+> **Errata (added October 22, 2026, after the audit).** The audit (`Audit_S4_S5_Rereview_v2.4.md`, Claude Fable 5.1) held this review with minor revisions. Both Critical conclusions stand. The review text below is unchanged. The following claims are superseded; read them as corrected here.
+>
+> | Claim in this review | Corrected | Audit finding |
+> |---|---|---|
+> | Test-only estimators carry a "+6% estimand bias" that the all-eligible analysis removes | No bias once the AME is evaluated at status-quo awards (1.29 to 1.34 against 1.31). The +6% to +11% is the received-dose evaluation point | A20 |
+> | The all-eligible analysis cuts the SE from 0.44 to 0.29 (34%); simulation ratio 0.66 | About 20% in logit units (0.0345 to 0.0275, analytic 0.76). The 0.66 compared two different estimands. The all-eligible estimate is primary only if staff are blind to test membership | A21, A22 |
+> | A median-position target could turn the test verdict positive | Not supported. At the 5%-of-tuition guardrail a raise-the-median target is infeasible for aid; a target makes the test less valuable | A4 |
+> | A ±10% class band still gives Not recommended | Corrected. At N = 650 with a five-band pool and ±10%, the verdict is Recommend or Optional. The verdict is decided by the capacity band | A3 |
+> | Conditional-scholarship counts lag two years | One year. Report year Y lists classes Y − 1 to Y − 3; the count is final after year one. The 2021 and 2022 files carry stale headers | A16 |
+> | Rank-matching illustration: Wake Forest 66th quantile, $43,000 against $51,800 | Position 0.71, $47,100 against $55,550 | A18 |
+> | Buffer of "about 12%"; spend SD 7.6%; P(overrun) about 25% | About 15% (award-weighted); spend SD 9.4%; about 30%. 7.6% is the count SD | A29 |
+> | The §8 median constraint with the 1.645σ margin | Cannot be implemented: the status quo violates it. Constrain the expectation; report P(median holds) separately | A30 |
+> | "Perfect knowledge of the slope is worth less than one cycle of the cheapest test" | True only at the base prior ($0.31M against $0.34M). False at N(0.6, 0.5²) ($0.68M) and N(1.0, 1.0²) ($0.41M) | A32 |
+>
+> Also from the audit, not claims of this review but relevant to it: EVSI under the production rule can be negative (A5); the cost of a capped test is understated by about 19% (A6); the uncapped-contrast numbers used the zero-effect cost (A7); the two-band Richmond pool has no admissible reallocation, so its status-quo verdicts overstate the rule's inertness (A9).
+
 **Reviewer:** independent (Claude Opus 5.5), October 21, 2026. I did not design this method.
 **Read:** `02_methodology_v2.4.md`, `01_executive_read_v2.4.md`, `03_technical_roadmap_v2.4.md`, `CHANGELOG_v2.4.md`; the v2 build (`efa_fao/src`, `config`, `outputs`, synthetic data); ABA 509 files in `aba-509-saas/data` (2021 to 2025 reports). Synthetic and public data only.
 **Computed for this review** (scripts and results in `review_support_v2.4/`):

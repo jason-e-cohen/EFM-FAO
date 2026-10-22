@@ -1,0 +1,29 @@
+program,group,item,source_ref,note
+law,Admissions,"Applications received (first-year JD, full-time and part-time)",ABA 509,"Per entering class, same years as the cohorts"
+law,Admissions,Offers of admission,ABA 509,
+law,Admissions,Matriculants (first-year JD),ABA 509,Should reconcile to students with enrolled_census = true
+law,Admissions,LSAT 25th / 50th / 75th percentile of matriculants,ABA 509,Describes matriculants
+law,Admissions,UGPA 25th / 50th / 75th percentile of matriculants,ABA 509,Describes matriculants
+law,Admissions,Matriculants by residency,ABA 509,
+law,Admissions,Matriculants by race and gender,ABA 509,Used only to reconcile the fairness audit
+law,Price,"Annual tuition and fees, resident and nonresident",ABA 509,"If billed per credit, also credit hours per year"
+law,Scholarships,Number of students receiving grants,ABA 509,"Grant section describes the prior academic year, all JD students"
+law,Scholarships,"Grant 25th / 50th / 75th percentile, among recipients",ABA 509,
+law,Scholarships,Number receiving at or above full tuition,ABA 509,
+law,Scholarships,"Conditional scholarships: number awarded, and number reduced or eliminated, by entering class",ABA 509,"Report year Y lists classes Y-1 to Y-3; the count is final after year one"
+law,Yield,Your own offers and matriculants history,Your records,Checks the yield forecast intercept. Peer yields are never used as a prior for you
+undergraduate,Applications,"Applied, admitted and enrolled: first-time, first-year, total",CDS C1,"Enrolled should reconcile to enrolled_census"
+undergraduate,Applications,"Applied, admitted and enrolled: by sex, and full-time or part-time",CDS C1,
+undergraduate,Applications,"Applied, admitted and enrolled: by in-state, out-of-state, international, unknown",CDS C1,"By known physical address at application"
+undergraduate,Applications,"Waiting list: offered a place, accepted, admitted",CDS C2,
+undergraduate,Applications,"Early decision and early action: applicants and admits",CDS C21-C22,
+undergraduate,Profile,"SAT and ACT: percent submitting, 25th / 50th / 75th percentiles",CDS C9,
+undergraduate,Profile,High school class rank: percent in top tenth / quarter / half and percent reporting,CDS C10,
+undergraduate,Profile,High school GPA distribution and average GPA,CDS C11-C12,
+undergraduate,Enrollment,"First-time, first-year enrollment by race and ethnicity and gender",CDS B1,Used only to reconcile the fairness audit
+undergraduate,Price,"Tuition, required fees, food and housing, books, transportation",CDS G1,
+undergraduate,Aid,"Aid awarded to enrolled undergraduates: counts and dollars by source",CDS H1,
+undergraduate,Aid,"First-time, full-time students: applied for need-based aid, determined to have need, awarded aid, need fully met",CDS H2,
+undergraduate,Aid,"Average aid package, average need-based grant, percent of need met",CDS H2,
+undergraduate,Aid,"Non-need-based institutional aid: number and average (and athletic awards)",CDS H2A,
+undergraduate,Aid,Graduates with debt and average indebtedness,CDS H4-H5,Confirm item numbers against your own filing
