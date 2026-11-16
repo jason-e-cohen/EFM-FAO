@@ -105,8 +105,8 @@ Retired: `projection_segments.csv` (folded into `policy_grid`) and `model_coeffi
 ## 4. Dashboard requirements to specify
 
 **Views**
-1. **Funnel and pacing** (enrollment team): conversion by stage with one or two dimensions from the approved table set, pacing against last year and plan, projected census, melt by segment, drivers panel labeled associational.
-2. **Scenario evaluator [v2.7, V27-37]:** client-authored and recommended scenarios with levers (admit rate, pool multiplier, award, tuition migration, class size under a cap, out-of-state incentive with its scope, target-tier application lift, yield shift), class, revenue, spend and discount rate at low, middle and high, what-if strips, and the label "Response based on client-input" where it applies.
+1. **Funnel and pacing** (enrollment team): conversion by stage with one or two dimensions from the approved table set, pacing against the same week of the cycle (counted from the application open date) in the prior two cycles and plan **[v2.8, B3-4]**, projected census, melt by segment, drivers panel labeled associational.
+2. **Scenario evaluator [v2.7, V27-37; v2.8, B5-1] (add-on after the workbook):** client-authored and recommended scenarios with levers (admit rate, pool multiplier, award, tuition migration, class target under a cap, incentive with its scope (priority segment or all out-of-state) and score floor, segment application lift, yield shift; names as in spec v0.6 section 2), class, revenue, spend and discount rate at low, middle and high, what-if strips, and the label "Response based on client-input" where it applies.
 3. **Policy grid [v2.7, V27-37]:** current versus recommended or client-authored award by fine-matrix cell, with projected yield and the step-size table (no guardrail); exportable as the scholarship policy document.
 4. **Market context:** loan-cap exposure by program, lost-to institutions and net-cost gaps, peer pricing (for law schools, from public ABA 509 data), survey findings.
 5. **Equity audit:** allocation and yield by group, flagged audit-only.

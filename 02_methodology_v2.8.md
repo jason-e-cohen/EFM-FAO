@@ -25,7 +25,7 @@ Two linked products and one monitoring layer share one data model.
 
 - **EFA (enrollment funnel analysis):** where do prospects drop out, and what predicts movement through inquiry, application, admit, deposit, and enrollment at census?
 - **FAO (financial aid optimization):** given the projected admitted pool, a budget, and goals, what award policy should the institution use for flexible aid?
-- **Monitoring [to build]:** during the cycle, how is the class pacing against last year and the plan, and where is melt risk?
+- **Monitoring [to build]:** during the cycle, how is the class pacing against the same week of the prior two cycles and the plan **[v2.8, B3-4]**, and where is melt risk?
 - **Scoring and targeting add-ons [v2.3]:** batch enrollment-probability scores, a policy lookup, and targeted objectives by segment or market.
 - **Consumer ZIP layer [v2.6]:** an optional add-on that appends neighborhood-level capacity indicators from ZIP5 for targeting, the forecast baseline, and, only under gates, a derived capacity tier in the aid grid (sections 2, 5 and 9; Appendix E).
 - **Scenario evaluator [v2.7, V27-10, V27-20]:** scores award and admit-rate scenarios the client writes, with a response based on client-input until an anchor exists. It evaluates and does not recommend (section 5).
