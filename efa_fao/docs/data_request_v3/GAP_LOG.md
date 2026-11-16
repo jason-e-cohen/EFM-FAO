@@ -116,3 +116,10 @@ Found while rebuilding and fixed on Jason's approval (November 16): the law-only
 Small-cell wording (section "What we do with the data") now reads: default suppression under ten with complementary suppression; a client may elect to show small groups to named, authenticated staff, recorded in the statement of work. It follows methodology section 9 and FR-76; the sign-off record (O40) is not yet written, so the text does not say that any client has elected.
 
 Tests: `test_spec.py` has 8 tests; all pass (run through a plain Python loop because `pytest` is not installed in the environment used). Law and undergraduate outputs regenerated.
+
+## 8. Session B reconciliation (November 16, 2026)
+
+Applied on Jason's acceptance of `Audit_Session_B_Design_Report.md`:
+- **B2-11:** `aid_policy.guardrail_max_cut_pct` (the removed 5% guardrail) replaced by `client_max_cut_pct`: any limit the client's own policy sets, reported against, never imposed.
+- **B3-4:** `early_funnel_by_state.deposits` is labeled net of withdrawals by census; `early_pacing.deposits_cumulative` is labeled gross; `early_pacing.applications_cumulative` counts complete applications (the Applicant definition); `early_pacing.lsat_band` added (conditional) so growth in high-LSAT applications can be computed at the same week of the cycle.
+- Law and undergraduate outputs regenerated; `test_spec.py` 8 of 8 pass (plain Python loop).

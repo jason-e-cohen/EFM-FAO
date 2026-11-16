@@ -415,7 +415,7 @@ Required: Y = send it; C = send it under the condition stated; N = optional; bla
 | `capacity_band_pct` | decimal | Y | 1 | Accepted band around the class target, as a percent (for example 3, 5 or 10). Mandatory. The price-test verdict depends on it. | Percent |
 | `profile_targets` | text | Y | 1 | Class-profile targets you manage to (for example median LSAT and UGPA). | Free text |
 | `floors_requested` | text | N | 1 | Minimum awards or limits on change for particular groups. | Free text |
-| `guardrail_max_cut_pct` | decimal | N | 1 | Largest cut any group's award may take, as a percent of tuition. | Default 5% if blank |
+| `client_max_cut_pct` | decimal | N | 1 | Any limit your policy places on year-over-year award cuts, if you have one, as a percent of tuition. We report against it; we do not impose one. | Blank if none |
 | `conditional_scholarships` | bool | Y | 1 | Whether any scholarship is conditional on performance. |  |
 | `blind_delivery_possible` | bool | Y | 2 | Can staff deliver a test bonus as a formula line, with no test flag in the CRM or aid system? This decides whether the all-eligible analysis is primary (methodology section 4). | true; false |
 | `award_visibility` | text | Y | 2 | Who sees award details and test membership. | Free text |
@@ -485,7 +485,7 @@ Required: Y = send it; C = send it under the condition stated; N = optional; bla
 | `lsat_band` | text | C | 1 | LSAT band of the applicant, if you can aggregate by band. Leave blank for the all-bands row. Send your own band edges and tell us what they are. Include a row with a blank band if you send bands, so the rows sum to the state total. | Your band label, as defined in your own reports |
 | `applications` | int | Y | 1 | Applicants for the cohort, state and band, by the Applicant definition in this request. Send the count as it is, including small counts. Please do not suppress or round. | Whole number, zero or more |
 | `admits` | int | Y | 1 | Applicants offered admission, including from the waiting list, by the Admitted definition in this request. | Whole number, zero or more |
-| `deposits` | int | Y | 1 | Admits who paid the first enrollment deposit and had not withdrawn by the cohort's census date. State which deposit you count if you use two. | Whole number, zero or more |
+| `deposits` | int | Y | 1 | Net deposits: admits who paid the first enrollment deposit and had not withdrawn by the cohort's census date. (Weekly pacing counts gross deposits.) State which deposit you count if you use two. | Whole number, zero or more |
 
 
 ### `early_pacing`
@@ -493,11 +493,12 @@ Required: Y = send it; C = send it under the condition stated; N = optional; bla
 | Field | Type | Req | Tier | Description | Values or format |
 |---|---|---|---|---|---|
 | `cohort` | int | Y | 1 | Entering class year. Send the current cycle and the prior two. | Four-digit year |
+| `lsat_band` | text | C | 1 | LSAT band, if you can aggregate weekly counts by band. Leave blank for the all-bands row. Use the same band edges as in the state counts. We use the bands at and above the top of your scholarship range to track growth in high-LSAT applications. | Your band label, as defined in your own reports |
 | `week_of_cycle` | int | Y | 1 | Week number counted from the date applications opened for that cohort (week 1 is the first seven days). Same week number means the same point in the cycle. | Whole number, 1 or more |
 | `week_ending_date` | date | Y | 1 | Last day of that week. | YYYY-MM-DD |
-| `applications_cumulative` | int | Y | 1 | Applications received from the application open date through the end of the week. | Whole number, zero or more |
+| `applications_cumulative` | int | Y | 1 | Complete applications (by the Applicant definition in this request) from the application open date through the end of the week. | Whole number, zero or more |
 | `admits_cumulative` | int | Y | 1 | Offers of admission released through the end of the week. | Whole number, zero or more |
-| `deposits_cumulative` | int | Y | 1 | First enrollment deposits received through the end of the week. | Whole number, zero or more |
+| `deposits_cumulative` | int | Y | 1 | Gross deposits: first enrollment deposits received through the end of the week, including any later withdrawn. | Whole number, zero or more |
 
 
 ### `early_planning_path`

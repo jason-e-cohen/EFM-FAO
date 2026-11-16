@@ -405,7 +405,7 @@ Required: Y = send it; C = send it under the condition stated; N = optional; bla
 | `capacity_type` | text | Y | 1 | Whether the class target is a hard seat cap or a soft target. | Hard cap; Soft target; Uncapped |
 | `capacity_band_pct` | decimal | Y | 1 | Accepted band around the class target, as a percent (for example 3, 5 or 10). Mandatory. The price-test verdict depends on it. | Percent |
 | `floors_requested` | text | N | 1 | Minimum awards or limits on change for particular groups. | Free text |
-| `guardrail_max_cut_pct` | decimal | N | 1 | Largest cut any group's award may take, as a percent of tuition. | Default 5% if blank |
+| `client_max_cut_pct` | decimal | N | 1 | Any limit your policy places on year-over-year award cuts, if you have one, as a percent of tuition. We report against it; we do not impose one. | Blank if none |
 | `conditional_scholarships` | bool | Y | 1 | Whether any scholarship is conditional on performance. |  |
 | `blind_delivery_possible` | bool | Y | 2 | Can staff deliver a test bonus as a formula line, with no test flag in the CRM or aid system? This decides whether the all-eligible analysis is primary (methodology section 4). | true; false |
 | `award_visibility` | text | Y | 2 | Who sees award details and test membership. | Free text |

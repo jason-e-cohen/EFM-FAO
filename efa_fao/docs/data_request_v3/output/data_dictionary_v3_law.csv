@@ -123,7 +123,7 @@ aid_policy,capacity_type,text,1,Y,Whether the class target is a hard seat cap or
 aid_policy,capacity_band_pct,decimal,1,Y,"Accepted band around the class target, as a percent (for example 3, 5 or 10). Mandatory. The price-test verdict depends on it.",Percent,M section 4 (E7)
 aid_policy,profile_targets,text,1,Y,Class-profile targets you manage to (for example median LSAT and UGPA).,Free text,M section 5
 aid_policy,floors_requested,text,1,N,Minimum awards or limits on change for particular groups.,Free text,v2.1; M Appendix C
-aid_policy,guardrail_max_cut_pct,decimal,1,N,"Largest cut any group's award may take, as a percent of tuition.",Default 5% if blank,M section 5
+aid_policy,client_max_cut_pct,decimal,1,N,"Any limit your policy places on year-over-year award cuts, if you have one, as a percent of tuition. We report against it; we do not impose one.",Blank if none,M section 5 (v2.8)
 aid_policy,conditional_scholarships,bool,1,Y,Whether any scholarship is conditional on performance.,,M section 2 (509)
 aid_policy,blind_delivery_possible,bool,2,Y,"Can staff deliver a test bonus as a formula line, with no test flag in the CRM or aid system? This decides whether the all-eligible analysis is primary (methodology section 4).",true; false,M section 4 (E1)
 aid_policy,award_visibility,text,2,Y,Who sees award details and test membership.,Free text,M section 4 (E1)
@@ -157,13 +157,14 @@ early_funnel_by_state,state,text,1,Y,"State of the permanent address at applicat
 early_funnel_by_state,lsat_band,text,1,C,"LSAT band of the applicant, if you can aggregate by band. Leave blank for the all-bands row. Send your own band edges and tell us what they are. Include a row with a blank band if you send bands, so the rows sum to the state total.","Your band label, as defined in your own reports",V27A-07
 early_funnel_by_state,applications,int,1,Y,"Applicants for the cohort, state and band, by the Applicant definition in this request. Send the count as it is, including small counts. Please do not suppress or round.","Whole number, zero or more",V27A-07
 early_funnel_by_state,admits,int,1,Y,"Applicants offered admission, including from the waiting list, by the Admitted definition in this request.","Whole number, zero or more",V27A-07
-early_funnel_by_state,deposits,int,1,Y,Admits who paid the first enrollment deposit and had not withdrawn by the cohort's census date. State which deposit you count if you use two.,"Whole number, zero or more",V27A-07
+early_funnel_by_state,deposits,int,1,Y,Net deposits: admits who paid the first enrollment deposit and had not withdrawn by the cohort's census date. (Weekly pacing counts gross deposits.) State which deposit you count if you use two.,"Whole number, zero or more",V27A-07
 early_pacing,cohort,int,1,Y,Entering class year. Send the current cycle and the prior two.,Four-digit year,V27A-07
+early_pacing,lsat_band,text,1,C,"LSAT band, if you can aggregate weekly counts by band. Leave blank for the all-bands row. Use the same band edges as in the state counts. We use the bands at and above the top of your scholarship range to track growth in high-LSAT applications.","Your band label, as defined in your own reports",v2.8 (B3-4)
 early_pacing,week_of_cycle,int,1,Y,Week number counted from the date applications opened for that cohort (week 1 is the first seven days). Same week number means the same point in the cycle.,"Whole number, 1 or more",V27A-07
 early_pacing,week_ending_date,date,1,Y,Last day of that week.,YYYY-MM-DD,V27A-07
-early_pacing,applications_cumulative,int,1,Y,Applications received from the application open date through the end of the week.,"Whole number, zero or more",V27A-07
+early_pacing,applications_cumulative,int,1,Y,Complete applications (by the Applicant definition in this request) from the application open date through the end of the week.,"Whole number, zero or more",V27A-07
 early_pacing,admits_cumulative,int,1,Y,Offers of admission released through the end of the week.,"Whole number, zero or more",V27A-07
-early_pacing,deposits_cumulative,int,1,Y,First enrollment deposits received through the end of the week.,"Whole number, zero or more",V27A-07
+early_pacing,deposits_cumulative,int,1,Y,"Gross deposits: first enrollment deposits received through the end of the week, including any later withdrawn.","Whole number, zero or more",V27A-07
 early_planning_path,entry_year,int,1,Y,"Entering class year. Include the last three completed years, the next entering class and each planned year after it.",Four-digit year,V27A-07
 early_planning_path,jd_tuition_usd,decimal,1,Y,"Published annual JD tuition for that entering class, in dollars. Send the exact figure for the next entering class. If tuition differs by residency or program, send one row per entry year and tell us how it differs.",Dollars,V27A-07
 early_planning_path,jd_tuition_increase_pct,decimal,1,Y,"Change from the prior year, in percent, to the precision you have. Send the exact decided figure for the next entering class, not a rounded one.",Percent,V27A-07

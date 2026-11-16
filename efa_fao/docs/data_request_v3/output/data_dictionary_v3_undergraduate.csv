@@ -124,7 +124,7 @@ aid_policy,class_size_target,int,1,Y,Target entering-class headcount by student 
 aid_policy,capacity_type,text,1,Y,Whether the class target is a hard seat cap or a soft target.,Hard cap; Soft target; Uncapped,M section 4 (E7)
 aid_policy,capacity_band_pct,decimal,1,Y,"Accepted band around the class target, as a percent (for example 3, 5 or 10). Mandatory. The price-test verdict depends on it.",Percent,M section 4 (E7)
 aid_policy,floors_requested,text,1,N,Minimum awards or limits on change for particular groups.,Free text,v2.1; M Appendix C
-aid_policy,guardrail_max_cut_pct,decimal,1,N,"Largest cut any group's award may take, as a percent of tuition.",Default 5% if blank,M section 5
+aid_policy,client_max_cut_pct,decimal,1,N,"Any limit your policy places on year-over-year award cuts, if you have one, as a percent of tuition. We report against it; we do not impose one.",Blank if none,M section 5 (v2.8)
 aid_policy,conditional_scholarships,bool,1,Y,Whether any scholarship is conditional on performance.,,M section 2 (509)
 aid_policy,blind_delivery_possible,bool,2,Y,"Can staff deliver a test bonus as a formula line, with no test flag in the CRM or aid system? This decides whether the all-eligible analysis is primary (methodology section 4).",true; false,M section 4 (E1)
 aid_policy,award_visibility,text,2,Y,Who sees award details and test membership.,Free text,M section 4 (E1)
