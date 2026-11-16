@@ -38,8 +38,7 @@ sections:
           law: "Two questions drive this engagement. First, where do prospective JD students leave the funnel? Second, how should scholarship dollars be set for the next entering class? The second question depends on knowing what each admit was offered and when, so this request asks for scholarships in components, with dates and every revision, not totals. It also asks for the rules behind your awards. Where those rules contain thresholds, they let us estimate price sensitivity without guesswork. Where they do not, we say so and we do not invent an estimate."
           undergraduate: "Two questions drive this engagement. First, where do prospective students leave the funnel? Second, what award policy should guide the next discretionary aid dollar? The second question depends on knowing what each student was offered and when, so this request asks for aid in components with dates, not totals. It also asks for the rules behind your awards, which let us learn price sensitivity without guesswork."
       - p:
-          only: law
-          text: "What you receive depends on the evidence your history contains. Many law schools have no published scholarship threshold. Where we cannot support a price estimate, you receive the funnel analysis, in-cycle pacing and melt monitoring, the ABA Standard 509 market view, a one-page evidence audit, and a written status-quo scholarship grid for you to confirm. We do not recommend a change in price level without design-based evidence."
+          law: "What you receive depends on the evidence your history contains. Many law schools have no published scholarship threshold. Where we cannot support a price estimate, you receive the funnel analysis, in-cycle pacing and melt monitoring, the ABA Standard 509 market view, a one-page evidence audit, and a written status-quo scholarship grid for you to confirm. We do not recommend a change in price level without design-based evidence."
       - p: "To keep the start-up effort proportional to what you need, the request comes in two tiers."
 
   - id: tiers
@@ -76,6 +75,15 @@ sections:
     blocks:
       - p: "Aid offers are needed for every cohort you send, not only the most recent. We provide an Excel template with the header row, data types and code lists for every file below, so you can see the exact structure before you pull anything (Data_Request_Template). Appendix A lists every field."
       - special: file_list
+      - p:
+          law: "**Early delivery (aggregates only, ahead of the student-level files).** So that the first scenario work can start from your own numbers, we ask for a short set of aggregate counts and planning inputs before the student-level files are ready. They are totals, not student records. They are in three files at the end of the list: `early_funnel_by_state`, `early_pacing` and `early_planning_path`. They do not repeat the state and ZIP3 fields in `students`; those stay in the student-level request."
+      - bullets:
+          - text: "Applications, admits and deposits by state, and by LSAT band if you can aggregate by band, for the last three completed cycles (`early_funnel_by_state`). Send every state as its own row; we will agree the grouping of target states with you. Send small counts as they are, without suppression or rounding."
+            only: law
+          - text: "Weekly pacing for the current cycle against the prior two cycles at the same week of the cycle: cumulative applications, admits and deposits (`early_pacing`)."
+            only: law
+          - text: "The exact tuition increase for the next entering class and the tuition path you are considering after it; your university's undergraduate tuition by year; and the class-size target path, with any hard cap (`early_planning_path`)."
+            only: law
       - p: "Please also send your own data dictionary: each variable you export and every possible value of each coded variable (program codes, decision codes, source labels, fund codes). We map your values to ours with you and return a list of anything we could not map."
       - p:
           law: "**Excluded groups:** please flag students whose aid follows rules outside the normal process, such as tuition remission or exchange, employee dependents, stipends and fellowships, named full-tuition scholars, and joint-degree awards. They keep their current packages in every scenario and are reported separately so your class totals still reconcile."
@@ -200,7 +208,7 @@ sections:
     blocks:
       - bullets:
           - text: "We check structure and logic: duplicate keys, stage order, aid for non-admitted students, offsets outside the protocol, and reconciliation to your published totals. Every check and its row count is reported back to you."
-          - text: "Student-level data stay in our secure compute environment. The dashboard shows aggregates only, with groups smaller than ten suppressed. If you request a student-level list (for example, students at risk of melt), it comes back through your secure channel, not the dashboard."
+          - text: "Student-level data stay in our secure compute environment. The dashboard shows aggregates only. By default, groups smaller than ten are suppressed, with complementary suppression so that a suppressed group cannot be worked out from the totals. You can elect instead to show small groups to named, authenticated staff; that choice is set for each engagement and recorded in the statement of work. If you request a student-level list (for example, students at risk of melt), it comes back through your secure channel, not the dashboard."
           - text: "Race, ethnicity and gender are used to audit results for fairness, never to decide awards."
           - text: "Recommendations are delivered as a scholarship policy that your staff apply as offers go out: scholarship levels by position band and market, and by need only if you use need in scholarships."
             only: law
@@ -246,6 +254,8 @@ sections:
           - "Fund-code crosswalk, with each fund's eligibility rule"
           - "Cycle calendar: offer batches, deposit deadlines, census date"
           - "Class-size band, hard cap or soft target, and who decides on a test"
+          - text: "Early-delivery aggregates: counts by state, weekly pacing, tuition path and class-size path"
+            only: law
           - text: "Conditional-award terms and renewal history"
             only: law
           - text: "PLUS approval and denial history"

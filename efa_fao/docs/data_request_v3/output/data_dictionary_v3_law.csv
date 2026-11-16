@@ -152,3 +152,22 @@ activity_log,activity_date,date,2,N,Date of the activity. Use to identify the fi
 zip_key,student_key,text,A,N,Same hashed key as the other files.,,E.3
 zip_key,zip5,text,A,N,"ZIP5 of the permanent address at application. Blank if unknown. Used once by the append job, then deleted within 30 days of append QA.",5 digits; blank,E.3
 zip_key,address_type,text,A,N,Which address the ZIP comes from. A family address is common for applicants; tell us if you hold both.,Permanent; Current,E.3
+early_funnel_by_state,cohort,int,1,Y,Entering class year. Send the last three completed cycles.,Four-digit year,V27A-07
+early_funnel_by_state,state,text,1,Y,"State of the permanent address at application, as two-letter USPS codes. One row per state. Use XX for unknown and ZZ for outside the United States. Aggregate counts only. This is not the student-level `region_code`, and it carries no ZIP3.",Two-letter USPS code; XX; ZZ,V27A-07
+early_funnel_by_state,lsat_band,text,1,C,"LSAT band of the applicant, if you can aggregate by band. Leave blank for the all-bands row. Send your own band edges and tell us what they are. Include a row with a blank band if you send bands, so the rows sum to the state total.","Your band label, as defined in your own reports",V27A-07
+early_funnel_by_state,applications,int,1,Y,"Applicants for the cohort, state and band, by the Applicant definition in this request. Send the count as it is, including small counts. Please do not suppress or round.","Whole number, zero or more",V27A-07
+early_funnel_by_state,admits,int,1,Y,"Applicants offered admission, including from the waiting list, by the Admitted definition in this request.","Whole number, zero or more",V27A-07
+early_funnel_by_state,deposits,int,1,Y,Admits who paid the first enrollment deposit and had not withdrawn by the cohort's census date. State which deposit you count if you use two.,"Whole number, zero or more",V27A-07
+early_pacing,cohort,int,1,Y,Entering class year. Send the current cycle and the prior two.,Four-digit year,V27A-07
+early_pacing,week_of_cycle,int,1,Y,Week number counted from the date applications opened for that cohort (week 1 is the first seven days). Same week number means the same point in the cycle.,"Whole number, 1 or more",V27A-07
+early_pacing,week_ending_date,date,1,Y,Last day of that week.,YYYY-MM-DD,V27A-07
+early_pacing,applications_cumulative,int,1,Y,Applications received from the application open date through the end of the week.,"Whole number, zero or more",V27A-07
+early_pacing,admits_cumulative,int,1,Y,Offers of admission released through the end of the week.,"Whole number, zero or more",V27A-07
+early_pacing,deposits_cumulative,int,1,Y,First enrollment deposits received through the end of the week.,"Whole number, zero or more",V27A-07
+early_planning_path,entry_year,int,1,Y,"Entering class year. Include the last three completed years, the next entering class and each planned year after it.",Four-digit year,V27A-07
+early_planning_path,jd_tuition_usd,decimal,1,Y,"Published annual JD tuition for that entering class, in dollars. Send the exact figure for the next entering class. If tuition differs by residency or program, send one row per entry year and tell us how it differs.",Dollars,V27A-07
+early_planning_path,jd_tuition_increase_pct,decimal,1,Y,"Change from the prior year, in percent, to the precision you have. Send the exact decided figure for the next entering class, not a rounded one.",Percent,V27A-07
+early_planning_path,ug_tuition_usd,decimal,1,Y,"Published annual undergraduate tuition at your university for the same year, in dollars. Used for the tuition comparison between your programs.",Dollars,V27A-07
+early_planning_path,class_size_target,int,1,Y,Target size of the entering JD class for that year.,Whole number,V27A-07
+early_planning_path,class_cap,int,1,C,"Hard cap on the entering class for that year, if there is one. Leave blank if the target is soft.",Whole number,V27A-07
+early_planning_path,figure_status,text,1,Y,"Whether the tuition and class figures in the row are actual, decided but not yet published, or planned and still open to change.",Actual; Decided; Planned,V27A-07

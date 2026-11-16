@@ -96,3 +96,23 @@ The v3 request has 11 files plus two worksheets; 153 fields apply to each progra
 - **Richmond call answers** are not in the capture sheet yet. Field requirements for Richmond (conditional scholarships, need use, offer batches, hard or soft cap) should be tuned once they are.
 - **Tier flag on `package_version`** is 2 because Tier 1 only needs the final package; the field is still present at Tier 1 with version 1.
 - The reference request names another institution (SBCC). v3 reuses its field ideas, not its text.
+
+## 7. V27A-07 early-delivery additions (Session A, November 16, 2026)
+
+Added for the law request only (the undergraduate document and dictionary are unchanged apart from the small-cell sentence in section "What we do with the data"). Three aggregate files, `early_funnel_by_state`, `early_pacing` and `early_planning_path` (spec `files.csv` order 12 to 14, 19 rows in `fields.csv`), a paragraph and three bullets in section 3 (after the file list), and one checklist line. Source: `Prototype_Spec_Scenario_Workbook_v0.5.md` section 15 item 10, `CHANGELOG_v2.7.md` V27A-07, and the Session A brief. Nothing was sent to the client.
+
+Judgment calls:
+
+| # | Call | What would change it |
+|---|---|---|
+| J11 | Counts are applications, admits and deposits, and pacing is against the prior two cycles. **Confirmed by Jason, Nov 16.** Spec section 15 item 10 was aligned to this; the Nov 13 draft email still says "enrolled" and "last year" and needs the same change | None |
+| J12 | Field `tier` is "1" so the file passes the tier test; the files table shows "Early delivery (aggregates)". Tier "A" would label the files optional, which they are not | A separate tier label for early delivery |
+| J13 | Text uses `{institution}` and generic wording (every state as its own row; target-state grouping agreed with the client), not New York and Pennsylvania, so the law spec stays reusable and carries no client-specific target states | Using the spec for Richmond only |
+| J14 | `week_of_cycle` counts from the application open date for each cohort (week 1 is the first seven days), so "same week" is the same point in each cycle | Client's own weekly reporting calendar |
+| J15 | Small counts are requested as they are (no suppression or rounding). This is inbound data and does not change the output rule in methodology section 9 | Counsel review |
+
+Found while rebuilding and fixed on Jason's approval (November 16): the law-only paragraph "What you receive depends on the evidence your history contains..." in `request_spec.yaml` section "why" is written as `p: {only: law, text: ...}`, which `blocks_to_ir` resolves to no text, so it appears in no output, and the sentence "We do not recommend a change in price level without design-based evidence" is missing from the law document. Fixed by writing it as `p: {law: "..."}`; the sentence now appears in the law document and not in the undergraduate one.
+
+Small-cell wording (section "What we do with the data") now reads: default suppression under ten with complementary suppression; a client may elect to show small groups to named, authenticated staff, recorded in the statement of work. It follows methodology section 9 and FR-76; the sign-off record (O40) is not yet written, so the text does not say that any client has elected.
+
+Tests: `test_spec.py` has 8 tests; all pass (run through a plain Python loop because `pytest` is not installed in the environment used). Law and undergraduate outputs regenerated.

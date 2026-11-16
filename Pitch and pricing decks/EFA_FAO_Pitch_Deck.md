@@ -26,7 +26,7 @@ The leadership answer is a defensible, documented response to "where should the 
 
 *Five stages, from first inquiry to enrolled at census: inquiry, application, admit, deposit, and enrolled at census. Deposit to census is reported as its own stage, so melt is visible.*
 
-**Conversion at every stage, by student group.** A fixed, published set of views by cohort and by segment such as residency, student type, source, and program. Groups under 10 students are never shown.
+**Conversion at every stage, by student group.** A fixed, published set of views by cohort and by segment such as residency, student type, source, and program. Small groups are suppressed by default; each client sets its own policy for named, authenticated staff.
 
 **What predicts movement.** The characteristics and behaviors linked to applying and enrolling, with confidence intervals, clearly labeled as associations rather than causes.
 
@@ -110,7 +110,7 @@ The dashboard has five views: funnel and pacing, scenario planner, policy grid, 
 
 **Fair by design.** Awards follow policy, not personal traits. Race, ethnicity, and gender are never model inputs; they are used only to audit results. Policy groups use academic, need, and residency attributes only. We use no consumer credit data, and an equity audit accompanies every recommendation.
 
-**Private by design.** Student records stay in a secure environment. Data arrive de-identified with hashed keys, with no names, contact details, or full ZIP codes. The dashboard shows aggregates only, groups under 10 students are suppressed, and raw files are deleted at engagement close.
+**Private by design.** Student records stay in a secure environment. Data arrive de-identified with hashed keys, with no names, contact details, or full ZIP codes. The dashboard shows aggregates only, groups under 10 students are suppressed by default (each client can set its own policy for named, authenticated staff), and raw files are deleted at engagement close.
 
 **Honest by design.** These are numbers you can explain and defend. No number appears without its range or a stated reason it has none. Only information known at the decision date enters the models, and missing data is never treated as zero. Every figure traces to a run, a data version, and a code version.
 

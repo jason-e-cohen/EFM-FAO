@@ -10,3 +10,6 @@ award_renewals,"Person and award year",2 (if any scholarship is conditional),2 (
 price_test,Eligible admit,2 (only if the screen recommends a test),2 (only if the screen recommends a test),"In-test flag, assignment date, stratum, bonus amount, randomization batch and seed","In-test flag, assignment date, stratum, bonus amount, randomization batch and seed",9
 activity_log,Recorded activity,Optional,Optional,"Activity type, raw source label, date","Activity type, raw source label, date",10
 zip_key,Person,Optional add-on,Optional add-on,"Hashed key, ZIP5, address type","Hashed key, ZIP5, address type",11
+early_funnel_by_state,"Cohort, state, and LSAT band (band blank if not available)",Early delivery (aggregates),Not requested,"Entry year, state, LSAT band if available, applications, admits, deposits",,12
+early_pacing,Cohort and week of the cycle,Early delivery (aggregates),Not requested,"Entry year, week of the cycle, week-ending date, cumulative applications, admits and deposits",,13
+early_planning_path,Entry year,Early delivery (aggregates),Not requested,"JD tuition and planned increase, undergraduate tuition, class-size target and hard cap, status of each figure",,14

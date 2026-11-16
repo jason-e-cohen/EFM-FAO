@@ -5,3 +5,9 @@ efa_fao/data/synthetic/*.csv
 efa_fao/outputs/
 .venv/
 .pytest_cache/
+# Richmond-provided Yellow Arrows workbook and analysis of it (confidential client data; Jason confirmed permission Nov 4, 2026; never commit)
+Richmond Law - 2027 Scenarios for Client.xlsx
+ya_workbook_support/
+Richmond_YA_Scenario_Workbook_Assessment.md
+prototypes/scenario_workbook/fixtures/
+prototypes/scenario_workbook/output/

@@ -11,6 +11,8 @@
 
 Two questions drive this engagement. First, where do prospective JD students leave the funnel? Second, how should scholarship dollars be set for the next entering class? The second question depends on knowing what each admit was offered and when, so this request asks for scholarships in components, with dates and every revision, not totals. It also asks for the rules behind your awards. Where those rules contain thresholds, they let us estimate price sensitivity without guesswork. Where they do not, we say so and we do not invent an estimate.
 
+What you receive depends on the evidence your history contains. Many law schools have no published scholarship threshold. Where we cannot support a price estimate, you receive the funnel analysis, in-cycle pacing and melt monitoring, the ABA Standard 509 market view, a one-page evidence audit, and a written status-quo scholarship grid for you to confirm. We do not recommend a change in price level without design-based evidence.
+
 To keep the start-up effort proportional to what you need, the request comes in two tiers.
 
 
@@ -41,8 +43,17 @@ Aid offers are needed for every cohort you send, not only the most recent. We pr
 | `price_test` | Eligible admit | In-test flag, assignment date, stratum, bonus amount, randomization batch and seed | 2 (only if the screen recommends a test) |
 | `activity_log` | Recorded activity | Activity type, raw source label, date | Optional |
 | `zip_key` | Person | Hashed key, ZIP5, address type | Optional add-on |
+| `early_funnel_by_state` | Cohort, state, and LSAT band (band blank if not available) | Entry year, state, LSAT band if available, applications, admits, deposits | Early delivery (aggregates) |
+| `early_pacing` | Cohort and week of the cycle | Entry year, week of the cycle, week-ending date, cumulative applications, admits and deposits | Early delivery (aggregates) |
+| `early_planning_path` | Entry year | JD tuition and planned increase, undergraduate tuition, class-size target and hard cap, status of each figure | Early delivery (aggregates) |
 | `Institutional_Reference` (worksheet) | Measure and cohort | Totals you already file or publish, for reconciliation (see Institutional reference) | 1 |
 | `Scoping_Inputs` (worksheet) | Input | Answers for the price-test screen (see Scoping inputs) | 1 |
+
+**Early delivery (aggregates only, ahead of the student-level files).** So that the first scenario work can start from your own numbers, we ask for a short set of aggregate counts and planning inputs before the student-level files are ready. They are totals, not student records. They are in three files at the end of the list: `early_funnel_by_state`, `early_pacing` and `early_planning_path`. They do not repeat the state and ZIP3 fields in `students`; those stay in the student-level request.
+
+- Applications, admits and deposits by state, and by LSAT band if you can aggregate by band, for the last three completed cycles (`early_funnel_by_state`). Send every state as its own row; we will agree the grouping of target states with you. Send small counts as they are, without suppression or rounding.
+- Weekly pacing for the current cycle against the prior two cycles at the same week of the cycle: cumulative applications, admits and deposits (`early_pacing`).
+- The exact tuition increase for the next entering class and the tuition path you are considering after it; your university's undergraduate tuition by year; and the class-size target path, with any hard cap (`early_planning_path`).
 
 Please also send your own data dictionary: each variable you export and every possible value of each coded variable (program codes, decision codes, source labels, fund codes). We map your values to ours with you and return a list of anything we could not map.
 
@@ -198,7 +209,7 @@ Please send your ABA Standard 509 Information Reports for the same years as your
 ## 12. What we do with the data
 
 - We check structure and logic: duplicate keys, stage order, aid for non-admitted students, offsets outside the protocol, and reconciliation to your published totals. Every check and its row count is reported back to you.
-- Student-level data stay in our secure compute environment. The dashboard shows aggregates only, with groups smaller than ten suppressed. If you request a student-level list (for example, students at risk of melt), it comes back through your secure channel, not the dashboard.
+- Student-level data stay in our secure compute environment. The dashboard shows aggregates only. By default, groups smaller than ten are suppressed, with complementary suppression so that a suppressed group cannot be worked out from the totals. You can elect instead to show small groups to named, authenticated staff; that choice is set for each engagement and recorded in the statement of work. If you request a student-level list (for example, students at risk of melt), it comes back through your secure channel, not the dashboard.
 - Race, ethnicity and gender are used to audit results for fairness, never to decide awards.
 - Recommendations are delivered as a scholarship policy that your staff apply as offers go out: scholarship levels by position band and market, and by need only if you use need in scholarships.
 - No recommendation is published until you and [institution counsel] have reviewed it.
@@ -227,6 +238,7 @@ Please send your ABA Standard 509 Information Reports for the same years as your
 - [ ] Fund-code crosswalk, with each fund's eligibility rule
 - [ ] Cycle calendar: offer batches, deposit deadlines, census date
 - [ ] Class-size band, hard cap or soft target, and who decides on a test
+- [ ] Early-delivery aggregates: counts by state, weekly pacing, tuition path and class-size path
 - [ ] Conditional-award terms and renewal history
 - [ ] PLUS approval and denial history
 - [ ] Excluded-group flags
@@ -462,6 +474,43 @@ Required: Y = send it; C = send it under the condition stated; N = optional; bla
 | `student_key` | text | N | A | Same hashed key as the other files. |  |
 | `zip5` | text | N | A | ZIP5 of the permanent address at application. Blank if unknown. Used once by the append job, then deleted within 30 days of append QA. | 5 digits; blank |
 | `address_type` | text | N | A | Which address the ZIP comes from. A family address is common for applicants; tell us if you hold both. | Permanent; Current |
+
+
+### `early_funnel_by_state`
+
+| Field | Type | Req | Tier | Description | Values or format |
+|---|---|---|---|---|---|
+| `cohort` | int | Y | 1 | Entering class year. Send the last three completed cycles. | Four-digit year |
+| `state` | text | Y | 1 | State of the permanent address at application, as two-letter USPS codes. One row per state. Use XX for unknown and ZZ for outside the United States. Aggregate counts only. This is not the student-level `region_code`, and it carries no ZIP3. | Two-letter USPS code; XX; ZZ |
+| `lsat_band` | text | C | 1 | LSAT band of the applicant, if you can aggregate by band. Leave blank for the all-bands row. Send your own band edges and tell us what they are. Include a row with a blank band if you send bands, so the rows sum to the state total. | Your band label, as defined in your own reports |
+| `applications` | int | Y | 1 | Applicants for the cohort, state and band, by the Applicant definition in this request. Send the count as it is, including small counts. Please do not suppress or round. | Whole number, zero or more |
+| `admits` | int | Y | 1 | Applicants offered admission, including from the waiting list, by the Admitted definition in this request. | Whole number, zero or more |
+| `deposits` | int | Y | 1 | Admits who paid the first enrollment deposit and had not withdrawn by the cohort's census date. State which deposit you count if you use two. | Whole number, zero or more |
+
+
+### `early_pacing`
+
+| Field | Type | Req | Tier | Description | Values or format |
+|---|---|---|---|---|---|
+| `cohort` | int | Y | 1 | Entering class year. Send the current cycle and the prior two. | Four-digit year |
+| `week_of_cycle` | int | Y | 1 | Week number counted from the date applications opened for that cohort (week 1 is the first seven days). Same week number means the same point in the cycle. | Whole number, 1 or more |
+| `week_ending_date` | date | Y | 1 | Last day of that week. | YYYY-MM-DD |
+| `applications_cumulative` | int | Y | 1 | Applications received from the application open date through the end of the week. | Whole number, zero or more |
+| `admits_cumulative` | int | Y | 1 | Offers of admission released through the end of the week. | Whole number, zero or more |
+| `deposits_cumulative` | int | Y | 1 | First enrollment deposits received through the end of the week. | Whole number, zero or more |
+
+
+### `early_planning_path`
+
+| Field | Type | Req | Tier | Description | Values or format |
+|---|---|---|---|---|---|
+| `entry_year` | int | Y | 1 | Entering class year. Include the last three completed years, the next entering class and each planned year after it. | Four-digit year |
+| `jd_tuition_usd` | decimal | Y | 1 | Published annual JD tuition for that entering class, in dollars. Send the exact figure for the next entering class. If tuition differs by residency or program, send one row per entry year and tell us how it differs. | Dollars |
+| `jd_tuition_increase_pct` | decimal | Y | 1 | Change from the prior year, in percent, to the precision you have. Send the exact decided figure for the next entering class, not a rounded one. | Percent |
+| `ug_tuition_usd` | decimal | Y | 1 | Published annual undergraduate tuition at your university for the same year, in dollars. Used for the tuition comparison between your programs. | Dollars |
+| `class_size_target` | int | Y | 1 | Target size of the entering JD class for that year. | Whole number |
+| `class_cap` | int | C | 1 | Hard cap on the entering class for that year, if there is one. Leave blank if the target is soft. | Whole number |
+| `figure_status` | text | Y | 1 | Whether the tuition and class figures in the row are actual, decided but not yet published, or planned and still open to change. | Actual; Decided; Planned |
 
 
 ## Appendix B. Cycle calendar events and code lists

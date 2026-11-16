@@ -202,7 +202,7 @@ Please send your Common Data Set for the same years as your cohorts. We reconcil
 ## 12. What we do with the data
 
 - We check structure and logic: duplicate keys, stage order, aid for non-admitted students, offsets outside the protocol, and reconciliation to your published totals. Every check and its row count is reported back to you.
-- Student-level data stay in our secure compute environment. The dashboard shows aggregates only, with groups smaller than ten suppressed. If you request a student-level list (for example, students at risk of melt), it comes back through your secure channel, not the dashboard.
+- Student-level data stay in our secure compute environment. The dashboard shows aggregates only. By default, groups smaller than ten are suppressed, with complementary suppression so that a suppressed group cannot be worked out from the totals. You can elect instead to show small groups to named, authenticated staff; that choice is set for each engagement and recorded in the statement of work. If you request a student-level list (for example, students at risk of melt), it comes back through your secure channel, not the dashboard.
 - Race, ethnicity and gender are used to audit results for fairness, never to decide awards.
 - Recommendations are delivered as a scholarship policy (award levels by academic, need, and residency group) that your staff can apply as offers go out.
 - No recommendation is published until you and [institution counsel] have reviewed it.

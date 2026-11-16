@@ -1,6 +1,6 @@
 # S1: Requirements and User Stories
 
-**Version:** 1.0 **Date:** October 22, 2026 **Owner:** Jason Cohen
+**Version:** 1.2 (v2.7 edits tagged [v2.7, V27-n]; November 13 addendum tagged [v2.7, V27A-n]) **Date:** November 13, 2026 (v1.1: November 5, 2026; v1.0: October 22, 2026) **Owner:** Jason Cohen
 **First client:** University of Richmond School of Law
 **Status:** Draft — awaiting Jason's sign-off. Every open item in section 10 must be resolved before build begins.
 
@@ -8,13 +8,14 @@
 
 ## 1. Purpose, scope, and how to read this document
 
-This document is the functional specification for the EFA + FAO system as of methodology v2.6. It defines what the system must do, who uses it, and what evidence is required before build begins (S3 sign-off). It does not specify how modules are implemented; that is S3 through S5.
+This document is the functional specification for the EFA + FAO system as of methodology v2.7. It defines what the system must do, who uses it, and what evidence is required before build begins (S3 sign-off). It does not specify how modules are implemented; that is S3 through S5.
 
 **Traceability tags used throughout**
 
 | Tag | Meaning |
 |---|---|
-| §n | Methodology section n (`02_methodology_v2.6.md`) |
+| §n | Methodology section n (`02_methodology_v2.7.md`) |
+| **[v2.7, V27-n]** | Edit from the v2.7 change list (`Change_List_v2.7_draft.md`) |
 | FR-nn | Functional requirement (this document) |
 | Fn | Re-review finding (`S4_S5_Rereview_v2.4.md`) |
 | An | Audit finding (`Audit_S4_S5_Rereview_v2.4.md`) |
@@ -35,9 +36,9 @@ This document is the functional specification for the EFA + FAO system as of met
 | Role | Who | What they see | Dashboard access |
 |---|---|---|---|
 | `enrollment_team` | Enrollment dean and staff | All five views; full scenario detail; exportable policy document | Views 1–5 |
-| `leadership` | Law school dean and executives | Headline scenarios (class, revenue, discount rate at three sensitivities); policy grid summary; equity audit | Views 2, 3, 5 — headline only |
+| `leadership` | Law school dean and executives | All views, including the fine matrix and small cells; headline scenarios (class, revenue, discount rate at three sensitivities) lead each view **[v2.7, V27-31]** | Views 1–5 |
 | `analyst` | Internal Frankel analyst | All views; draft runs before publication; publish action | All views + draft queue |
-| `aid_office` | Financial aid director and staff | Policy grid and policy lookup (award for a student's cell); no scenario detail | View 3; policy lookup file via secure channel |
+| `aid_office` | Financial aid director and staff | All views, including small cells; policy lookup (award for a student's cell) **[v2.7, V27-31]** | Views 1–5; policy lookup file via secure channel |
 | `gate_approver` | Client decision-maker who signs the alignment gate (for Richmond: the dean plus named others) | Alignment-gate packet only; not a dashboard role | One-page approval form |
 
 **Richmond note:** Q12 confirms the dean as the decision-maker for any aid policy change and for counsel review. The aid office (enrollment team in Slate) owns the data extract. Whether the aid office and enrollment team are the same staff is an open question (OQ-07).
@@ -54,6 +55,8 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 | **Weak evidence** | Anchor exists (q10 ≤ 0), or the anchor straddles β* | Above, plus the evidence-too-weak state message and the screen's evidence plan. Only reallocations that are non-negative at b=0 and b_H pass. | Tier 1 | Possible if evidence audit finds a marginal source. |
 | **Anchor available** | Evidence audit returns usable μ0, σ0; q10 > 0 | Above, plus the optimized grid under the two-sided rule. No optimized grid is shipped without an anchor. | Tier 2 | Conditional: requires the barbell-to-even policy change to qualify as a policy change under §4 evidence criteria, or a future test. |
 | **Test running** | Screen recommends or marks Optional; client accepts; blinding evaluated | Above, plus test operations (FR-41 to FR-48), compliance reporting, and mid-cycle increases-only evaluation. | Tier 2 | **Not recommended at the current hard cap** (see §8). Revisit if cap or renewal rule changes. |
+
+**[v2.7, V27-32] Scenario evaluator.** In every evidence state, including No anchor, the client may evaluate scenarios it writes (FR-71 to FR-76). Every output that depends on the price response carries the label **"Response based on client-input"** until an anchored response replaces it. The evaluator recommends nothing; "Evidence too weak to change aid levels" (FR-26) applies to Frankel-recommended grids only.
 
 **Tier mapping for Richmond**
 
@@ -81,11 +84,11 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 
 | ID | Requirement | Priority | Source | Acceptance pointer |
 |---|---|---|---|---|
-| FR-06 | Compute the descriptive funnel: stage-to-stage conversion rates (inquiry → application → admit → deposit → enrolled at census) by cohort and pooled, using the fixed non-overlapping table set. Suppress cells with fewer than 10 students. Design tables so suppressed cells cannot be recovered by subtraction. Flag stealth applicants (no inquiry record) and exclude them from the inquiry-to-application stage. | MVP | §2 descriptive layer | No cell under 10 in any output; structure matches approved table set; stealth flag present |
+| FR-06 | Compute the descriptive funnel: stage-to-stage conversion rates (inquiry → application → admit → deposit → enrolled at census) by cohort and pooled, using the fixed non-overlapping table set. Apply the engagement's `small_cell_policy` (FR-76): by default suppress cells with fewer than 10 students and design tables so suppressed cells cannot be recovered by subtraction; Richmond's named roles see small cells **[v2.7, V27-28]**. Flag stealth applicants (no inquiry record) and exclude them from the inquiry-to-application stage. | MVP | §2 descriptive layer | No cell under 10 in any output; structure matches approved table set; stealth flag present |
 | FR-07 | Compute inquiry-to-application logit with clustered standard errors (clustered by student), reported as AME with 95% confidence intervals, labeled explicitly as associational. | MVP | §2 driver layer | Clustering applied; intervals present; "associational" label in output |
 | FR-08 | Compute admit-to-enroll effects of non-price attributes from the forecast model with intervals, labeled associational. The forecast model contains no aid fields. | MVP | §2 driver layer; §4 response model | Guardrail test 4 passes; no aid field in forecast feature set |
 | FR-09 | Compute relative position for each JD admitted student: empirical CDF applied per-measure (LSAT, UGPA; GRE and JD-Next via published concordance where available, otherwise flagged with UGPA alone). Combined position = mean of available measures. Assign to five position bands (under 25, 25–50, 50–75, 75–85, 85+); merge the top band if under 30 admits per cohort. Freeze bands at cycle start. Report admit distribution by band. | MVP | §2 relative position | Bands frozen before first offer released; top-band merge rule applied; GRE/JD-Next flagged when concordance absent |
-| FR-10 | Derive geography from client home address via a client-side script before PII removal: CBSA code, state, ZIP3, distance-to-campus band. Report the funnel by market; pool markets under 10 students into "other." No address appears in any analysis table. | MVP | §2 geography | No address field in any output table; market funnel present; "other" tier applied |
+| FR-10 | Derive geography from client home address via a client-side script before PII removal: CBSA code, state, ZIP3, distance-to-campus band. Report the funnel by market; under the default `small_cell_policy`, pool markets under 10 students into "other" **[v2.7, V27-28]**. No address appears in any analysis table. | MVP | §2 geography | No address field in any output table; market funnel present; "other" tier applied |
 | FR-11 | Compute the academic index (for undergraduate) or use position band (law). Keep the raw running variables (LSAT, UGPA) alongside the index for the discontinuity estimation. | M1 | §2 academic index; §4 anchor | Index and raw running variables both present in the feature table; academic index is a composite, not aid-derived |
 | FR-12 | Flag stealth applicants; include them in the funnel count and the forecast model, not in the inquiry-to-application logit. | MVP | §2 stages | Stealth flag present; stealth applicants in forecast but not in inquiry logit |
 
@@ -124,18 +127,19 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 
 | ID | Requirement | Priority | Source | Acceptance pointer |
 |---|---|---|---|---|
-| FR-29 | Build the law policy grid in total-award mode: cells = position band (5) × market (home state / other), optionally × need (2 bands when the school uses need in scholarships, as Richmond does per Q3); ladder at $2,500 steps up to tuition; cap at 100% of tuition; horizon = award commitment length (three years for a renewable full-time JD award). Total cells must not exceed floor(projected admits ÷ 30). | MVP | §5 law profile; S5-2; S5-4 | Cell count ≤ floor(admits ÷ 30); awards are total institutional scholarship amounts; horizon matches commitment length; config validation rejects mismatches |
-| FR-30 | Set position cut points from the trailing three cohorts at cycle start and freeze for at least two cycles. Record every change in the policy_changes table with effective date, old and new cut points, and old and new awards. Log award differences between adjacent cells at a cut point as candidate discontinuities for the evidence audit. | MVP | §5 fixed thresholds | Cut points immutable after cycle-start freeze (tested by attempting to change them mid-cycle); policy_changes table populated on each update |
-| FR-31 | Apply the two-sided choice rule: b_L = max(0, b̂ − 1.2816 s), b_M = b̂, b_H = b̂ + 1.2816 s. Accept only grids that are feasible at all three scenarios. Maximize net tuition revenue at b_M subject to gain ≥ 0 at both b_L and b_H. Use the same objective in the screen's preposterior analysis and the production optimizer. | MVP | §5 choice rule; S5-1; A8–A10; E3 | No level change when q10 ≤ 0 in 100% of Monte Carlo seeds (W0, W0L); W4: gain ≥ 0 in ≥ 85% of seeds; screen and optimizer use identical objective |
+| FR-29 | Build the law policy grid in total-award mode. **[v2.7, V27-21]** Two layers. The **decision layer** is built by merging adjacent score bands within residency × GPA class until each group has at least 30 projected admits, plus one out-of-state incentive, with at most floor(projected admits ÷ 30) parameters. The **policy of record** is the client's fine matrix (at Richmond: LSAT band × GPA class × residency, optionally × need when the school uses need in scholarships, per Q3), rendered from the decision layer by a deterministic rule or authored directly by the client. Optimizer ladder at $2,500 steps up to tuition; cap at 100% of tuition; horizon = award commitment length (three years for a renewable full-time JD award). | MVP | §5 law profile; S5-2; S5-4; V27-07 | Decision-layer parameters ≤ floor(admits ÷ 30); fine-matrix award for every cell equals the rendering rule's output; awards are total institutional scholarship amounts; horizon matches commitment length; config validation rejects mismatches |
+| FR-30 | **[v2.7, V27-22]** Use the client's declared score bands as given. Compute any Frankel-derived cut points from the trailing three cohorts at cycle start and keep them fixed for the cycle; there is no minimum freeze length. Record every change in the policy_changes table with effective date, old and new cut points, and old and new awards. Log award differences between adjacent cells at a cut point for the evidence audit and show them in the step-size table (FR-33a); the log is informational. | MVP | §5 fixed thresholds | Cut points immutable within a cycle (tested by attempting to change them mid-cycle); policy_changes table populated on each update |
+| FR-31 | Apply the two-sided choice rule: b_L = max(0, b̂ − 1.2816 s), b_M = b̂, b_H = b̂ + 1.2816 s. Accept only grids that are feasible at all three scenarios. Maximize net tuition revenue at b_M subject to gain ≥ 0 at both b_L and b_H. Use the same objective in the screen's preposterior analysis and the production optimizer. **[v2.7, V27-23]** The rule applies to Frankel-recommended grids; client-authored scenarios are evaluated, not chosen (FR-71). | MVP | §5 choice rule; S5-1; A8–A10; E3 | No level change when q10 ≤ 0 in 100% of Monte Carlo seeds (W0, W0L); W4: gain ≥ 0 in ≥ 85% of seeds; screen and optimizer use identical objective; optimizer and ledger agree on class, spend and NTR for the same grid |
 | FR-32 | Budget constraint: expected flexible spend + appeals reserve (trailing three-cohort mean of post-first-offer increases by cell) + count-noise buffer (1.645 × √Σ p(1−p) × award², evaluated at b_H) ≤ budget. Reject grids that exceed the budget at any scenario. The count-noise buffer targets at most a 5% probability of overrun from enrollment noise. | MVP | §5 constraints; §6; S4-12; A29; E9 | Spend overrun above 105% of budget in ≤ 5% of seeds (W0L); buffer reported as approximately 15% of first-year scholarship spend (award-weighted) |
-| FR-33 | Apply the per-cell guardrail: no first-offer award falls more than 5% of tuition below its status-quo level (configurable). Report which cells hit the guardrail. | MVP | §5 guardrail; S5-5; F20 | Guardrail test 5 passes on the synthetic pipeline; guardrail column present in policy_grid.csv |
-| FR-34 | Apply segment floors per Appendix C: highest-need and Pell-eligible at 100% of the trailing three-cohort average; all other segments (other need bands, No FAFSA, every market tier, every consumer capacity-tier cell) at 75%. Report which floors bind and their shadow prices each run. | MVP | §5 floors; Appendix C | Floor constraint rows present in optimizer; binding frequency reported; shadow prices in scenarios.csv |
+| FR-33 | **[retired v2.7, V27-24]** The v2.5 per-cell guardrail (no first-offer award more than 5% of tuition below its status-quo level) is removed. | — | §5 (guardrail removed v2.7); S5-5 superseded; F20 | Not applicable; see FR-33a |
+| FR-33a | **[v2.7, V27-24]** Publish a step-size table in every run: award differences between adjacent cells (by residency × GPA class across score bands), as a plain table with no threshold, flag or message. | MVP | §5 constraints (V27-01) | Step-size table present in the policy grid output and the policy document; a test asserts that no output field or message labels an award exceptional, anomalous or out of bounds |
+| FR-34 | Apply segment floors per Appendix C: highest-need and Pell-eligible at 100% of the trailing three-cohort average; all other segments (other need bands, No FAFSA, every market tier, every consumer capacity-tier cell) at 75%. Report which floors bind and their shadow prices each run. **[v2.7, V27-25]** Floors are evaluated on the rendered fine matrix, weighted by projected admits. | MVP | §5 floors; Appendix C | Floor constraint rows present in optimizer; binding frequency reported; shadow prices in scenarios.csv |
 | FR-35 | Compute four shipped scenarios: 0.75×, 1×, and 1.25× budget; and headcount-maximizing at 1×. Compute the class-floor scenario only when the class floor binds; report its shadow price. Each scenario reported at b_L, b_M, and b_H. | MVP | §5 solver outputs | Five scenario types present in scenarios.csv; class-floor scenario absent when non-binding (verified on synthetic data) |
-| FR-36 | Apply targeted-objective constraints (minimum expected enrollment by segment, year-over-year gain, enrollment weights, median position expectation) as linear constraints holding at all three scenarios. For a median-position constraint, constrain the expectation only — no 1.645σ margin. Report P(median holds) separately from the binomial variance. Run infeasibility reporting: shortfall in enrollees at each scenario; budget to close it (re-solve with budget free up to 2×); funnel stage where the segment leaks. | M1 | §5 targeted objectives; S5-6; A30; E8 | Median constraint enforces expectation only; P(median holds) reported separately; infeasibility report present when target cannot be met |
+| FR-36 | Apply targeted-objective constraints (minimum expected enrollment by segment, year-over-year gain, enrollment weights, median position expectation) as linear constraints holding at all three scenarios. For a median-position constraint, constrain the expectation only — no 1.645σ margin. Report P(median holds) separately from the binomial variance, using the closed form 1 − Φ((−0.5 − m)/√V_m) **[v2.7, V27-26]**. Run infeasibility reporting: shortfall in enrollees at each scenario; budget to close it (re-solve with budget free up to 2×); funnel stage where the segment leaks. | M1 | §5 targeted objectives; S5-6; A30; E8 | Median constraint enforces expectation only; P(median holds) reported separately; infeasibility report present when target cannot be met; closed-form P(median) within 0.01 of simulation on the synthetic fixture |
 | FR-37 | Enforce the whitelist: allowed grid attributes are market tier/CBSA, state, distance band, program, first-generation, Pell eligibility, residency, student type, position band, need band, and the consumer capacity tier (gated). Blocked attributes: race, ethnicity, gender, segment and lifestage codes, individual-level credit data, ZIP5 and ZIP3 as a grid dimension or target, household fields, any geography finer than CBSA as a grid dimension or target. Enforce by a static schema test with one unit test per blocked attribute and by the runtime proxy screen. | MVP | §5 whitelist; §9 | Guardrail test 3 passes; all blocked-attribute unit tests pass; PR-time schema check present |
 | FR-38 | Run the runtime proxy screen before any publication that uses a geographic or consumer target: if the target segment's composition by race or ethnicity differs from the admit pool by more than 20 points for any group, or Cramér's V ≥ 0.3, require explicit acknowledgment at the alignment gate and add allocation changes by race group to the equity audit. | MVP | §5 enforcement; §9 | Proxy screen fires in ≥ 70% of planted-proxy seeds; acknowledgment required before publication in those seeds |
 | FR-39 | In mid-cycle increases-only evaluation: increases are non-negative (Δ_i ≥ 0) and no larger than the tested dose D. Released offers keep their committed awards even if the cell's new award is lower. Budget and class checks use the FR-17 formula. | M1 | §5 increases-only; S5-7 | No decrease on any released offer in any fixture; test-dose cap enforced |
-| FR-40 | Produce the scholarship policy document: recommended grid (or documented status-quo grid in weak-evidence state), projected class, revenue, spend, and discount rate under each scenario and sensitivity scenario, evidence status, which floors and guardrail cells bind. Every number must carry its sensitivity range, interval, or a stated reason it has none. | MVP | §5 outputs | Policy document present for every run; evidence status present; no unranged number in the document |
+| FR-40 | Produce the scholarship policy document: recommended grid (or documented status-quo grid in weak-evidence state), projected class, revenue, spend, and discount rate under each scenario and sensitivity scenario, evidence status, which floors bind, the fine matrix, the step-size table (FR-33a), and a planning-assumptions block (admit rates, pool multiplier, tuition migration, class size) kept apart from aid policy **[v2.7, V27-27]**. Every number must carry its sensitivity range, interval, or a stated reason it has none. | MVP | §5 outputs | Policy document present for every run; evidence status present; no unranged number in the document |
 
 ### 4.7 Price-test operations
 
@@ -157,7 +161,7 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 | FR-49 | Before any client publication, obtain the alignment-gate one-page sign-off from the client's designated decision-maker (for Richmond: the dean plus named others). Record sign-off date, reviewer name, and scope in model_run.json. No deliverable is published without this record. | MVP | §9 alignment gate | Sign-off present and dated in model_run.json before any delivery; publication blocked without it |
 | FR-50 | Produce the equity audit table with every recommendation: status-quo and recommended policies compared by group (average award, expected yield, expected discount rate, share receiving an increase), for every group that appears in the data. The v2 equity tables must not be shown to clients until re-run under the lean model. Review the equity audit before every alignment-gate packet. | MVP | §9 equity audit | equity_audit.csv present for every run; labeled "audit-only"; v2 equity tables blocked from client deliverables until re-run |
 | FR-51 | Where the consumer ZIP add-on is active, include in the alignment-gate packet: the purpose statement ("the capacity tier measures neighborhood-level capacity to pay and expected response to price; it is not a measure of race, ethnicity or any protected trait"), the P1 gate result, and the P2, P3, and P4 reports. Counsel reviews the license and proxy note before the first use in an aid grid at any client. | M1 | §9 consumer data; Appendix E.1 | Purpose statement present in gate packet; P2–P4 reports present; counsel-review flag recorded before any grid use |
-| FR-52 | Enforce the seven existing guardrail tests (no student-level columns in published outputs; small cells suppressed; protected attributes not in allocation models; post-decision aid not in price models; optimizer respects budget cap and excluded groups; missing aid not silently zero; run metadata present). Add the consumer-module guardrail tests when the add-on is active (no ZIP5 or segment codes in any analysis or output table; tier construction takes no race argument; tier rejected as grid dimension unless every required gate passed; raw segment codes rejected as features; no ZIP-to-segment pairs; ZIP-level outputs aggregate ≥ 3 segments and ≥ 10 students; P4 never appears as a pass/fail field). | MVP | §9; §7; Appendix E.2 | All 7 existing tests pass; consumer tests pass when the add-on is active |
+| FR-52 | Enforce the seven existing guardrail tests (no student-level columns in published outputs; small-cell policy enforced as configured **[v2.7, V27-28]**; protected attributes not in allocation models; post-decision aid not in price models; optimizer respects budget cap and excluded groups; missing aid not silently zero; run metadata present). Add the consumer-module guardrail tests when the add-on is active (no ZIP5 or segment codes in any analysis or output table; tier construction takes no race argument; tier rejected as grid dimension unless every required gate passed; raw segment codes rejected as features; no ZIP-to-segment pairs; ZIP-level outputs aggregate ≥ 3 segments and ≥ 10 students; P4 never appears as a pass/fail field). | MVP | §9; §7; Appendix E.2 | All 7 existing tests pass (test 5 no longer asserts a maximum cut; test 2 checks the configured policy; a step-size test is added as test 8 **[v2.7, V27-28]**); consumer tests pass when the add-on is active |
 | FR-53 | Enforce the policy lookup: the recommended award for a student is the cell award — the policy grid award for that student's cell. The lookup is not a separate per-student optimization. | MVP | §5 policy lookup | Batch score cell award identical to grid cell award for every student in that cell; no per-student optimizer code path used for the lookup |
 
 ### 4.9 Delivery
@@ -165,13 +169,13 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 | ID | Requirement | Priority | Source | Acceptance pointer |
 |---|---|---|---|---|
 | FR-54 | Funnel and pacing view (enrollment_team): stage conversion with at most one or two approved dimensions, pacing against last year and plan, projected census, melt by segment, drivers panel labeled associational. No student-level data. | MVP | §7; roadmap §4 view 1 | Guardrail test 1 passes; no student-level fields in Supabase; drivers labeled associational |
-| FR-55 | Scenario planner (enrollment_team and leadership): budget scenarios with class, revenue, spend, and discount rate at b_L, b_M, b_H. Leadership role sees headline class, revenue, and discount rate only. Every number must carry its sensitivity range or a stated reason it has none. | MVP | roadmap §4 view 2 | Three-sensitivity display present; RLS test for leadership role shows only headline fields |
-| FR-56 | Policy grid view (enrollment_team): current versus recommended award by cell, projected yield, guardrail flag; exportable as the scholarship policy document. | MVP | roadmap §4 view 3 | Grid export matches policy_grid.csv; guardrail column present; export action available |
+| FR-55 | **[v2.7, V27-29]** Scenario evaluator view (enrollment_team, leadership, aid_office): client-authored and Frankel-recommended scenarios with the levers in FR-74, showing class, revenue, spend and discount rate at b_L, b_M, b_H (or the client-input cases when no anchor exists), the what-if strips, and the label "Response based on client-input" where it applies. Every number carries its sensitivity range or a stated reason it has none. | MVP | roadmap §4 view 2 | Three-case display present; what-if strips present; label present; RLS test shows the same fine-matrix and small-cell fields to the three roles |
+| FR-56 | **[v2.7, V27-29]** Policy grid view (enrollment_team, leadership, aid_office): current versus recommended or client-authored award by fine-matrix cell, projected yield, and the step-size table (FR-33a); exportable as the scholarship policy document. | MVP | roadmap §4 view 3 | Grid export matches policy_grid.csv; no guardrail column; step-size table present; export action available |
 | FR-57 | Market context view (enrollment_team): loan-cap exposure by program and segment, lost-to institutions (from the Clearinghouse match, where ordered), peer pricing from the ABA 509 layer (for law: including the rank-matched market award gap from FR-20), survey findings summary. | M1 | roadmap §4 view 4; §8 | Data sourced from market_reference table only; no student-level rows in that table |
 | FR-58 | Equity audit view (enrollment_team and analyst): allocation and yield by group, labeled "audit-only." The alignment-gate approver sees this view as part of the gate packet. | MVP | roadmap §4 view 5; §9 | View access restricted by role; "audit-only" label present; no student-level data |
 | FR-59 | Student-level returns (batch scores, melt lists, policy lookup file) go to the client through the secure channel only — never through Supabase or the hosted dashboard. The SOW names recipient roles and prohibits individualized pricing, use in admission decisions, use in individual scholarship negotiation, and onward sharing. Files deleted within 30 days of engagement close; deletion log kept. | MVP | §7; §9; roadmap §1 architecture | Guardrail test 1 passes; no student-level data in Supabase; deletion log present |
 | FR-60 | Every chart links to its definition. Methodology, data-quality, and lineage information appear as a linked panel on every view, not a separate view. | MVP | roadmap §4 design constraints | Definition link present on every chart; lineage panel present on every view |
-| FR-61 | Row-level security in Supabase enforces the three defined roles (enrollment_team, leadership, analyst). Aggregates only are loaded; cells under 10 are suppressed before any load. | MVP | roadmap §1 architecture; §2 suppression | RLS tests pass for all three roles; loader rejects rows with cells under 10 |
+| FR-61 | **[v2.7, V27-28]** Row-level security in Supabase enforces the defined roles (enrollment_team, leadership, aid_office, analyst; the schema enum currently lacks aid_office). Aggregates only are loaded; small cells are handled per the engagement's `small_cell_policy` (FR-76). | MVP | roadmap §1 architecture; §2 suppression | RLS tests pass for all roles; loader rejects student-level rows and applies the configured small-cell policy (the default rejects cells under 10) |
 
 ### 4.10 Add-ons: batch scoring and consumer ZIP
 
@@ -189,15 +193,32 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 
 ---
 
+### 4.11 Scenario evaluator and workbook [v2.7]
+
+| ID | Requirement | Priority | Source | Acceptance pointer |
+|---|---|---|---|---|
+| FR-71 | **[v2.7, V27-30]** Scenario ledger: one reference evaluator (applications, admits, award, yield, enrolled, merit, need, NTR, discount) for any client-authored or Frankel-recommended grid at the L, M, H cases; yield constant when admit rates move; no sticker-price effect. Every output that depends on the response carries the label "Response based on client-input" until an anchored response replaces it. | MVP | §5 Scenario evaluator | Identities hold on a hand-computed toy grid; optimizer and ledger give identical class, spend and NTR for the same grid; label present on every dependent output |
+| FR-72 | Excel scenario workbook as a deliverable: live formulas (no macros, no volatile functions), editable levers per scenario, L, M, H cases, closed-form probabilities, checks. | MVP | §5 Scenario evaluator | Recalculated workbook equals the Python ledger (exact for integers, 1e-6 relative otherwise); reproduce mode matches the client's reference workbook on class, merit spend and NTR within $100 (fixture test; skipped when the file is absent) |
+| FR-73 | Reconciliation: for the same run, the Excel workbook, the dashboard scenario view and the policy document show identical class, spend, NTR and discount rate. | MVP | §5 single evaluator | Reconciliation test over every shared figure |
+| FR-74 | What-if levers: tuition increase by year (default 6.0% for 2027; Richmond planning 5.5%, unconfirmed **[V27A-06]**), class size as the target under a hard class cap (140 this cycle), supported from 100 to 140 (what-if tables: mix held, and a shrink path that removes admits from the lowest score bands first) **[V27A-02, V27A-03]**, out-of-state incentive (dollars per enrolled student; scope the target tier or all out-of-state; optional score floor) and target-tier application lift (default 0) **[V27A-01]**, yield shift (percentage points; optional by residency; strip from −3 to +3 points; linear break-evens for class size and NTR target), pool multiplier, admit rate by cell, award by cell or schedule. Every tuition output states that sticker price does not change applications or yield. | MVP | §5 Scenario evaluator | A child scenario with zero incentive and the parent's tuition equals the parent; the tuition what-if at the scenario's own rate equals ledger NTR; the class-size what-if at the expected class equals ledger NTR; the yield strip at shift d equals the ledger with that shift entered when no cell clips; the shrink path hits N within rounding and never adds admits |
+| FR-75 | Goal-seek helper: a linear program that finds admit rates meeting class and median targets at a stated probability (default 0.80) with minimal change; reports status and binding constraints; results are re-evaluated in the ledger. It is a planning helper, not the optimizer. | M1 | §5 Scenario evaluator, Goal-seek | On synthetic scenarios the ledger meets the targets or the helper reports infeasibility with the binding constraint |
+| FR-76 | `small_cell_policy` per engagement (default suppress under 10 with complementary suppression; Richmond none) and the role map: enrollment_team, leadership and aid_office see all views including small cells; analyst sees all views and the draft queue; gate_approver sees the packet only. The sign-off record (date, scope, roles) is stored for the SOW and the alignment-gate packet. | MVP | §9 Small-cell disclosure | Loader applies the policy; RLS tests for each dashboard role; no student-level fields anywhere |
+| FR-77 | **[v2.7, V27A-01]** Target-state market tier: each cell carries a market tier (in-state, out-of-state target, out-of-state other). Target states are client-defined (Richmond default NY and PA) and form one combined tier; the cell file carries no state. The ledger reports target-tier enrolled with a 90% range, the probability of a target-enrolled goal, incentive cost, cost per incremental target enrollee, and the share of incentive dollars paid to students who would have enrolled anyway (valid when a scenario differs from its parent by the incentive alone). Every dependent output carries "Response based on client-input". | MVP | §5 Scenario evaluator | Splitting a residency into tiers with equal parameters changes no total or probability; incentive scope `target` changes only target cells; the closed form matches simulation within 0.02 |
+| FR-78 | **[v2.7, V27A-02, V27A-03]** Class range and cap: class size is supported and tested from 100 to 140 under a hard class cap (default 140); P(class above cap) uses the cap. A shrink-path rule (lowest score band first, then GPA; target-tier cells last) writes admit rates for a smaller class and reports the lowest band still admitted and the cuts by band. The rule is deterministic, runs on the evaluator side and is not an optimizer dimension. | MVP | §5 Scenario evaluator | Hits the target class within rounding for N = 100 to 140; admits never rise; the share at or above a threshold is non-decreasing as N falls |
+| FR-79 | **[v2.7, V27A-04]** Pool tripwires: report the pool multiplier at which the expected class equals the target and the expected median margin is zero (linear forms), and at which P(median holds) = p* and P(class above cap) = 1 − p* (default p* = 0.80), as growth over 2026 beside the client's reported year-to-date growth. | M1 | §5 Scenario evaluator | At the linear tripwire the expected class equals the target and the expected margin is zero; the probability tripwires return p* within 0.005 |
+| FR-80 | **[v2.7, V27A-05]** Net-price readouts (display only): net price at constant award for each award rung under fixed and under scaled awards, with the enrolled-weighted average, labeled "Arithmetic at constant award. Sticker-price demand effect not modeled." | M1 | §5 Scenario evaluator | Fixed-dollar change equals the tuition change; scaled change equals p × (prior tuition − award) within rounding |
+
+---
+
 ## 5. User stories for Richmond
 
 ### Story 1: Enrollment dean — understanding the funnel (no anchor)
 
 **Given** Richmond has sent three cohorts of Tier 1 data through Galaxkey and the QA log reports zero missing required fields,
 **When** the Frankel analyst publishes the EFA run,
-**Then** the enrollment dean can see: (a) stage-to-stage conversion rates by position band and by market (home state / other), with cells under 10 suppressed; (b) pacing against the prior year; (c) a market funnel showing geographic reach by state and MSA; (d) the ABA 509 peer comparison (tuition, grant percentiles for a 5-to-10-school approved peer set, conditional-scholarship prevalence); and (e) a one-pager from the evidence audit stating whether any usable price source was found.
+**Then** the enrollment dean can see: (a) stage-to-stage conversion rates by position band and by market (home state / other), with small cells handled per the engagement's `small_cell_policy` (at Richmond, shown) **[v2.7]**; (b) pacing against the prior year; (c) a market funnel showing geographic reach by state and MSA; (d) the ABA 509 peer comparison (tuition, grant percentiles for a 5-to-10-school approved peer set, conditional-scholarship prevalence); and (e) a one-pager from the evidence audit stating whether any usable price source was found.
 
-**Acceptance:** Funnel suppression verified; peer set between 5 and 10 schools; evidence audit present with source-by-source check; no student-level data in the dashboard.
+**Acceptance:** Small-cell policy verified as configured; peer set between 5 and 10 schools; evidence audit present with source-by-source check; no student-level data in the dashboard.
 
 ---
 
@@ -251,15 +272,27 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 
 **Acceptance:** FR-36 and FR-38 acceptance criteria met; geographic targets on the whitelist (state, CBSA); shadow price reported; proxy screen fires if V ≥ 0.3.
 
+**[v2.7, V27-33; revised November 13, V27A-01]** In the scenario evaluator, Richmond's geographic lever is a single combined target tier (default NY and PA) with one incentive aimed at it (FR-74, FR-77). The state and MSA targeted objective above stays the optimizer path; per-state and MSA tiers in the evaluator wait for Richmond's state-level counts and about two cycles of data.
+
 ---
 
 ### Story 7: Enrollment dean — aid redistribution away from the barbell
 
 **Given** Richmond wants to move from full-ride / full-pay extremes to a more even distribution,
 **When** the optimizer runs in total-award mode with the two-sided rule and segment floors,
-**Then**: if the evidence audit finds an anchor, the optimizer reallocates within the floors and guardrails (no cell below 75% of its trailing average; highest-need and Pell-eligible cells at 100%); if no anchor is found, the system outputs the documented status-quo grid with a note that the redistribution objective requires either a qualifying price source or a test.
+**Then**: if the evidence audit finds an anchor, the optimizer reallocates within the segment floors (no segment average below 75% of its trailing average; highest-need and Pell-eligible segments at 100%) **[v2.7, V27-33: the per-cell guardrail is removed]**; if no anchor is found, the system outputs the documented status-quo grid with a note that the redistribution objective requires either a qualifying price source or a test.
 
 **Acceptance:** FR-34 acceptance criteria met; floor shadow prices reported; redistribution cannot override the weak-evidence state block.
+
+---
+
+### Story 8: Enrollment dean — comparing scenarios with class size and tuition what-ifs [v2.7]
+
+**Given** Richmond has written several scenarios (admit rates, awards, a pool multiplier) and wants to see what happens if the class lands anywhere from 100 to 140 under the 140 cap (including which admits would be trimmed), if tuition rises 5.0% to 6.5%, if yield is lower than assumed, or if an incentive aimed at the target states (NY and PA) is added,
+**When** the dean opens the scenario evaluator or the Excel workbook,
+**Then** the system shows class, revenue, spend, discount rate and median position for each scenario at the L, M and H cases with probabilities; the class-size (mix held and shrink path), tuition and yield-shift what-if tables, the target-state block and the pool tripwires; and the label "Response based on client-input". The Excel workbook and the dashboard show the same numbers.
+
+**Acceptance:** FR-71, FR-73, FR-74 and FR-77 to FR-80 acceptance criteria met; the tuition what-if states that sticker price does not change applications or yield.
 
 ---
 
@@ -267,7 +300,7 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 
 | # | Requirement | Priority | Source | Acceptance pointer |
 |---|---|---|---|---|
-| NFR-01 | **Privacy / suppression.** No student-level data is loaded to Supabase or shown in the hosted dashboard. All cells with fewer than 10 students are suppressed before any load or display. Tables are designed so suppressed cells cannot be recovered by subtraction. | MVP | §2; §9 | Guardrail tests 1 and 2 pass |
+| NFR-01 | **Privacy / small cells.** No student-level data is loaded to Supabase or shown in the hosted dashboard. **[v2.7, V27-28]** Small cells follow the engagement's `small_cell_policy` (FR-76): by default, cells with fewer than 10 students are suppressed before any load or display, with complementary suppression so suppressed cells cannot be recovered by subtraction; Richmond has no suppression for its named, authenticated roles (Cat and Richmond staff signed off, November 5, 2026). | MVP | §2; §9 | Guardrail tests 1 and 2 pass (test 2 checks the configured policy) |
 | NFR-02 | **Secure channel.** All student-level returns (batch scores, melt lists, policy lookup, mid-cycle award suggestions) go to the client through the client's established secure channel (Galaxkey for Richmond). Never through Supabase or the dashboard. | MVP | §7; §9; Q14 | FR-59 acceptance criteria met |
 | NFR-03 | **Lineage and reproducibility.** Every published run records: input hashes, software versions, pipeline parameters, and the policy_changes log. Re-running the pipeline on the same inputs must reproduce all aggregate outputs to within MILP solver tolerance. | MVP | §6; roadmap §3 model_run.json | model_run.json present; re-run matches outputs to within 0.055% on scenarios.csv and validation files |
 | NFR-04 | **Explainability.** Every number in every deliverable carries either a sensitivity range (b_L, b_M, b_H), a confidence interval, or an explicit statement of why it has neither. Numbers never appear without context. | MVP | §6; roadmap §4 design constraints | No unranged number in the policy document or dashboard; "stated reason" label present where intervals are omitted |
@@ -303,6 +336,7 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 - Adaptive price tests across admit waves: requires several admit waves and a standing test
 - Year-specific retention modeling: requires three or more years of retention per cohort
 - Time-varying treatment (revisions and appeals): requires treatment log in place for at least one cycle
+- **[v2.7, V27-33]** Net-price yield response; per-state and MSA tiers in the evaluator (a single combined target tier is in scope, FR-77); admit-rate dimension in the optimizer; marginal-admit yield; Slate-based pool-growth pacing; USNWR planner feed (methodology §11)
 
 ---
 
@@ -317,10 +351,11 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 | ABA 509 market view | Yes | Partial peer set confirmed (Q11); need remaining schools to reach 5–10 |
 | Evidence audit | Yes | Must evaluate the 2025 barbell-to-even policy change and any prior thresholds |
 | Documented status-quo grid | Yes | Dean must confirm the grid matches practice |
+| Scenario evaluator and Excel scenario workbook **[v2.7]** | Yes | Needs Richmond's scenarios and the cell-level history; the response is based on client-input until an anchor exists |
 | Geographic market analysis (state/MSA) | Yes | Richmond confirmed state and MSA level; ZIP3 sufficient (Q2, Q12) |
 | VOI screen | Yes | Inputs needed: N, p, and the formal capacity band percentage (see OQ-01) |
 | Optimized grid | **Conditional** | Only if the evidence audit finds a qualifying source; likely not this cycle |
-| Price test operations | **Not recommended at current cap** | Hard cap at 100% fill → likely ±3% band → Not recommended under every pool and prior tested (A2); formal production-optimizer screen required (OQ-01) |
+| Price test operations | **Pending re-run [v2.7]** | The earlier "Not recommended" verdict (hard cap, ±3% band, A2) was computed under the 5% guardrail, which v2.7 removes. Re-run the screen (O36) before telling Richmond anything about a test; formal production-optimizer screen required (OQ-01) |
 | Consumer ZIP add-on | Not this cycle | Gated (L1, counsel review); Richmond's geographic objective does not require it (ZIP3 sufficient per Q2) |
 | Batch scoring | Not this cycle | Requires out-of-time calibration pass; forecast model not yet built on Richmond data |
 
@@ -331,6 +366,7 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 2. Dean signs off on the equity audit for the EFA and market deliverables.
 3. Dean signs off on the geographic targeting approach (state and MSA; no finer than CBSA).
 4. If the evidence audit finds any anchor: full alignment-gate sign-off on the optimized grid, including the evidence status and the screen verdict.
+5. **[v2.7]** Record of the small-cell disclosure policy: date and scope of Cat's and Richmond staff's sign-off, and the roles that see small cells (aid office, enrollment team, leadership).
 
 ---
 
@@ -343,7 +379,7 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 | FR-03 | §9 protected attributes | R11 | Guardrail test 3; static schema tests |
 | FR-04 | §3 data model; §7 | R5, F10 | Guardrail tests 4 and 6; QA log |
 | FR-05 | §3 law Tier 1; data request v3 | Verification Report §5 gaps 1–6 | All Tier 1 required fields present |
-| FR-06 | §2 descriptive layer | R8, R12 | Suppression enforced; table set fixed |
+| FR-06 | §2 descriptive layer | R8, R12 | Small-cell policy enforced as configured; table set fixed |
 | FR-07 | §2 driver layer | R9 | Clustered SEs; associational label |
 | FR-08 | §2; §4 response model | R11 | Guardrail test 4 |
 | FR-09 | §2 relative position | F13, A14 | Bands frozen; GRE/JD-Next concordance flag |
@@ -366,11 +402,12 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 | FR-26 | §5 weak-evidence state; O2 | F1, A8 | W6: no level change when q10 ≤ 0 (100%) |
 | FR-27 | §5 no admissible grid; §1 | F2 | W9: no anchor → no grid (100%) |
 | FR-28 | §4 anchor; E13 | R10, F5, A23 | W5: flag in ≥ 70%; coverage ≥ 85% |
-| FR-29 | §5 law profile; S5-2; S5-4 | F2, F14 | Cell cap; total-award mode; horizon |
-| FR-30 | §5 fixed thresholds | — | Cut points frozen; policy_changes populated |
+| FR-29 | §5 law profile; S5-2; S5-4; V27-07 | F2, F14 | Decision layer ≤ floor(admits ÷ 30); fine matrix rendered by rule; total-award mode; horizon |
+| FR-30 | §5 fixed thresholds; V27-06 | — | Cut points fixed within a cycle; policy_changes populated |
 | FR-31 | §5 choice rule; S5-1; E3 | F1, A8–A10 | W0, W0L: no level change when q10 ≤ 0 (100%) |
 | FR-32 | §5 constraints; E9 | R4, F10, A29 | W0L: overrun ≤ 5% of budget in ≤ 5% of seeds |
-| FR-33 | §5 guardrail; S5-5 | F20 | Guardrail test 5 |
+| FR-33 | §5 (guardrail removed v2.7); S5-5 superseded | F20 | Retired; see FR-33a |
+| FR-33a | §5 constraints; V27-01 | F20 | Step-size table present; no flag or label on any award |
 | FR-34 | §5 floors; Appendix C | R1 (international cut artifact) | Floor rows in optimizer; shadow prices in output |
 | FR-35 | §5 solver outputs | R11 | Five scenario types; class-floor absent when non-binding |
 | FR-36 | §5 targeted objectives; E8 | A30 | Median expectation only; P(median holds) separate |
@@ -398,7 +435,7 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 | FR-58 | roadmap §4 view 5; §9 | F17 | View access restricted; audit-only label |
 | FR-59 | §7; §9 | R12 | Guardrail test 1; deletion log |
 | FR-60 | roadmap §4 | — | Definition links and lineage panel on every view |
-| FR-61 | roadmap §1 | R12 | RLS tests all three roles; suppression before load |
+| FR-61 | roadmap §1; §9 small-cell disclosure | R12 | RLS tests all roles; small-cell policy applied before load |
 | FR-62 | §7 batch scoring | O15 | All four release criteria in model_run.json |
 | FR-63 | §7; Appendix E | O15 | File contents match specification |
 | FR-64 | §11 boosted challenger | O19 | W20b pass before adoption |
@@ -408,6 +445,16 @@ This table is the backbone of the document. Every FR maps to one or more evidenc
 | FR-68 | §4; §9 gates | O13 | Tier rejected unless G2 and G3 passed |
 | FR-69 | §5 consumer tier; §9 | O24; O34; O35 | All five gates passed; law default no tier until W21L |
 | FR-70 | §9 report-only P2–P4 | O26; O32 | P4 never a pass/fail field; reports in equity_audit |
+| FR-71 | §5 scenario evaluator | — | Identities on toy grid; ledger equals optimizer for same grid; label present |
+| FR-72 | §5 scenario evaluator | — | Excel equals Python; reproduce mode matches client reference workbook |
+| FR-73 | §5 single evaluator | — | Excel, dashboard and policy document agree for the same run |
+| FR-74 | §5 scenario evaluator, levers | — | Strip and what-if checks equal the ledger |
+| FR-75 | §5 goal-seek | — | Targets met in the ledger or infeasibility reported |
+| FR-76 | §9 small-cell disclosure | — | Policy applied by loader; RLS by role; sign-off record stored |
+| FR-77 | §5 scenario evaluator, target tier | — | Tier merge invariance; incentive scope; closed form against simulation |
+| FR-78 | §5 scenario evaluator, class range | — | Shrink path hits N; admits never rise; monotone median share |
+| FR-79 | §5 scenario evaluator, tripwires | — | Linear and probability tripwires reproduce their targets |
+| FR-80 | §5 scenario evaluator, net price | — | Fixed and scaled identities |
 
 ---
 
@@ -440,19 +487,21 @@ Items are labeled **OQ** (open question requiring a Richmond answer), **OD** (op
 | OD-02 | Whether the pilot with Richmond is confirmed. The roadmap still says "assumed to proceed." S1 is written as if the engagement is signed; if it is not, FR-05 and the Tier 1 data request cannot move forward. | Jason confirms engagement status. |
 | OD-03 | Which pitch copy is current and whether its privacy paragraph needs revision. The CHANGELOG v2.6 flags that the pitch deck's "No consumer credit data" and "No full ZIP codes" language conflicts with v2.6. The pitch copy was not verified during Phase A. | Jason confirms the current pitch copy and reconciles the privacy paragraph with §9 and Appendix E.3 before the Richmond follow-up. |
 | OD-04 | Law timeline offsets in the data request v3 (+6 and +8 weeks). These are proposed, not from the plan. | S1 sign-off provides the basis; the Richmond timeline is then confirmed with the client. |
-| OD-05 | Whether "holding the discount rate static this year" (Q2) is a hard optimizer constraint (cap on class-wide discount rate) or a stated preference. If it is a hard constraint, it is added to the scoping inputs (FR-01) and must not conflict with the geographic redistribution objective. | Clarify with Richmond at the follow-up. Add as a scoping input in FR-01 if confirmed as a hard constraint. |
+| OD-05 | Whether "holding the discount rate static this year" (Q2) is a hard optimizer constraint (cap on class-wide discount rate) or a stated preference. If it is a hard constraint, it is added to the scoping inputs (FR-01) and must not conflict with the geographic redistribution objective. | Clarify with Richmond at the follow-up. Add as a scoping input in FR-01 if confirmed as a hard constraint. **[V27A-02]** Dean Rooksby (Nov 13): the five-year plan is to maintain the discount rate; the evaluator shows an optional `discount_target` margin, and whether it is a hard optimizer constraint stays open. |
 | OD-06 | Whether Richmond's geographic targeting (state or MSA) requires a targeted-objective constraint or is satisfied purely by grid cells (law profile: position × market, where market = home state / other). If a finer MSA-level breakdown is desired and the 30-admit-per-cohort cell minimum cannot be met, markets under 30 admits must be pooled. | Confirm the level of granularity Richmond needs in the follow-up. The law grid already includes home-state vs. other as the market dimension. |
-| OD-07 | Dashboard scope for the Richmond MVP: the Handoff proposes views 1 (funnel/pacing), 4 (market context), and 5 (equity audit) as the first delivery for a no-anchor client. Views 2 (scenario planner) and 3 (policy grid) follow once an anchor or a documented status-quo grid is available. Confirm with Jason. | Jason confirms the phase ordering of dashboard views for Richmond. |
+| OD-07 | Dashboard scope for the Richmond MVP: the Handoff proposes views 1 (funnel/pacing), 4 (market context), and 5 (equity audit) as the first delivery for a no-anchor client. Views 2 (scenario planner) and 3 (policy grid) follow once an anchor or a documented status-quo grid is available. Confirm with Jason. | **Resolved Nov 5, 2026 (Jason) [v2.7, V27-34]:** the scenario evaluator (view 2) and the policy grid (view 3) ship in the first delivery with the Excel workbook, alongside the views the Handoff proposed. |
+| OD-08 | **[V27A-02]** The class size path: 140 is a hard cap this cycle and the five-year plan is 100 to 115; whether the glide path starts this cycle (Jason's current understanding: yes) and at what target. | Ask Brandon; the evaluator supports 100 to 140 meanwhile. |
+| OD-09 | **[V27A-06]** The exact 2027 tuition increase (Dean Rooksby: "just over 5.5%"; Brandon to confirm) and the tuition path beyond 2027, with undergraduate tuition by year (law is $11K below undergraduate today; Dean wants to narrow the gap). | Ask Brandon; planning scenarios use 5.5% until then. |
 
 ### 10.3 Potential contradictions with methodology v2.6
 
 | ID | Item | What the methodology says | What the Richmond answers suggest | Flag |
 |---|---|---|---|---|
 | CONTR-01 | Screen verdict confidence before the production screen runs. | "The production screen must run on the real optimizer with a 509-calibrated pool" (§4; Verification Report §3). The audit ran on stylized pools only. | Richmond's hard cap strongly suggests "Not recommended," and the audit verified this at ±3% under every pool and prior tested. But the formal verdict requires the production run. | Do not state a final verdict in deliverables until FR-23 (production screen) has run. State the working assumption ("likely Not recommended at the current cap") and the path to a formal verdict. |
-| CONTR-02 | Discount rate static vs. geographic redistribution. | The optimizer allows an optional cap on the class-wide discount rate (§5 constraints). | Richmond wants to hold the discount rate static this year (Q2) but also add bonus aid to geographic targets (Q1). Adding bonus aid while holding the discount rate static requires cutting aid elsewhere, which the guardrail (FR-33) and floors (FR-34) limit. | Resolve at scoping: if the discount-rate cap is hard, model it as a constraint and run infeasibility reporting. If it is a preference, treat it as an objective weight. Do not resolve here. |
+| CONTR-02 | Discount rate static vs. geographic redistribution. | The optimizer allows an optional cap on the class-wide discount rate (§5 constraints). | Richmond wants to hold the discount rate static this year (Q2) but also add bonus aid to geographic targets (Q1). Adding bonus aid while holding the discount rate static requires cutting aid elsewhere, which the floors (FR-34) limit; the per-cell guardrail (FR-33) was removed in v2.7. | Resolve at scoping: if the discount-rate cap is hard, model it as a constraint and run infeasibility reporting. If it is a preference, treat it as an objective weight. Do not resolve here. |
 | CONTR-03 | "ZIP3 is going to work fine for us" vs. consumer ZIP add-on. | The consumer ZIP add-on (FR-65 to FR-70) uses ZIP5 for the append job to derive a capacity tier. Geographic targeting at state/MSA level uses the standard geography derivation (CBSA, state, ZIP3) and does not require the consumer ZIP add-on. | Richmond's statement that ZIP3 is sufficient was made in the context of geographic targeting, not the capacity tier. The consumer ZIP add-on and geographic targeting are separate features. | No methodology contradiction. Clarify with Richmond: the consumer ZIP add-on is optional and serves a different purpose (capacity tier for grid modeling, not geographic targeting). Richmond may not elect the add-on at all for its current objective. |
 | CONTR-04 | Need as a grid dimension. | "In law, need is a grid dimension only if the school uses need in scholarships" (§5). | Q3: Richmond confirmed that need data (FAFSA or institutional) is used in scholarship decisions. | No contradiction; need is a valid grid dimension for Richmond. The law grid may be: position (5) × need (2) × market (2), giving 20 cells, within the cap of 21 for approximately 650 admits. This should be confirmed at scoping. |
-| CONTR-05 | Tuition increase (~5%) and fixed-dollar renewal rule. | The methodology notes that if awards renew as fixed dollars, a tuition increase changes the net cost (§3 renewal rule; §5 objective). | Richmond's planned tuition increase of just above 5% (Q2) and an unknown renewal rule (Q4) create a risk: if awards are fixed dollars, the real value of multi-year grants declines, which affects the three-year revenue model. | Do not resolve here. Resolve via OQ-02 (renewal rule). If awards are fixed dollars, the methodology handles it correctly through the renewal_rule field and the commitment-length horizon. Note the sensitivity in the policy document. |
+| CONTR-05 | Tuition increase (~5%) and fixed-dollar renewal rule. **[V27A-06]** Richmond planning uses 5.5%, unconfirmed (OD-09). | The methodology notes that if awards renew as fixed dollars, a tuition increase changes the net cost (§3 renewal rule; §5 objective). | Richmond's planned tuition increase of just above 5% (Q2) and an unknown renewal rule (Q4) create a risk: if awards are fixed dollars, the real value of multi-year grants declines, which affects the three-year revenue model. | Do not resolve here. Resolve via OQ-02 (renewal rule). If awards are fixed dollars, the methodology handles it correctly through the renewal_rule field and the commitment-length horizon. Note the sensitivity in the policy document. **[v2.7, V27-34]** Tuition migration is now a scenario lever (FR-74); the renewal rule stays open (OQ-02) and the multi-year sheet is a stub until it is answered. **[V27A-06]** Dean Rooksby (Nov 13): tuition up just over 5.5% with the discount rate held; the evaluator shows fixed and scaled awards side by side and the net price change (FR-80). |
 
 ---
 
