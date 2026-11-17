@@ -1618,13 +1618,16 @@ class Book:
             v = self.vals["seg_exact"][s]
             stale = xs(labels.EXACT_STALE)
             if isinstance(v, float):
+                # stale when the expected enrollment, the goal or the set of segment cells (fixed by the active
+                # segment's name; cells carry their segment) differs from the build [v0.6.2, P21 call 1]
                 lc = self.run.lcs[s]["middle"]
                 b = float(lc.mu[lc.in_segment].sum())
                 gb = int(math.ceil(self.run.scen(s).segment_goal))
+                seg_b = L.active_segment(self.cfg, self.run.scen(s)) or ""
                 MS = f"SUMPRODUCT({SEG},{MU})"
                 return (f'IF(SUM({SEG})=0,{stale},IF({GL}="",{stale},IF((MAX({MS}-{b!r},{b!r}-{MS})>'
-                        f'1E-9*MAX(1,{b!r}))+({ceil_x(GL)}<>{gb})>0,{stale},{xs(labels.EXACT_CURRENT)})))',
-                        labels.EXACT_CURRENT)
+                        f'1E-9*MAX(1,{b!r}))+({ceil_x(GL)}<>{gb})+({self.LH("middle", s, "seg")}<>{xs(seg_b)})>0,'
+                        f'{stale},{xs(labels.EXACT_CURRENT)})))', labels.EXACT_CURRENT)
             return f'IF((SUM({SEG})>0)*({GL}<>"")=1,{stale},"")', ""
         self.exact_status_row = self.sr
         self._row(S, "Exact value status (static value against the current segment enrollment and goal)", "",
@@ -2313,6 +2316,10 @@ class Book:
                 ("data source", m.get("data_source", "")), ("data hash (sha256 of the cell table)", m.get("data_hash", "")),
                 ("scenarios", m.get("scenarios_path", "")), ("scenarios hash (sha256)", m.get("scenarios_hash", "")),
                 ("requirements.lock hash (sha256)", m.get("requirements_lock_hash", "")),
+                ("code hash (sha256 of sw/*.py)", m.get("code_hash", "")),
+                ("uncommitted files", m.get("uncommitted_files", "")),
+                ("cached values", "sentinel: every formula cell holds -999 until recalculated (use this copy for the "
+                                  "desktop Excel check)" if self.sentinel else "Python values (the build's results)"),
                 ("timestamp", _dt.datetime.now().astimezone().isoformat(timespec="seconds")),
                 ("response source", self.run.base.source_label + " (placeholder slopes; sw/response.py)"),
                 ("shock source", f"{self.cfg['risk']['shock_source']} (s = {self.cfg['risk']['common_shock_sd']:g})"),

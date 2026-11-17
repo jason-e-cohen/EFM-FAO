@@ -41,12 +41,14 @@ def soffice_path():
     return shutil.which("soffice")
 
 
-def make_profile(parent=None):
-    """A fresh LibreOffice user profile with forced recalculation on load. Returns its directory."""
+def make_profile(parent=None, recalc=True):
+    """A fresh LibreOffice user profile with forced recalculation on load (recalc=False: never recalculate, used only
+    to test that the desktop Excel check refuses an unrecalculated copy). Returns its directory."""
     d = tempfile.mkdtemp(prefix="sw_lo_profile_", dir=parent)
     os.makedirs(os.path.join(d, "user"), exist_ok=True)
+    xcu = XCU if recalc else XCU.replace("<value>0</value></prop></item>", "<value>1</value></prop></item>", 2)
     with open(os.path.join(d, "user", "registrymodifications.xcu"), "w") as f:
-        f.write(XCU)
+        f.write(xcu)
     return d
 
 

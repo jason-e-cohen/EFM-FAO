@@ -25,8 +25,8 @@ Mutant sources:
        mutant code was not saved), IDs X01 to X45
   1.1  mutants of the Phase 1.1 changes and of the choices recorded in spec v0.6.1 (R-05, R-07, R-08, OP-1, OP-3,
        OP-5), IDs N01 to N17
-  2.1  mutants of the Phase 2.1 Python changes (spec v0.6.2), IDs N18 to N22
-  XL, XL+, 2.1 (Excel mode)  see EXCEL_MUTANTS, IDs E01 to E59
+  2.1  mutants of the Phase 2.1 Python changes (spec v0.6.2), IDs N18 to N22; P21-03, N23
+  XL, XL+, 2.1, P21 (Excel mode)  see EXCEL_MUTANTS, IDs E01 to E62
 Exit status: 0 when every survivor is in EQUIVALENT, every mutant applied and every run collected the baseline's test
 count; 1 otherwise. Report JSON: output/mutation/report.json (Python) or report_excel.json (Excel).
 """
@@ -421,6 +421,10 @@ MUTANTS = [
      '    "budget_basis": "total_aid",',
      '    "budget_basis": "merit",',
      "Q-8e: budget basis defaults to merit"),
+    ("N23", "P21", "sw/build.py",
+     '    build_id = _sha("|".join([cfg_h, data_h, scen_h, lock_h, code_h]).encode())[:12]',
+     '    build_id = _sha("|".join([cfg_h, data_h, scen_h, lock_h]).encode())[:12]',
+     "P21-03 reverted: build id ignores the generator code"),
 ]
 
 # Excel-formula mutants [v0.6.2, P2-01] (spec section 11, test 20; run with --excel). Each changes one formula string in
@@ -430,6 +434,7 @@ MUTANTS = [
 #   XL+  the review's 34 caught mutants, reconstructed from its scope (formula strings in sw/workbook.py; their
 #        descriptions were not published), numbered in the remaining slots E02 to E46
 #   2.1  mutants of the Phase 2.1 workbook changes, E48 to E59
+#   P21  the review's X09 as worded in Review_Phase2_1_Fix_Pass.md (override adds instead of replacing), E60 to E62
 W = "sw/workbook.py"
 EXCEL_MUTANTS = [
     ("E01", "XL", W, '''f"IF({ft_c}=1,{T},MIN({lever},{T}))"''', '''f"IF({ft_c}=1,{T},{lever})"''',
@@ -553,6 +558,16 @@ EXCEL_MUTANTS = [
      '''f'IF(({a1(r, c0 + 2, False)}=1)=1,\'''', "P2-03: note marks every flagged cell"),
     ("E59", "2.1", W, '''f'IF(in_protect_segment={xs(ps)},"OK",{rb(ps)})\'''', '''f'"OK"\'''',
      "P2-06: rebuild check on protect_segment never fires"),
+    # ---- P21: the review's X09 as it was meant [v0.6.2, P21-02] ----
+    ("E60", "P21", W, '''IF({LVf("yield_shift_pts_in")}<>"",{LVf("yield_shift_pts_in")},\'''',
+     '''IF({LVf("yield_shift_pts_in")}<>"",{LVf("yield_shift_pts_in")}+{LVf("yield_shift_pts")},\'''',
+     "In-state override adds to the global shift instead of replacing it (review X09)"),
+    ("E61", "P21", W, '''IF({LVf("yield_shift_pts_out")}<>"",{LVf("yield_shift_pts_out")},\'''',
+     '''IF({LVf("yield_shift_pts_out")}<>"",{LVf("yield_shift_pts_out")}+{LVf("yield_shift_pts")},\'''',
+     "Out-of-state override adds to the global shift"),
+    ("E62", "P21", W, '''=1,{LVf("yield_shift_pts_segment")},\'''',
+     '''=1,{LVf("yield_shift_pts_segment")}+{LVf("yield_shift_pts")},\'''',
+     "Segment override adds to the global shift"),
 ]
 
 # Survivors accepted because they cannot change any result on valid input: id -> reason. Empty unless a run shows

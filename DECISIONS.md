@@ -4,6 +4,10 @@
 
 ## 1. Decisions by date
 
+### November 17, 2026 (Jason): Phase 2 accepted
+
+Desktop Excel parity measured: the sentinel build (every cached value -999), recalculated and saved by desktop Excel, matched Python on every formula cell of every sheet with 0 mismatches (`tests/compare_excel_saved.py`). Phase 2 is accepted. Re-run after the P21 follow-up on build `a5d46aca1735` (synthetic world 101), saved by Microsoft Excel 16 for Mac: all 57,483 formula cells match Python, none still holds -999, and no formula differs from the build (`output/phase2/excel_compare_report.json`). Windows Excel is not yet checked; check it before the first workbook goes to Richmond.
+
 ### November 17, 2026 (Jason): Phase 2 review (`Review_Phase2_Build.md`)
 
 Applied as spec v0.6.2 (tags **[v0.6.2, P2-n]** and **[v0.6.2, Q-n]**). Fixes P2-01 to P2-07 go to the Phase 2.1 fix pass.

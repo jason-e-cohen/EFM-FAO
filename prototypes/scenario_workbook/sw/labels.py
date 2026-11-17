@@ -56,7 +56,8 @@ FT_CONFLICT_CHECK = "award entered on a full-tuition cell is ignored; clear the 
 # Build-time inputs and static figures [v0.6.2, P2-06, P2-07]
 REBUILD_NEEDED = "rebuild needed: differs from its value at build ({build})"
 EXACT_CURRENT = "current"
-EXACT_STALE = "stale: segment expected enrollment or goal changed since the build; rebuild for the exact value"
+EXACT_STALE = ("stale: segment expected enrollment, goal or cells changed since the build; rebuild for the exact "
+               "value")
 SCOPE_ERROR = ("error: bonus scope 'segment' with no segment cells and a bonus, lift or goal (Python refuses this "
                "scenario)")
 SEGMENT_UNNAMED = "error: several segments are configured and none is named; name the active segment on Levers"

@@ -76,6 +76,13 @@ def test_edge_inputs_reach_every_branch(edge_wb):
     s = run.scen("Inner clip")
     assert s.award_usd[i_hi] > ic.tuition and not s.full_tuition[i_hi] and ic.award_base[i_hi] == ic.tuition
     assert s.yield_shift_pts_in is not None
+    # [v0.6.2, P21-02] an in-state override with a non-zero global shift: the override replaces the global shift
+    go = run.scen("Global shift, in-state override")
+    gl = lc["Global shift, in-state override"]["middle"]
+    ins = (cells.residency == "in") & ~gl.in_segment
+    assert go.yield_shift_pts != 0 and go.yield_shift_pts_in not in (None, 0, go.yield_shift_pts)
+    assert ins.any() and (gl.shift[ins] == go.yield_shift_pts_in).all()
+    assert (gl.shift[cells.residency == "out"] == go.yield_shift_pts).all()
     # need_total override; non-integer goal; flag-only child is not valid
     assert lc["Need override"]["middle"].need_rate != lc["Baseline"]["middle"].need_rate
     g = run.scen("Goal 24.3").segment_goal
@@ -185,3 +192,88 @@ def test_two_builds_differ_only_in_runlog(tmp_path):
         changed = [(x, y) for x, y in zip(sa, sb) if x != y]
         assert len(sa) == len(sb) and len(changed) == 1
         assert re.match(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d", changed[0][0])     # the RunLog timestamp
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Desktop Excel check guards [v0.6.2, P21-01]: tests/compare_excel_saved.py accepts only a recalculated sentinel build
+# of the current build id. A LibreOffice-recalculated sentinel copy stands in for the Excel-saved copy.
+
+def _replace_formula(src, dst, sheet, coord, new_formula):
+    """Copy an xlsx, replacing one cell's formula text in the sheet XML and keeping its cached value."""
+    import re
+    import zipfile
+    with zipfile.ZipFile(src) as z:
+        wbx = z.read("xl/workbook.xml").decode()
+        rels = z.read("xl/_rels/workbook.xml.rels").decode()
+        rid = re.search(r'<sheet [^>]*name="%s"[^>]*r:id="([^"]+)"' % sheet, wbx).group(1)
+        target = re.search(r'<Relationship [^>]*Id="%s"[^>]*Target="([^"]+)"' % rid, rels) or \
+            re.search(r'<Relationship [^>]*Target="([^"]+)"[^>]*Id="%s"' % rid, rels)
+        part = "xl/" + target.group(1).lstrip("/").replace("xl/", "", 1)
+        with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as out:
+            for item in z.infolist():
+                data = z.read(item.filename)
+                if item.filename == part:
+                    xml = data.decode()
+                    pat = re.compile(r'(<c r="%s"[^>]*>(?:(?!</c>).)*?<f[^>]*>)([^<]*)(</f>)' % coord, re.S)
+                    xml, n = pat.subn(lambda m: m.group(1) + new_formula + m.group(3), xml)
+                    assert n == 1, (part, coord)
+                    data = xml.encode()
+                out.writestr(item, data)
+
+
+def _excel_check(path):
+    import compare_excel_saved
+    return compare_excel_saved.main([path, "--show", "2"])
+
+
+def test_excel_check_passes_on_a_recalculated_sentinel_copy(sentinel_wb):
+    assert _excel_check(sentinel_wb["recalc_path"]) == 0
+
+
+def test_excel_check_refuses_unrecalculated_or_altered_copies(sentinel_wb, main_wb, tmp_path):
+    from sw import lo
+    lay = sentinel_wb["info"]["layout"]
+    # the tuition formula of the first scenario on Ledger_Middle
+    from xlsxwriter.utility import xl_rowcol_to_cell
+    coord = xl_rowcol_to_cell(3, lay["lblock"][("middle", "Baseline")]["in_seg"] + 1)
+    # (a) the sentinel workbook as built, never opened
+    assert _excel_check(sentinel_wb["path"]) != 0
+    # (b) resaved by LibreOffice without recalculation
+    prof = lo.make_profile(str(tmp_path), recalc=False)
+    resave = lo.recalc(sentinel_wb["path"], str(tmp_path / "norecalc"), profile=prof)
+    assert _excel_check(resave) != 0
+    # (c) that resave with one Ledger formula replaced by =0
+    alt = str(tmp_path / "norecalc_zero.xlsx")
+    _replace_formula(resave, alt, "Ledger_Middle", coord, "0")
+    assert _excel_check(alt) != 0
+    # also: the normal (non-sentinel) build, and a recalculated sentinel copy with one formula typed over but its
+    # correct value kept (only the formula-text check can see it)
+    assert _excel_check(main_wb["path"]) != 0
+    alt2 = str(tmp_path / "recalc_zero.xlsx")
+    _replace_formula(sentinel_wb["recalc_path"], alt2, "Ledger_Middle", coord, "0")
+    assert _excel_check(alt2) == 1
+
+
+def test_build_id_hashes_the_generator_code(tmp_path):
+    """[v0.6.2, P21-03] The build id hashes config, data, scenarios, requirements.lock and sw/*.py; RunLog shows the
+    code hash, the uncommitted files and whether the cached values are sentinels. Needs no LibreOffice."""
+    import hashlib
+    import openpyxl
+    from conftest import ROOT
+    from sw import build
+    h = hashlib.sha256()
+    d = os.path.join(ROOT, "sw")
+    for name in sorted(f for f in os.listdir(d) if f.endswith(".py")):
+        with open(os.path.join(d, name), "rb") as f:
+            h.update(name.encode() + b"\0" + f.read() + b"\0")
+    path, info = build.build(os.path.join(ROOT, "config", "synthetic.yaml"), "synthetic",
+                             os.path.join(ROOT, "config", "scenarios_synthetic.yaml"), str(tmp_path), sentinel=True)
+    m = info["run"].meta
+    assert m["code_hash"] == h.hexdigest()
+    parts = [m["config_hash"], m["data_hash"], m["scenarios_hash"], m["requirements_lock_hash"], m["code_hash"]]
+    assert info["build_id"] == hashlib.sha256("|".join(parts).encode()).hexdigest()[:12]
+    ws = openpyxl.load_workbook(path)["RunLog"]
+    log = {ws.cell(r, 1).value: ws.cell(r, 2).value for r in range(1, ws.max_row + 1)}
+    assert log["code hash (sha256 of sw/*.py)"] == m["code_hash"]
+    assert log["uncommitted files"] == m["uncommitted_files"] and log["uncommitted files"]
+    assert log["cached values"].startswith("sentinel")

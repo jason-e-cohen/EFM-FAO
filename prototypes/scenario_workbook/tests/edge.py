@@ -10,7 +10,9 @@ response clipped before the shift (inner clip)     "Inner clip": in-0-hi award r
                                                     before the -10 shift); out-167-hi award cut to 0 (below the floor
                                                     before the +5 shift)
 unflagged award above tuition                       "Inner clip": in-0-hi lever 90,000 against tuition 57,150
-in-state yield-shift override                       both scenarios above
+in-state yield-shift override                       both scenarios above; "Global shift, in-state override" sets a
+                                                    non-zero global shift too, so replacing and adding differ
+                                                    [v0.6.2, P21-02]
 need_total override                                 "Need override"
 non-integer segment goal                            "Goal 24.3"
 child differing only in one full_tuition flag       "Flag only" (child of "Goal 24.3")
@@ -85,6 +87,9 @@ SCENARIOS = [
      "yield_shift_pts_in": -10, "yield_shift_pts_out": 5,
      "overrides": {"award_usd": {"in-0-hi": 90000, "out-167-hi": 0}}},
     {"name": "Need override", "parent": "Baseline", "description": "need_total override only", "need_total": 210000},
+    {"name": "Global shift, in-state override", "parent": "Baseline",
+     "description": "Global yield shift +2 with an in-state override of -1: the override replaces the global shift",
+     "yield_shift_pts": 2, "yield_shift_pts_in": -1},
     {"name": "Goal 24.3", "parent": "Baseline", "description": "Segment incentive, goal 24.3, a dollar pool",
      "bonus_usd": 6000, "bonus_scope": "segment", "segment_goal": 24.3, "bonus_pool_usd": 150000},
     {"name": "Flag only", "parent": "Goal 24.3", "description": "Differs from its parent in one full_tuition flag",

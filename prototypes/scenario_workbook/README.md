@@ -20,7 +20,7 @@ Build a workbook (synthetic data only until the live Richmond build; Richmond tu
 ../../.venv/bin/python -m sw.build --config config/synthetic.yaml --data synthetic --seed 101 --scenarios config/scenarios_synthetic.yaml --out output/ --pdf
 ```
 
-It writes `output/<client>/<plan_cycle>/<build_id>/workbook.xlsx` and, with `--pdf`, `workbook_Summary.pdf`. The build id is a hash of the config, cell data, scenario file and `requirements.lock`; two builds of the same inputs differ only in RunLog.
+It writes `output/<client>/<plan_cycle>/<build_id>/workbook.xlsx` and, with `--pdf`, `workbook_Summary.pdf`; with `--sentinel`, `workbook_sentinel.xlsx`, whose every cached value is -999 (the copy for the desktop Excel check). The build id is a hash of the config, cell data, scenario file, `requirements.lock` and the generator code (`sw/*.py`, P21-03); two builds share it only if they are the same apart from RunLog's timestamp. RunLog lists the code hash, uncommitted files and whether the cached values are sentinels.
 
 Mutation check (test 20; on demand, not collected by pytest):
 
@@ -31,13 +31,13 @@ Mutation check (test 20; on demand, not collected by pytest):
 
 It applies each mutant in `tests/mutation_check.py` to a scratch copy of the prototype (everything except `output/`) and runs the suite there. Python mode (default) runs every test with `SW_SKIP_EXCEL=1`: the workbook tests compare Excel with Python and would fail for any Python mutant, so they are left out. Excel mode (`--excel`) mutates formula strings in `sw/workbook.py` and runs tests 3, 8, 9 and 18 with LibreOffice. The unmutated suite runs first in a copy made the same way and must pass; every mutant run must collect the same number of tests (else "count mismatch"); the report warns when one test accounts for more than half of the catches. Exit status is non-zero if any mutant survives that is not listed in `EQUIVALENT` with its reason. Reports: `output/mutation/report.json` and `report_excel.json`.
 
-Desktop Excel parity (Phase 2 acceptance; by hand). Open a built workbook in Excel, let it recalculate, Save As a copy, then:
+Desktop Excel parity (Phase 2 acceptance; by hand). Build the sentinel copy (`--sentinel` above), open it in Excel, let it recalculate, Save As a copy, then:
 
 ```bash
 ../../.venv/bin/python tests/compare_excel_saved.py path/to/saved_copy.xlsx
 ```
 
-It rebuilds the workbook from the inputs on RunLog, checks the build id, compares every formula cell with Python at test 3's tolerances, lists input cells edited since the build and prints mismatches (report: `output/phase2/excel_compare_report.json`).
+It refuses any file that is not a recalculated sentinel build of the current build id (P21-01): a normal build, a different build id, or a file whose every formula cell still holds -999. Otherwise it compares every formula cell with Python at test 3's tolerances, fails any cell still holding -999, compares each formula's text with the rebuild's (numeric literals by value), lists input cells edited since the build and prints the differences (report: `output/phase2/excel_compare_report.json`). Test 3 checks that it passes a recalculated sentinel copy and fails the unopened sentinel build, a LibreOffice resave without recalculation, that resave with a Ledger formula replaced by `=0`, the normal build, and a recalculated copy with one formula typed over.
 
 LibreOffice: `config/tools.yaml` holds `soffice_path`; env var `SOFFICE_PATH` overrides it. Every call uses a fresh profile whose `registrymodifications.xcu` sets `OOXMLRecalcMode` to 0, so LibreOffice recalculates every formula on load.
 
@@ -86,7 +86,7 @@ Number formats (P2-05): counts `#,##0`, dollars `$#,##0`, scores and flags `0`, 
 |---|---|---|
 | 1 | `test_01_ledger.py` | Each section 3 identity on a six-cell toy grid against hand-computed answers, including the caps on `award_base` and on the incentive |
 | 2 | `test_02_risk.py` | Closed forms within 0.01 of the exact convolution, and simulation (200,000 draws) within 0.005, on a toy grid with expected class about 31 (class-band probability asserted only at expected class 50 or more, on the doubled grid) and on a balanced median grid where rho 0.5 matters |
-| 3 | `test_03_excel_equals_python.py` | Excel equals Python: every formula cell on every sheet after a forced LibreOffice recalculation (integers exact, floats 1e-6 relative), for the main workbook and the edge workbook (`tests/edge.py`, P2-01), with a check that the edge inputs still reach each branch; the -999 sentinel guard; the profile setting; formula vocabulary; two builds differ only in RunLog |
+| 3 | `test_03_excel_equals_python.py` | Excel equals Python: every formula cell on every sheet after a forced LibreOffice recalculation (integers exact, floats 1e-6 relative), for the main workbook and the edge workbook (`tests/edge.py`, P2-01; a global shift with an in-state override, P21-02), with a check that the edge inputs still reach each branch; the desktop Excel check's guards (P21-01); the build id covers `sw/*.py` (P21-03); the -999 sentinel guard; the profile setting; formula vocabulary; two builds differ only in RunLog |
 | 4 | `test_04_cf_vs_sim.py` | Closed-form class, median (rho 1.0 and 0.5) and NTR probabilities within 0.02 of simulation on 20 synthetic worlds |
 | 5 | `test_05_shape.py` | Calibration check of the stopgap generator: asserted shape rows hold in at least 90% of 20 seeds; other rows, including confounding, reported (R-06) |
 | 8 | `test_08_levers.py` | Lever semantics in the recalculated workbook: a zero-bonus child and a shift-0 child equal the parent; need rate unchanged by the class target; a shift equals the yield-strip row; the class break-even hits the target; residency and segment overrides replace; the tuition what-if at a scenario's own increase equals its ntr_y1 |

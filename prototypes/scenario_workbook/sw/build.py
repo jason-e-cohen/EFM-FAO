@@ -3,9 +3,11 @@
     python -m sw.build --config config/synthetic.yaml --data synthetic --seed 101 \
         --scenarios config/scenarios_synthetic.yaml --out output/
 
-Writes output/<client>/<plan_cycle>/<build_id>/workbook.xlsx (and, with --pdf, the Summary render). The build id is a
-hash of the inputs (config, cell data, scenarios, requirements.lock), so two builds of the same inputs share it and
-differ only in RunLog. Live mode only: reproduce mode is Phase 3 and is not built.
+Writes output/<client>/<plan_cycle>/<build_id>/workbook.xlsx (and, with --pdf, the Summary render; with --sentinel,
+workbook_sentinel.xlsx, every cached value -999, for the desktop Excel check). The build id is a hash of the inputs
+(config, cell data, scenarios, requirements.lock) and the generator code (sw/*.py) [v0.6.2, P21-03], so two builds
+share it only if they are the same apart from RunLog's timestamp. Live mode only: reproduce mode is Phase 3 and is
+not built.
 """
 import argparse
 import copy
@@ -111,9 +113,21 @@ def input_hashes(cfg_path, cells, scen_bytes):
     with open(lock, "rb") as f:
         lock_h = _sha(f.read())
     scen_h = _sha(scen_bytes)
-    build_id = _sha("|".join([cfg_h, data_h, scen_h, lock_h]).encode())[:12]
+    code_h = code_hash()
+    build_id = _sha("|".join([cfg_h, data_h, scen_h, lock_h, code_h]).encode())[:12]
     return {"config_hash": cfg_h, "data_hash": data_h, "scenarios_hash": scen_h, "requirements_lock_hash": lock_h,
-            "build_id": build_id}
+            "code_hash": code_h, "build_id": build_id}
+
+
+def code_hash():
+    """sha256 over sw/*.py (name and bytes, sorted by name) [v0.6.2, P21-03]: two workbooks share a build id only if
+    the same generator built them from the same inputs."""
+    h = hashlib.sha256()
+    d = os.path.join(ROOT, "sw")
+    for name in sorted(f for f in os.listdir(d) if f.endswith(".py")):
+        with open(os.path.join(d, name), "rb") as f:
+            h.update(name.encode() + b"\0" + f.read() + b"\0")
+    return h.hexdigest()
 
 
 def git_commit():
@@ -123,6 +137,18 @@ def git_commit():
         return h.stdout.strip() + (" (working tree has uncommitted changes)" if d.stdout.strip() else "")
     except (OSError, subprocess.CalledProcessError):
         return "unavailable"
+
+
+def uncommitted_files():
+    """Files under the prototype with uncommitted changes (git status), for RunLog [v0.6.2, P21-03]. Output files are
+    git-ignored and do not appear."""
+    try:
+        d = subprocess.run(["git", "status", "--porcelain", "--", "."], cwd=ROOT, capture_output=True, text=True,
+                           check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return "unavailable"
+    files = [ln[3:].strip() for ln in d.stdout.splitlines() if ln.strip()]
+    return ", ".join(files) if files else "none"
 
 
 def load_cells(cfg, data, seed):
@@ -148,6 +174,8 @@ def build(cfg_path, data, scenarios_path, out_root, seed=101, pdf=False, sentine
     # [v0.6.2, P2-07]
     meta["baseline_segment_named"] = bool(specs[0].get("segment"))
     meta["git_commit"] = git_commit()
+    meta["uncommitted_files"] = uncommitted_files()
+    meta["cached_values"] = "sentinel" if sentinel else "python"
     meta["config_path"] = os.path.relpath(cfg_path, ROOT)
     meta["scenarios_path"] = os.path.relpath(scenarios_path, ROOT)
     run = make_run(cfg, cells, scenarios, meta)
@@ -169,8 +197,11 @@ def main():
     ap.add_argument("--scenarios", required=True)
     ap.add_argument("--out", default=os.path.join(ROOT, "output"))
     ap.add_argument("--pdf", action="store_true", help="render Summary to PDF with LibreOffice")
+    ap.add_argument("--sentinel", action="store_true",
+                    help="cache -999 in every formula cell (the copy for the desktop Excel check, spec test 3)")
     args = ap.parse_args()
-    path, info = build(args.config, args.data, args.scenarios, args.out, seed=args.seed, pdf=args.pdf)
+    path, info = build(args.config, args.data, args.scenarios, args.out, seed=args.seed, pdf=args.pdf,
+                       sentinel=args.sentinel, name="workbook_sentinel.xlsx" if args.sentinel else "workbook.xlsx")
     print(path)
     if info.get("pdf"):
         print(info["pdf"])
