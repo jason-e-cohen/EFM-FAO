@@ -33,9 +33,11 @@ def tuition(lc, grid=None, example_award=None):
     t_base = float(cfg["tuition_base"])
     diff = lc.tuition - t_base
     if example_award is None:
-        # Enrolled-weighted mean base-cycle lever award (award_usd, not award_base) over enrollees below full tuition,
-        # zero awards included, rounded to $1,000 [v0.6.1, R-07, OP-7c].
-        below = (lc.award < lc.tuition - 1e-6) & (e > 0)
+        # Enrolled-weighted mean base-cycle lever award (award_usd, not award_base) over enrollees in cells without
+        # the full_tuition flag, zero awards included, rounded to $1,000 [v0.6.1, R-07, OP-7c]. Membership is judged
+        # on the lever award before any incentive (award_base below tuition_s; a flagged cell has award_base equal to
+        # tuition_s), so an incentive that lifts a cell to the cap does not drop it [v0.6.1, P1.1-4].
+        below = (lc.award_base < lc.tuition - 1e-6) & (e > 0)
         example_award = float(L.xround((e[below] * scen.award_usd[below]).sum() / e[below].sum() / 1000.0) * 1000.0) \
             if below.any() else 0.0
     x = lc.p * (t_base - example_award)

@@ -1,0 +1,39 @@
+# Synthetic scenarios for the Phase 2 workbook (spec section 2, scenario file). Every value is synthetic.
+# Cell ids follow sw/synth_cells.py: <residency>[-<segment>]-<score band or unscored>-<gpa class>.
+scenarios:
+  - name: Baseline
+    description: Latest-cohort admit rates and awards; tuition at the plan year
+
+  - name: Out-of-state incentive
+    parent: Baseline
+    description: 5,000 incentive to every out-of-state admit at 161 or above; nothing else changes
+    bonus_usd: 5000
+    bonus_scope: residency_out
+    bonus_min_score: 161
+
+  - name: Segment incentive
+    parent: Baseline
+    description: 8,000 incentive to the priority segment, segment goal 25
+    bonus_usd: 8000
+    bonus_scope: segment
+    segment_goal: 25
+
+  - name: Larger pool, softer yield
+    parent: Out-of-state incentive
+    description: Pool +20% at 165 and above, segment applications +10%, yield -1 point (out-of-state -2)
+    pool_multiplier: 1.2
+    segment_pool_lift_pct: 10
+    yield_shift_pts: -1
+    yield_shift_pts_out: -2
+
+  - name: Smaller class, scaled awards
+    parent: Baseline
+    description: Class target 120 under the cap, 5.5% tuition, awards scale with tuition, award and admit-rate edits
+    class_target: 120
+    tuition_increase_pct: 5.5
+    award_scale_with_tuition: true
+    discount_target: 0.45
+    specialty_usd: 25000
+    overrides:
+      award_usd: {out-161-lo: 25000, out-priority-161-lo: 30000, in-170-hi: 40000}
+      admit_rate: {out-158-lo: 0.15, out-priority-158-lo: 0.30}

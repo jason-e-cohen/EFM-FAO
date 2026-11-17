@@ -166,6 +166,17 @@ def derive(parent, name, cfg, cells, admit_rate=None, award=None, full_tuition=N
     return child
 
 
+def full_tuition_conflicts(cells, cfg, scen, parent=None):
+    """Cells where an award is entered on a full-tuition cell [v0.6.1, P1.1-1]: the flag is set and award_usd differs
+    from the value the cell inherits (the parent's award_usd; for Baseline, the latest-cohort award). The entered
+    award is ignored while the flag is set; the Checks sheet lists these cells. Returns a boolean array."""
+    if parent is None:
+        ref = cells.award[:, cells.col(cfg["cycle"]["base_cycle"])]
+    else:
+        ref = parent.award_usd
+    return np.asarray(scen.full_tuition, bool) & (np.asarray(scen.award_usd, float) != np.asarray(ref, float))
+
+
 def with_rates(scen, rates, name=None):
     """Copy of a scenario with a full admit-rate column (used by the shrink path)."""
     s = copy.copy(scen)

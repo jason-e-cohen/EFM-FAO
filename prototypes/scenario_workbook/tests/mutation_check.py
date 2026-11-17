@@ -322,8 +322,8 @@ MUTANTS = [
      "(e[below] * lc.award_base[below])",
      "R-07 reverted: example award in plan-year dollars (award_base)"),
     ("N03", "1.1", "sw/strip.py",
-     "        below = (lc.award < lc.tuition - 1e-6) & (e > 0)",
-     "        below = (lc.award < lc.tuition - 1e-6) & (lc.award > 0) & (e > 0)",
+     "        below = (lc.award_base < lc.tuition - 1e-6) & (e > 0)",
+     "        below = (lc.award_base < lc.tuition - 1e-6) & (lc.award > 0) & (e > 0)",
      "R-07 reverted: example award excludes zero awards"),
     ("N04", "1.1", "sw/ledger.py",
      "SEGMENT_APPROX_BELOW = 30",
@@ -367,6 +367,22 @@ MUTANTS = [
      '        for lvl in ("residency", "group", "all"):',
      '        for lvl in ("residency", "all"):',
      "R-08c: pooling fallback skips the score group"),
+    ("N14", "1.1", "sw/strip.py",
+     "        below = (lc.award_base < lc.tuition - 1e-6) & (e > 0)",
+     "        below = (lc.award < lc.tuition - 1e-6) & (e > 0)",
+     "P1.1-4 reverted: example-award membership judged on the award after the incentive"),
+    ("N15", "1.1", "sw/strip.py",
+     "        below = (lc.award_base < lc.tuition - 1e-6) & (e > 0)",
+     "        below = (lc.award_base <= lc.tuition) & (e > 0)",
+     "P1.1-4: flagged (full-tuition) cells included in the example award"),
+    ("N16", "1.1", "sw/ledger.py",
+     "    return np.asarray(scen.full_tuition, bool) & (np.asarray(scen.award_usd, float) != np.asarray(ref, float))",
+     "    return np.asarray(scen.full_tuition, bool)",
+     "P1.1-1: every flagged cell listed as a conflict"),
+    ("N17", "1.1", "sw/ledger.py",
+     "        ref = parent.award_usd",
+     "        ref = cells.award[:, cells.col(cfg[\"cycle\"][\"base_cycle\"])]",
+     "P1.1-1: child conflicts judged against the latest-cohort award, not the parent's"),
 ]
 
 # Survivors accepted because they cannot change any result on valid input: id -> reason. Empty unless a run shows
@@ -386,8 +402,10 @@ def _test_files():
 
 
 def _env():
+    # SW_SKIP_EXCEL: the workbook tests (3, 8, 9, 10, 18) compare Excel with Python, so any Python mutant would fail
+    # them; the check measures the Python tests only.
     return dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1",
-                VECLIB_MAXIMUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+                VECLIB_MAXIMUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1", SW_SKIP_EXCEL="1")
 
 
 def _first_failure(stdout):
@@ -434,7 +452,7 @@ def baseline_ok(timeout):
     work = tempfile.mkdtemp(prefix="sw_mut_base_")
     try:
         _copy_tree(work)
-        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", SW_SKIP_EXCEL="1")
         cmd = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *_test_files()]
         r = subprocess.run(cmd, cwd=work, env=env, capture_output=True, text=True, timeout=timeout)
         return r.returncode == 0, r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""

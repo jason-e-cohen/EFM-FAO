@@ -253,20 +253,25 @@ def test_tuition_whatif_every_grid_value():
         assert r["discount_entering_y1"] == pytest.approx(1 - ntr / (37.2 * T), abs=1e-12)   # 0.5672 at 5.0%
         assert r["label"] == labels.STICKER_LABEL
     assert expect[6.0][1] == pytest.approx(L.money(lc)["ntr_y1"], abs=1e-6)
-    # net-tuition lines: fixed 53,000 - 50,000; scaled 0.06 x (50,000 - 17,000), the example award being
-    # (12 x 10,000 + 5 x 30,000 + 10.5 x 20,000 + 1.5 x 0) / 29 = 16,552 -> 17,000
+    # net-tuition lines: fixed 53,000 - 50,000; scaled 0.06 x (50,000 - 20,000). The example award averages cells
+    # without the full_tuition flag, judged on the lever award before the incentive [v0.6.1, P1.1-4]: c5 (lever
+    # 45,000, lifted to the 53,000 cap by the incentive) counts; c1 (flagged) does not:
+    # (12 x 10,000 + 5 x 30,000 + 10.5 x 20,000 + 3.6 x 45,000 + 1.5 x 0) / 32.6 = 19,693 -> 20,000.
+    # Judged on the award after the incentive (the pre-P1.1-4 rule) it would be 16,552 -> 17,000.
     assert tw["net_tuition_line_fixed"] == 3000.0
-    assert tw["example_award"] == 17000.0
-    assert tw["net_tuition_line_scaled"] == pytest.approx(1980.0, abs=1e-9)
-    assert tw["net_tuition_line_scaled_text"] == labels.NET_TUITION_SCALED.format(p="6.0%", x="$1,980",
-                                                                                   award="$17,000")
+    assert tw["example_award"] == 20000.0
+    assert tw["net_tuition_line_scaled"] == pytest.approx(1800.0, abs=1e-9)
+    assert tw["net_tuition_line_scaled_text"] == labels.NET_TUITION_SCALED.format(p="6.0%", x="$1,800",
+                                                                                   award="$20,000")
 
 
 def test_tuition_whatif_scaled_awards():
     """Scenario W with award_scale_with_tuition. Ledger at 6.0%: c2 10,600, c3 31,800 + 10,000, c4 21,200 + 10,000;
     enrolled 4.6, 12.18, 5.36, 10.86, 3.6, 1.5 (class 38.1). NTR(p) = 29.9 T - 499,800 (1 + p) - 162,200 - 43,100.
-    Example award: base-cycle levers (121,800 + 160,800 + 217,200) / 29.9 = 16,716 -> 17,000. With award_base
-    (plan-year dollars) it would be 17,719 -> 18,000; without zero awards, 17,599 -> 18,000 [v0.6.1, R-07]."""
+    Example award: base-cycle levers over cells without the flag, c5 included (lever 45,000; award_base 47,700
+    below 53,000) [v0.6.1, P1.1-4]: (121,800 + 160,800 + 217,200 + 3.6 x 45,000) / 33.5 = 19,755 -> 20,000. With
+    award_base (plan-year dollars) it would be (529,788 + 171,720) / 33.5 = 20,941 -> 21,000; without zero awards,
+    661,800 / 32 = 20,681 -> 21,000 [v0.6.1, R-07]."""
     cfg, cells, base = _setup()
     W = L.derive(L.baseline(cells, cfg), "W", cfg, cells, bonus_usd=10000.0, specialty_usd=5000.0,
                  award_scale_with_tuition=True)
@@ -276,8 +281,8 @@ def test_tuition_whatif_scaled_awards():
     assert rows[6.0]["ntr_y1"] == pytest.approx(29.9 * 53_000 - 499_800 * 1.06 - 205_300, abs=1e-6)   # 849,612
     assert rows[6.0]["ntr_y1"] == pytest.approx(L.money(lc)["ntr_y1"], abs=1e-6)
     tw = strip.tuition(lc)
-    assert tw["example_award"] == 17000.0
-    assert tw["net_tuition_line_scaled"] == pytest.approx(0.06 * 33_000, abs=1e-9)
+    assert tw["example_award"] == 20000.0
+    assert tw["net_tuition_line_scaled"] == pytest.approx(0.06 * 30_000, abs=1e-9)
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -570,3 +575,29 @@ def test_segment_scenario_field():
     # naming the other segment: no cell carries it, so the segment block is empty
     o = L.derive(b, "o", two, cells, segment="other")
     assert L.segment(L.evaluate(cells, two, o, base, "middle"))["segment_enrolled"] == labels.NO_SEGMENT_CELLS
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Full-tuition award conflicts [v0.6.1, P1.1-1]
+
+def test_full_tuition_conflicts():
+    """c1 carries the flag on Baseline. A child that types an award on c1 conflicts at c1 only; Baseline has none; a
+    grandchild that inherits the entered award does not list it again; an award typed on an unflagged cell (c2) is
+    not a conflict; setting the flag without an award change is not a conflict."""
+    cfg, cells, base = _setup()
+    b = L.baseline(cells, cfg)
+    assert dict(zip(cells.cell_id, b.full_tuition))["c1"]
+    assert not L.full_tuition_conflicts(cells, cfg, b).any()
+    ch = L.derive(b, "ch", cfg, cells, award={"c1": 30000.0, "c2": 12000.0})
+    conf = dict(zip(cells.cell_id, L.full_tuition_conflicts(cells, cfg, ch, b)))
+    assert conf == {"c1": True, "c2": False, "c3": False, "c4": False, "c5": False, "c6": False}
+    lc = L.evaluate(cells, cfg, ch, base, "middle")
+    assert lc.award[cells.index("c1")] == lc.tuition          # the entered award is ignored
+    gc = L.derive(ch, "gc", cfg, cells)
+    assert not L.full_tuition_conflicts(cells, cfg, gc, ch).any()
+    fl = L.derive(b, "fl", cfg, cells, full_tuition={"c3": True})
+    assert not L.full_tuition_conflicts(cells, cfg, fl, b).any()
+    # Baseline edited directly: flag set and award no longer the latest-cohort award
+    b2 = L.derive(b, "b2", cfg, cells)
+    b2.award_usd[cells.index("c1")] = 1.0
+    assert L.full_tuition_conflicts(cells, cfg, b2)[cells.index("c1")]

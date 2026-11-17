@@ -4,6 +4,22 @@
 
 ## 1. Decisions by date
 
+### November 17, 2026 (Jason): Phase 2 review (`Review_Phase2_Build.md`)
+
+Applied as spec v0.6.2 (tags **[v0.6.2, P2-n]** and **[v0.6.2, Q-n]**). Fixes P2-01 to P2-07 go to the Phase 2.1 fix pass.
+
+| Decision | IDs |
+|---|---|
+| Test 3 adds an edge workbook that reaches every branch; desktop Excel parity is measured by comparing an Excel-saved copy with Python | P2-01 |
+| Canonical range names are prefix + name in upper case, no aliases; `p_segment_goal_exact` added to the contract from Python; `award_matrix` is the resolved award on Levers | Q-1, Q-2, Q-3 |
+| An "entered" award on a full-tuition cell is one that differs from the inherited award; it is counted and marked separately, not as a change | Q-4, P2-03 |
+| Scaled net-tuition example: base-cycle lever award below base-cycle tuition, cells without the full-tuition flag | Q-5 |
+| Narrative NTR range slot; Baseline line "no parent scenario" | Q-6 |
+| Trim order stays fixed at build; Checks flags "rebuild needed" and a stale exact segment probability | Q-7, P2-06 |
+| Budget check compares total aid by default, merit only by setting; Brandon to say which (OD-10) | Q-8e |
+| Optional inputs `bonus_pool_usd` and `merit_actual_by_cohort` | Q-8d, Q-8f |
+| Blank segment on Levers defaults to the only configured segment; the empty-segment scope error is a Check | P2-07 |
+
 ### November 17, 2026 (Jason): Phase 1 review (`Review_Phase1_Build.md`)
 
 Applied as spec v0.6.1 (tags **[v0.6.1, R-n]** and **[v0.6.1, OP-n]** for the builder's open points).
@@ -80,6 +96,7 @@ Net-price yield response; goal-seek helper and schedule authoring layer; dashboa
 | OD-05 / O42 | Which discount rate Dean Rooksby means (entering class or all JD; fees); whether it is a hard constraint | Brandon |
 | OD-08 | The class target path toward 100 to 115 | Brandon |
 | OD-09 | The exact 2027 tuition increase and the path after it | Brandon |
+| OD-10 | Whether Richmond's budget figure covers total aid (merit, need, specialty) or merit only | Brandon |
 | O41 | ABA 509 basis for unscored students in percentiles; how deferrals enter 509 yield | Jason (509 instructions) |
 | O43 | Small-cell rule for files, the policy document and public material (methodology section 9) | Cat |
 | O36 | Screen re-run without the guardrail (frozen until a client considers a price test) | Later |
