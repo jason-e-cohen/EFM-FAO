@@ -100,14 +100,30 @@ def test_award_scaling(toy):
     assert lc.award_base[cells.index("c1")] == 53000.0      # full-tuition rung follows tuition either way
 
 
-def test_full_tuition_override_is_rung(toy):
-    """An award override at or above the parent's tuition is the full-tuition rung."""
+def test_full_tuition_flag(toy):
+    """full_tuition is a per-cell flag [v0.6.1, OP-1]: Baseline sets it where the latest award is at or above
+    base-cycle tuition (c1); a child inherits it unless it overrides the flag; an award override leaves it alone."""
     cfg, cells, base = toy
     b = L.baseline(cells, cfg)
-    s = L.derive(b, "ft", cfg, cells, award={"c2": 53000.0})
+    i1, i2 = cells.index("c1"), cells.index("c2")
+    assert b.full_tuition.tolist() == [cells.cell_id[i] == "c1" for i in range(cells.n)]
+    # flag set by override: the award follows tuition at every p
+    s = L.derive(b, "ft", cfg, cells, full_tuition={"c2": True})
     s2 = L.derive(s, "ft2", cfg, cells, tuition_increase_pct=8.0)
+    assert s2.full_tuition[i2]                                         # inherited
     lc = L.evaluate(cells, cfg, s2, base, "middle")
-    assert lc.award[cells.index("c2")] == lc.tuition == 54000.0
+    assert lc.award[i2] == lc.tuition == 54000.0
+    # an award override alone does not set the flag: 53,000 stays a lever value when tuition rises to 54,000
+    s3 = L.derive(b, "aw", cfg, cells, award={"c2": 53000.0}, tuition_increase_pct=8.0)
+    assert not s3.full_tuition[i2]
+    assert L.evaluate(cells, cfg, s3, base, "middle").award[i2] == 53000.0
+    # clearing the flag on c1 makes its lever (50,000) the award; otherwise it follows tuition (53,000)
+    s4 = L.derive(b, "clear", cfg, cells, full_tuition={"c1": False})
+    assert L.evaluate(cells, cfg, s4, base, "middle").award[i1] == 50000.0
+    assert L.evaluate(cells, cfg, b, base, "middle").award[i1] == 53000.0
+    # an award override on a flagged cell is not read while the flag stays set
+    s5 = L.derive(b, "aw1", cfg, cells, award={"c1": 30000.0})
+    assert s5.full_tuition[i1] and L.evaluate(cells, cfg, s5, base, "middle").award[i1] == 53000.0
 
 
 def test_yield_clip_and_case_slopes(toy):

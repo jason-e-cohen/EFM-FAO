@@ -1,5 +1,8 @@
 """Test 5: the asserted shape rows of section 10 hold in at least 90% of 20 seeds; the other rows are reported
-(pass share per row written to output/phase1/test05_shape.json)."""
+(pass share per row written to output/phase1/test05_shape.json).
+
+This is a calibration check of the stopgap generator, not a test of realism: the generator steers group yields onto
+the targets. The confounding row is reported, not asserted, until W0L provides a real check [v0.6.1, R-06, OP-6]."""
 import json
 import os
 

@@ -17,6 +17,7 @@ Applied as spec v0.6.1 (tags **[v0.6.1, R-n]** and **[v0.6.1, OP-n]** for the bu
 | Class-band probability asserted at expected class 50 or more; segment "approximate" flag below 30 expected; rho applies to the median in test 4 | OP-3, OP-4 |
 | Test 5 is a calibration check of the stopgap generator; its confounding row is reported, not asserted, until W0L | R-06, OP-6 |
 | Richmond tuition stays null in config until Richmond's published figures and OD-09 arrive; needed before Phase 3 | OP-8 |
+| Phase 1.1 follow-ups: the full-tuition flag wins over an award typed into the cell, and Checks lists the conflict; `plan_year` is a label (tuition comes from the scenario's increase, inherited by children); the scaled-line example uses cells without the full-tuition flag; step sizes group by residency x segment x GPA; the band check runs on a second toy grid at class 50 or more | P1.1-1 to P1.1-5 |
 
 ### November 16, 2026 (Jason): Session B design audit accepted in full
 

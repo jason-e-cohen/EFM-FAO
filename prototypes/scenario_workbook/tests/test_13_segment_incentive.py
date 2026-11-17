@@ -74,7 +74,7 @@ def test_segment_block(toy):
     lc = L.evaluate(cells, cfg, s, base, "middle")
     blk = L.segment(lc)
     assert blk["segment_goal"] == 2                                 # rounded up
-    assert blk["approximate"] == labels.SEGMENT_APPROX              # fewer than 20 expected
+    assert blk["approximate"] == labels.SEGMENT_APPROX              # fewer than 30 expected [v0.6.1, OP-3]
     assert labels.SEGMENT_SHARE_LABEL in blk["labels"]              # share_source: assumed
     assert labels.RESPONSE_LABEL in blk["labels"]
     assert 0.0 <= blk["p_segment_goal"] <= 1.0
@@ -120,16 +120,28 @@ CHANGES = {
 }
 
 
-@pytest.mark.parametrize("field", list(CHANGES) + ["admit_rate", "award_usd"])
+@pytest.mark.parametrize("field", list(CHANGES) + ["admit_rate", "award_usd", "full_tuition", "segment"])
 def test_validity_flag(toy, field):
     cfg, cells, base = toy
     cfg = dict(cfg)
     cfg["tuition_increase_by_year"] = {2027: 6.0, 2028: 5.0}
-    p, s = _incentive_pair(cfg, cells)
+    if field == "segment":
+        # a second configured segment; the scenario names the active one [v0.6.1, OP-5]
+        cfg["segments"] = cfg["segments"] + [{"name": "other", "within": {"residency": "in"},
+                                              "members_label": "x", "share_source": "assumed"}]
+        p = L.derive(L.baseline(cells, cfg, segment="priority"), "parent", cfg, cells, pool_multiplier=1.1,
+                     yield_shift_pts=0.5)
+        s = L.derive(p, "child", cfg, cells, bonus_usd=10000.0, bonus_scope="residency_out")
+    else:
+        p, s = _incentive_pair(cfg, cells)
     if field == "admit_rate":
         s2 = L.derive(s, "x", cfg, cells, admit_rate={"c2": 0.45})
     elif field == "award_usd":
         s2 = L.derive(s, "x", cfg, cells, award={"c2": 12000.0})
+    elif field == "full_tuition":
+        s2 = L.derive(s, "x", cfg, cells, full_tuition={"c2": True})
+    elif field == "segment":
+        s2 = L.derive(s, "x", cfg, cells, segment="other")
     else:
         s2 = L.derive(s, "x", cfg, cells, **{field: CHANGES[field]})
     lp = L.evaluate(cells, cfg, p, base, "middle")

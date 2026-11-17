@@ -74,8 +74,9 @@ rows:
       - {metric: share_active_under10_admits, kind: range_each_cohort, min: 0.45, max: 0.55}
       - {metric: share_active_under10_enrolled, kind: min_each_cohort, min: 0.90}
 
+  # Reported, not asserted, until the law world W0L provides a real check [v0.6.1, R-06, OP-6]
   - name: confounding
-    asserted: true
+    asserted: false
     checks:
       # admit-weighted WLS of cell yield (points) on award ($1,000), pooled over cohorts and active cells
       - {metric: confounding_raw, kind: range_pooled, min: -0.17, max: -0.04}

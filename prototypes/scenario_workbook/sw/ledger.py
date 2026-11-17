@@ -21,6 +21,7 @@ VALIDITY_FIELDS = (
     "yield_shift_pts_out", "yield_shift_pts_segment", "plan_year", "segment",
 )
 BONUS_SCOPES = ("residency_out", "segment", "none")
+SEGMENT_APPROX_BELOW = 30          # segment "approximate" flag below this expected count [v0.6.1, OP-3]
 
 
 def xround(x):
@@ -112,8 +113,13 @@ def segment_mask(cells, cfg, scen):
     return cells.segment == name
 
 
-def baseline(cells, cfg, name="Baseline"):
-    """Scenario 0: admit rate and award from the latest cohort, tuition at the plan year, yield from the response base."""
+def baseline(cells, cfg, name="Baseline", segment=None):
+    """Scenario 0: admit rate and award from the latest cohort, tuition at the plan year, yield from the response base.
+
+    full_tuition is true where the latest-cohort award is at or above base-cycle tuition [v0.6.1, OP-1]. `segment`
+    names the active segment; it defaults to the only configured segment and is an error when several are configured
+    and none is named [v0.6.1, OP-5]. The resolved name is stored, so children inherit it.
+    """
     j = cells.col(cfg["cycle"]["base_cycle"])
     apps = cells.apps[:, j]
     with np.errstate(invalid="ignore", divide="ignore"):
@@ -125,17 +131,20 @@ def baseline(cells, cfg, name="Baseline"):
         name=name, parent=None, admit_rate=rate, award_usd=award, full_tuition=full,
         tuition_increase_pct=plan_increase_pct(cfg, plan_year), class_target=float(cfg["class"]["target"]),
         class_cap=float(cfg["class"]["cap"]), plan_year=plan_year,
-        need_total=float(cfg["need"]["total"]), discount_target=cfg.get("discount_target"),
+        need_total=float(cfg["need"]["total"]), discount_target=cfg.get("discount_target"), segment=segment,
     )
+    scen.segment = active_segment(cfg, scen)
     _validate_scenario(cells, cfg, scen)
     return scen
 
 
-def derive(parent, name, cfg, cells, admit_rate=None, award=None, **changes):
+def derive(parent, name, cfg, cells, admit_rate=None, award=None, full_tuition=None, **changes):
     """Child scenario: copies the parent's levers and applies changes.
 
-    admit_rate, award: mappings cell_id -> value (overrides relative to the parent); full columns are materialized.
-    An award override at or above the parent's tuition is the full-tuition rung (section 3, step 4).
+    admit_rate, award, full_tuition: mappings cell_id -> value (overrides relative to the parent); full columns are
+    materialized. full_tuition is a per-cell flag inherited from the parent unless overridden here; an award override
+    does not change it [v0.6.1, OP-1]. While the flag is set, award_base equals tuition_s and the award lever is not
+    read (section 3, step 4).
     """
     unknown = set(changes) - {f.name for f in fields(Scenario)}
     if unknown:
@@ -147,11 +156,12 @@ def derive(parent, name, cfg, cells, admit_rate=None, award=None, **changes):
         for cid, r in admit_rate.items():
             child.admit_rate[cells.index(cid)] = float(r)
     if award:
-        t_parent = scenario_tuition(cfg, parent.tuition_increase_pct)
         for cid, a in award.items():
-            i = cells.index(cid)
-            child.award_usd[i] = float(a)
-            child.full_tuition[i] = float(a) >= t_parent - 1e-6
+            child.award_usd[cells.index(cid)] = float(a)
+    if full_tuition:
+        for cid, flag in full_tuition.items():
+            child.full_tuition[cells.index(cid)] = bool(flag)
+    child.segment = active_segment(cfg, child)
     _validate_scenario(cells, cfg, child)
     return child
 
@@ -348,7 +358,7 @@ def segment(lc, goal=None):
     """Segment block (section 3). Every figure is the 'no segment cells' text when the segment is empty."""
     from . import risk
     cfg = lc.cfg
-    keys = ("segment_apps", "segment_admits", "segment_enrolled", "segment_share", "segment_merit",
+    keys = ("segment_apps", "segment_admits", "segment_enrolled", "segment_share", "segment_merit", "segment_v",
             "segment_lo90", "segment_hi90", "p_segment_goal", "p_segment_goal_normal", "segment_goal")
     goal = lc.scenario.segment_goal if goal is None else goal
     m = lc.in_segment
@@ -369,12 +379,13 @@ def segment(lc, goal=None):
         "segment_enrolled": float(lc.enrolled[m].sum()),
         "segment_share": float(lc.enrolled[m].sum()) / cls if cls > 0 else 0.0,
         "segment_merit": float((lc.enrolled[m] * lc.award[m]).sum()),
-        "segment_lo90": max(0.0, M - 1.645 * sd),
-        "segment_hi90": M + 1.645 * sd,
+        "segment_v": V,
+        "segment_lo90": max(0.0, M - risk.Z90 * sd),
+        "segment_hi90": M + risk.Z90 * sd,
         "segment_goal": None,
         "p_segment_goal": None,
         "p_segment_goal_normal": None,
-        "approximate": labels.SEGMENT_APPROX if M < 20 else "",
+        "approximate": labels.SEGMENT_APPROX if M < SEGMENT_APPROX_BELOW else "",
     }
     if goal is not None:
         g = math.ceil(goal)

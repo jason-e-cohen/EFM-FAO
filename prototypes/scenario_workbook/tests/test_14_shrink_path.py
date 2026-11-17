@@ -139,6 +139,8 @@ def test_integer_admits_within_one(syn_cfg, worlds):
             assert abs(lcN.mu.sum() - N) <= 1.0, (seed, N, lcN.mu.sum())
             assert (lcN.admits <= lc.admits).all()
             assert np.allclose(lcN.admits, np.round(lcN.admits))
+            uncut = tr["removed_share"] == 0                       # [v0.6.1, R-05]
+            np.testing.assert_array_equal(tr["rates"][uncut], lc.rate[uncut])
 
 
 def test_zero_admit_cells(syn_cfg, worlds):

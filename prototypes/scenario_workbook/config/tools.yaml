@@ -1,0 +1,7 @@
+# External tools for the workbook phases (machine-specific; not client config).
+# LibreOffice is used from Phase 2 for forced recalculation (spec test 3) and the PDF render (test 10).
+# Resolution order for code that needs it: env var SOFFICE_PATH, then soffice_path below, then `soffice` on PATH.
+# Checked Nov 17, 2026 on Jason's Mac: LibreOffice 26.8.3.1; not on PATH. Forced recalculation works with a dedicated
+# profile whose registrymodifications.xcu sets /org.openoffice.Office.Calc/Formula/Load/OOXMLRecalcMode to 0.
+
+soffice_path: /Applications/LibreOffice.app/Contents/MacOS/soffice

@@ -32,7 +32,7 @@ RHO_SENSITIVITY = "if high-score and other admits' yields move differently year 
 
 # Segment block [v0.6, B1-8, B1-14]
 NO_SEGMENT_CELLS = "no segment cells in the data"
-SEGMENT_APPROX = "approximate (fewer than 20 expected)"
+SEGMENT_APPROX = "approximate (fewer than 30 expected)"          # [v0.6.1, OP-3]
 
 # Incentive block [v0.6, B1-4, B1-11]
 INCENTIVE_VALID = "valid"

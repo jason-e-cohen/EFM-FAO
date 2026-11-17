@@ -69,7 +69,8 @@ def trim_rates(lc, N):
 
 
 def _settle_integer(lc, rates, share, order, N, f):
-    """Round admits and settle the residual in the last cell cut."""
+    """Round admits and settle the residual in the last cell cut. Cells the walk does not cut keep their input
+    admit rates exactly; only cut cells get rates from their rounded admits [v0.6.1, R-05]."""
     apps = lc.apps
     admits = L.xround(apps * rates)
     cut = [i for i in order if share[i] > 0]
@@ -81,7 +82,8 @@ def _settle_integer(lc, rates, share, order, N, f):
             lo = L.xround(apps[last] * f)
             admits[last] = np.clip(admits[last] - L.xround(resid / y_last), lo, lc.admits[last])
     with np.errstate(invalid="ignore", divide="ignore"):
-        return np.where(apps > 0, admits / np.where(apps > 0, apps, 1.0), rates)
+        settled = np.where(apps > 0, admits / np.where(apps > 0, apps, 1.0), rates)
+    return np.where(share > 0, settled, lc.rate)
 
 
 def _row_figures(lc):
