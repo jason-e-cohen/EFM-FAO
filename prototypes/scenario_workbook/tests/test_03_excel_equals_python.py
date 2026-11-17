@@ -8,6 +8,12 @@ statuses and narratives). Integers exact; floats within 1e-6 relative (1e-9 abso
 
 Guard: a copy built with every cached value set to -999 must show no -999 after recalculation, which proves
 LibreOffice recalculated every formula rather than reading cached values. Skips, with the reason, if soffice is missing.
+
+Edge workbook [v0.6.2, P2-01]: a third workbook (tests/edge.py) built to reach the branches the main and test 8
+workbooks never take (clips at the floor and cap, inner clip, unflagged award above tuition, in-state override,
+need_total override, non-integer goal, a child differing only in one full_tuition flag, a segment pool exactly at the
+pooling threshold, rho 0.5, floor_rate with exempt cells, a shortfall, budget basis merit, the history reconciliation)
+is compared cell by cell like the main one; `test_edge_inputs_reach_every_branch` keeps it an edge workbook.
 """
 import collections
 import json
@@ -37,6 +43,80 @@ def test_excel_equals_python(main_wb):
     for sheet in ("Ledger_Low", "Ledger_Middle", "Ledger_High", "Summary"):
         assert count[sheet] > 0, f"no formula cells recorded on {sheet}"
     assert not bad, {k: v[:5] for k, v in bad.items()}
+
+
+def test_edge_workbook_equals_python(edge_wb):
+    count, bad = _compare(edge_wb)
+    report = {"workbook": edge_wb["path"], "cells_compared": dict(count),
+              "mismatches": {k: v[:20] for k, v in bad.items()}}
+    with open(os.path.join(PHASE2, "test03_edge_report.json"), "w") as f:
+        json.dump(report, f, indent=1, default=str)
+    assert sum(count.values()) > 10_000
+    assert not bad, {k: v[:5] for k, v in bad.items()}
+
+
+def test_edge_inputs_reach_every_branch(edge_wb):
+    """The edge inputs still reach each branch they were built for (Review_Phase2_Build.md section 2)."""
+    import numpy as np
+    from sw import labels, ledger as L, strip, trim
+    run, cfg, cells, base = edge_wb["info"]["run"], edge_wb["info"]["run"].cfg, edge_wb["info"]["run"].cells, \
+        edge_wb["info"]["run"].base
+    lc = run.lcs
+    # outer clip: active cells at the cap and at the floor
+    c = lc["Clip at floor and cap"]["middle"]
+    act = c.admits > 0
+    assert (np.isclose(c.yld, base.cap) & act).sum() > 0 and (np.isclose(c.yld, base.floor) & act).sum() > 0
+    # inner clip: the response before the shift is above the cap at in-0-hi and below the floor at out-167-hi
+    ic = lc["Inner clip"]["middle"]
+    raw = base.y0["middle"] + cfg["risk"]["sensitivity_slopes"]["middle"] / 100 * (ic.award - base.a0) / 1000
+    i_hi, i_lo = cells.index("in-0-hi"), cells.index("out-167-hi")
+    assert raw[i_hi] > base.cap[i_hi] and ic.shift[i_hi] < 0 and ic.yld[i_hi] < base.cap[i_hi]
+    assert raw[i_lo] < base.floor[i_lo] and ic.shift[i_lo] > 0 and ic.yld[i_lo] > base.floor[i_lo]
+    # unflagged award above tuition, capped
+    s = run.scen("Inner clip")
+    assert s.award_usd[i_hi] > ic.tuition and not s.full_tuition[i_hi] and ic.award_base[i_hi] == ic.tuition
+    assert s.yield_shift_pts_in is not None
+    # need_total override; non-integer goal; flag-only child is not valid
+    assert lc["Need override"]["middle"].need_rate != lc["Baseline"]["middle"].need_rate
+    g = run.scen("Goal 24.3").segment_goal
+    assert g != int(g)
+    fo, gp = run.scen("Flag only"), run.scen("Goal 24.3")
+    assert (fo.full_tuition != gp.full_tuition).sum() == 1
+    assert np.array_equal(fo.award_usd, gp.award_usd) and np.array_equal(fo.admit_rate, gp.admit_rate)
+    assert L.incentive(lc["Flag only"]["middle"], lc["Goal 24.3"]["middle"])["incentive_valid"] \
+        == labels.INCENTIVE_NOT_VALID
+    # a segment pool exactly at the pooling threshold, pooled at the segment level
+    import edge
+    assert edge.segment_pool_min(cells, cfg) == cfg["pooling_min_admits"]
+    assert "segment" in set(base.pool_level)
+    # rho below 1; floor_rate with exempt cells; shortfall and above-cap statuses; trimmed rates at the floor
+    assert cfg["risk"]["shock_corr_above_below"] == 0.5
+    assert cfg["trim"]["floor_rate"] > 0 and cfg["trim"]["exempt_cells"]
+    st = {r["status"] for s_ in run.scenarios for r in trim.class_table(cells, cfg, s_, base)["class_table"]}
+    assert any(x.startswith("N not reachable") for x in st) and labels.CT_ABOVE_CAP in st and labels.CT_OK in st
+    tr = trim.trim_rates(lc["Baseline"]["middle"], 80)
+    assert (np.isclose(tr["rates"], cfg["trim"]["floor_rate"]) & (tr["removed_share"] == 1)).any()
+    # yield-strip clip count above 0
+    assert strip.yield_strip(c)["clip_count"] > 0
+    # budget basis merit and both history-reconciliation branches
+    assert cfg["budget_basis"] == "merit" and cfg["budget_total"] is not None
+    rec = L.history_reconciliation(cells, cfg)
+    assert any(h["actual"] is None for h in rec) and any(h["actual"] is not None for h in rec)
+    assert run.scen("Goal 24.3").bonus_pool_usd is not None
+    # Q-5 example award: flagged zero-award cells and an unflagged award between base-cycle and plan tuition are left
+    # out, and leaving them out changes the rounded example award either way
+    ea = run.scen("Example award edges")
+    le = lc["Example award edges"]["middle"]
+    e = le.enrolled
+    tb = float(cfg["tuition_base"])
+    assert ((ea.award_usd >= tb) & (ea.award_usd < le.tuition) & ~ea.full_tuition & (e > 0)).any()
+    assert (ea.full_tuition & (ea.award_usd < tb) & (e > 0)).any()
+    got = strip.tuition(le)["example_award"]
+
+    def ex(mask):
+        return float(L.xround((e[mask] * ea.award_usd[mask]).sum() / e[mask].sum() / 1000.0) * 1000.0)
+    assert ex((ea.award_usd < tb) & (e > 0)) != got                          # flag ignored
+    assert ex(~ea.full_tuition & (ea.award_usd < le.tuition) & (e > 0)) != got   # plan-year tuition
 
 
 def test_sentinel_guard(sentinel_wb):

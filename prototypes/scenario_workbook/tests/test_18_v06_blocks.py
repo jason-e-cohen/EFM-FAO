@@ -4,6 +4,10 @@ narratives per scenario (spec section 8), Excel text against `sw.narrative`.
 
 The Excel segment probability is the normal form; its gap to the Python exact value is reported in
 output/phase2/test18_report.json, not asserted (spec test 13).
+
+Phase 2.1 [v0.6.2]: ignored award entries counted and marked separately (P2-03), no unfilled template text (P2-04),
+number formats (P2-05), the rebuild-needed, stale and scope-error Checks rows on an edited copy (P2-06, P2-07), and
+bonus_pool_usd (Q-8d).
 """
 import json
 import os
@@ -192,3 +196,139 @@ def test_full_tuition_conflict_listed(main_wb):
     lc = run.lcs["Smaller class, scaled awards"]["middle"]
     i = run.cells.index("in-170-hi")
     assert lc.award_base[i] == lc.tuition
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Phase 2.1 [v0.6.2]
+
+def _levers_row(bundle, r):
+    lay = bundle["info"]["layout"]
+    ws = bundle["values"]["Levers"]
+    return {s.name: ws.cell(r + 1, lay["vblock"][s.name] + 1).value for s in bundle["info"]["run"].scenarios}
+
+
+def test_ignored_award_entries_counted_separately(main_wb):
+    """P2-03: the award typed on the full-tuition cell in-170-hi is not an award change; it is counted, marked in the
+    note column beside the cell and reported in the narrative."""
+    run, wb, info = main_wb["info"]["run"], main_wb["values"], main_wb["info"]
+    lay = info["layout"]
+    ws = wb["Levers"]
+    labels_col = {ws.cell(r, 1).value: r for r in range(1, lay["r0v"] + 1)}
+    changed = _levers_row(main_wb, labels_col["awards changed from parent (cells)"] - 1)
+    ignored = _levers_row(main_wb, labels_col["award entries ignored (full-tuition flag set)"] - 1)
+    for s in run.scenarios:
+        ch, ig = L.award_changes(run.cells, run.cfg, s, run.parents[s.name])
+        assert ignored[s.name] == int(ig.sum())
+        if run.parents[s.name] is not None:
+            assert changed[s.name] == int(ch.sum())
+    assert changed["Smaller class, scaled awards"] == 2 and ignored["Smaller class, scaled awards"] == 1
+    c0 = lay["vblock"]["Smaller class, scaled awards"]
+    marks = {run.cells.cell_id[i]: ws.cell(lay["r0v"] + 1 + i, c0 + 4).value for i in range(run.cells.n)}
+    assert {k for k, v in marks.items() if v} == {"in-170-hi"}
+    assert marks["in-170-hi"] == labels.AWARD_IGNORED
+    assert narrative.changes(run, info["vals"], run.scen("Smaller class, scaled awards")).endswith(
+        " " + labels.AWARDS_IGNORED_ONE)
+
+
+def test_no_unfilled_template_text(main_wb, edge_wb):
+    """P2-04: no cell shows a template field such as '{s}'."""
+    import re
+    pat = re.compile(r"\{[a-z_]+\}")
+    for bundle in (main_wb, edge_wb):
+        for ws in bundle["values"].worksheets:
+            for row in ws.iter_rows():
+                for c in row:
+                    assert not (isinstance(c.value, str) and pat.search(c.value)), (ws.title, c.coordinate, c.value)
+    ws = main_wb["values"]["Summary"]
+    shock = [ws.cell(r, 2).value for r in range(1, ws.max_row + 1) if ws.cell(r, 1).value == "SHOCK_LABEL"]
+    assert shock == [labels.shock_label(main_wb["info"]["run"].cfg["risk"]["common_shock_sd"])]
+
+
+def test_number_formats(main_wb):
+    """P2-05: no format with a trailing optional decimal; counts #,##0, dollars $#,##0, scores and flags 0, rates
+    0.0000."""
+    import openpyxl
+    wb = openpyxl.load_workbook(main_wb["path"])
+    lay = main_wb["info"]["layout"]
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for c in row:
+                assert ".#" not in (c.number_format or ""), (ws.title, c.coordinate, c.number_format)
+    h = wb["History"]
+    first = h.cell(7, 1).value
+    assert first == main_wb["info"]["run"].cells.cell_id[0]
+    fmts = {h.cell(4, c).value: h.cell(7, c).number_format for c in range(8, h.max_column + 1)
+            if h.cell(4, c).value in ("Applications", "Award $", "Admit rate", "Yield")}
+    assert fmts == {"Applications": "#,##0", "Award $": "$#,##0", "Admit rate": "0.0000", "Yield": "0.0000"}
+    assert h.cell(7, 4).number_format == "0" and h.cell(7, 5).number_format == "0"     # score_lo, scored
+    lv = wb["Levers"]
+    c0 = lay["vblock"]["Baseline"] + 1
+    r = lay["r0v"] + 1
+    assert (lv.cell(r, c0).number_format, lv.cell(r, c0 + 1).number_format, lv.cell(r, c0 + 2).number_format) \
+        == ("0.0000", "$#,##0", "0")
+
+
+def _check_rows(ws):
+    out = {}
+    for r in range(1, ws.max_row + 1):
+        out.setdefault((ws.cell(r, 1).value, ws.cell(r, 2).value), ws.cell(r, 3).value)
+    return out
+
+
+def test_new_checks_rows_ok_on_the_built_workbook(main_wb, edge_wb):
+    for bundle in (main_wb, edge_wb):
+        rows = _check_rows(bundle["values"]["Checks"])
+        for (chk, scope), v in rows.items():
+            if isinstance(chk, str) and (chk.startswith("Trim") or chk.startswith("Static exact")
+                                         or chk.startswith("Bonus scope")):
+                assert v == "OK", (chk, scope, v)
+    rows = _check_rows(edge_wb["values"]["Checks"])
+    budget = [v for (c, s), v in rows.items() if isinstance(c, str) and c.startswith("Spend against budget_total")]
+    assert budget and all(v.startswith(("OK: merit $", "merit $")) for v in budget)
+    rec = [v for (c, s), v in rows.items() if isinstance(c, str) and c.startswith("History reconciliation")]
+    assert sum(v.startswith("grid-implied $") for v in rec) == 2 and sum(v.startswith("not run") for v in rec) == 1
+
+
+def test_checks_flag_rebuild_stale_and_scope_error(main_wb, lo_profile):
+    """P2-06, P2-07 on an edited copy of the main workbook: change the first median threshold and protect_segment on
+    Inputs, the segment goal of 'Segment incentive', and give 'Out-of-state incentive' scope 'segment' with a segment
+    no cell carries. After recalculation Checks shows 'rebuild needed', the stale exact probability and the scope
+    error; Ledger shows the default segment where Levers is blank."""
+    import openpyxl
+    from sw import lo
+    run, lay = main_wb["info"]["run"], main_wb["info"]["layout"]
+    wb = openpyxl.load_workbook(main_wb["path"])
+
+    def first(name):
+        (sheet, coord), = list(wb.defined_names[name].destinations)
+        return wb[sheet][coord.replace("$", "").split(":")[0]]
+    first("in_median_thresholds").value = 165
+    first("in_protect_segment").value = "none"
+    lv = wb["Levers"]
+    vr = lay["vfield_row"]
+    lv.cell(vr["segment_goal"] + 1, lay["vblock"]["Segment incentive"] + 1).value = 30
+    lv.cell(vr["bonus_scope"] + 1, lay["vblock"]["Out-of-state incentive"] + 1).value = "segment"
+    lv.cell(vr["segment"] + 1, lay["vblock"]["Out-of-state incentive"] + 1).value = "nobody"
+    assert lv.cell(vr["segment"] + 1, lay["vblock"]["Baseline"] + 1).value in (None, "")
+    out = os.path.join(PHASE2, "edited")
+    os.makedirs(out, exist_ok=True)
+    src = os.path.join(out, "edited.xlsx")
+    wb.save(src)
+    rc = lo.recalc(src, os.path.join(out, "recalculated"), profile=lo_profile)
+    vals = openpyxl.load_workbook(rc, data_only=True)
+    rows = _check_rows(vals["Checks"])
+    rb = labels.REBUILD_NEEDED
+    assert rows[("Trim order: first median threshold equals its value at build", "Inputs")] == rb.format(build="166")
+    assert rows[("Trim order: trim.protect_segment equals its value at build", "Inputs")] == rb.format(
+        build="below_threshold")
+    assert rows[("Trim order: active segment equals its value at build", "Out-of-state incentive")] == rb.format(
+        build="priority")
+    assert rows[("Trim order: active segment equals its value at build", "Baseline")] == "OK"
+    assert rows[("Static exact segment probability is current (Summary segment block)", "Segment incentive")] \
+        == labels.EXACT_STALE
+    assert rows[("Static exact segment probability is current (Summary segment block)", "Baseline")] == "OK"
+    chk = "Bonus scope 'segment' has segment cells when a bonus, lift or goal is set"
+    assert rows[(chk, "Out-of-state incentive")] == labels.SCOPE_ERROR
+    assert rows[(chk, "Segment incentive")] == "OK"
+    led = vals["Ledger_Middle"]
+    assert led.cell(7, lay["lblock"][("middle", "Baseline")]["in_seg"] + 2).value == "priority"

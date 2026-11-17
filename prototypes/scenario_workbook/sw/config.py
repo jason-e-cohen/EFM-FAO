@@ -38,6 +38,8 @@ DEFAULTS = {
     "ntr_target": None,
     "discount_target": None,
     "budget_total": None,
+    "budget_basis": "total_aid",                  # [v0.6.2, Q-8e] total aid (merit + need + specialty) or merit
+    "merit_actual_by_cohort": None,               # [v0.6.2, Q-8f] optional; feeds the history reconciliation
     "pool_ytd_growth": None,
 }
 
@@ -150,6 +152,18 @@ def validate(raw):
         if s["share_source"] not in ("client_counts", "assumed"):
             raise ConfigError("segment.share_source must be 'client_counts' or 'assumed'")
     cfg["segments"] = cfg["segments"] or []
+
+    # budget basis and reported merit [v0.6.2, Q-8e, Q-8f]
+    if cfg["budget_basis"] not in ("total_aid", "merit"):
+        raise ConfigError("budget_basis must be 'total_aid' or 'merit'")
+    if cfg["merit_actual_by_cohort"] is not None:
+        mab = {int(k): float(v) for k, v in cfg["merit_actual_by_cohort"].items() if v is not None}
+        for y in mab:
+            if y not in cyc["history"]:
+                raise ConfigError(f"merit_actual_by_cohort: {y} is not a history cohort")
+            if mab[y] <= 0:
+                raise ConfigError("merit_actual_by_cohort values must be positive")
+        cfg["merit_actual_by_cohort"] = mab
 
     # trim
     if cfg["trim"]["protect_segment"] not in ("below_threshold", "none"):

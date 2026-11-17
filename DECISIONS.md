@@ -19,6 +19,7 @@ Applied as spec v0.6.2 (tags **[v0.6.2, P2-n]** and **[v0.6.2, Q-n]**). Fixes P2
 | Budget check compares total aid by default, merit only by setting; Brandon to say which (OD-10) | Q-8e |
 | Optional inputs `bonus_pool_usd` and `merit_actual_by_cohort` | Q-8d, Q-8f |
 | Blank segment on Levers defaults to the only configured segment; the empty-segment scope error is a Check | P2-07 |
+| Phase 2.1 review (`Review_Phase2_1_Fix_Pass.md`): the Excel comparison runs on the sentinel build and refuses anything else; the build id includes a hash of the generator code; one edge scenario sets a non-zero global shift with an in-state override; builder calls 1 to 4 and 6 accepted, call 5 changed | P21-01 to P21-03 |
 
 ### November 17, 2026 (Jason): Phase 1 review (`Review_Phase1_Build.md`)
 

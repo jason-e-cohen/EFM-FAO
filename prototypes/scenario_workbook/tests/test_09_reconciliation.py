@@ -3,7 +3,8 @@ the Summary named range, the Ledger and a Python dump of the same run.
 
 The Python dump (`sw.contract.dump`) is keyed by the range names; the Ledger side recomputes each figure from the
 recalculated Ledger columns in the test, so the three sources are independent. `step_sizes` waits for the Distribution
-sheet (Phase 4) and is not enumerated.
+sheet (Phase 4) and is not enumerated. Range names are canonical, with no aliases [v0.6.2, Q-1]; `p_segment_goal_exact`
+is Python only and the Summary carries a static copy [v0.6.2, Q-2].
 """
 import numpy as np
 
@@ -33,7 +34,7 @@ def _static(bundle, k, key):
 
 def test_every_contract_name_matches_the_python_dump(main_wb):
     wb, dump = main_wb["values"], main_wb["info"]["dump"]
-    names = [rn for rn, _, _, _ in K.contract_table()] + list(K.ALIASES)
+    names = [rn for rn, _, _, _ in K.contract_table()]
     assert len(set(names)) == len(names)
     missing = [n for n in names if n not in wb.defined_names]
     assert not missing, missing
@@ -48,11 +49,41 @@ def test_every_contract_name_matches_the_python_dump(main_wb):
     assert not bad, bad[:10]
 
 
-def test_aliases_point_at_the_same_ranges(main_wb):
+def test_canonical_names_only(main_wb):
+    """[v0.6.2, Q-1] One range per figure: every defined name is an Inputs name (in_*) or a contract range; the spec's
+    short forms (SUM_PCAP, ...) are not defined."""
     wb = main_wb["formulas"]
-    for alias, target in K.ALIASES.items():
-        assert list(wb.defined_names[alias].destinations) == list(wb.defined_names[target].destinations)
+    contract = {rn for rn, _, _, _ in K.contract_table()}
+    extra = [n for n in wb.defined_names if not n.startswith("in_") and n not in contract]
+    assert not extra, extra
+    for short in ("SUM_PCAP", "SUM_PBAND", "SUM_FT", "SUM_NM", "SUM_BB", "SUM_PNTR", "SUM_EVID"):
+        assert short not in wb.defined_names
 
+
+def test_p_segment_goal_exact_python_only(main_wb):
+    """[v0.6.2, Q-2] The dump carries p_segment_goal_exact from risk.segment_exact (every case); the Summary's static
+    copy is the Middle case."""
+    import math
+    from sw import labels, ledger as L, risk
+    run, wb, dump = main_wb["info"]["run"], main_wb["values"], main_wb["info"]["dump"]
+    assert "p_segment_goal_exact" not in wb.defined_names
+    got = dump["p_segment_goal_exact"]
+    ws = wb["Summary"]
+    row = next(r for r in range(1, ws.max_row + 1)
+               if ws.cell(r, 1).value == "P(segment enrolled at or above goal), exact (static, from the build)")
+    seen = 0
+    for ki, k in enumerate(CASES):
+        for j, s in enumerate(run.scenarios):
+            lc = run.lcs[s.name][k]
+            if s.segment_goal is None or not lc.in_segment.any():
+                assert got[ki][j] in (None, labels.NO_SEGMENT_CELLS)
+                continue
+            assert got[ki][j] == risk.segment_exact(lc, math.ceil(s.segment_goal))
+            assert got[ki][j] == L.segment(lc)["p_segment_goal"]
+            if k == "middle":
+                assert close(ws.cell(row, 3 + j).value, got[ki][j])
+                seen += 1
+    assert seen
 
 def test_summary_agrees_with_ledger(main_wb):
     run = main_wb["info"]["run"]
@@ -114,7 +145,7 @@ def test_award_matrix_and_strips_agree_with_ledger(main_wb):
 
 def test_contract_table_is_complete():
     """Every name of spec section 15 item 11 is enumerated (step_sizes waits for the Distribution sheet)."""
-    names = {n for _, n, _, _ in K.contract_table()}
+    names = {n for _, n, _, _ in K.contract_table()} | {n for n, _, _ in K.python_only_table()}
     spec = {"class_mean", "class_lo90", "class_hi90", "p_class_over_cap", "p_class_in_band", "margin_t",
             "p_median_t", "p_median_t_rho05", "share_at_or_above_t", "unscored_count", "gross_y1", "merit", "need",
             "specialty", "aid", "ntr_y1", "discount_entering_y1", "avg_aid", "p_ntr_y1_ge_target", "full_tuition_n",
@@ -123,5 +154,5 @@ def test_contract_table_is_complete():
             "additional_enrollees", "aid_per_additional", "ntr_per_additional", "incentive_valid",
             "tuition_whatif[grid]", "net_tuition_line_fixed", "net_tuition_line_scaled", "yield_strip[grid]",
             "breakeven_shift_class", "breakeven_shift_ntr", "pool_strip[grid]", "class_table[grid]",
-            "evidence_extrapolated_share", "award_matrix"}
+            "evidence_extrapolated_share", "award_matrix", "p_segment_goal_exact"}
     assert spec <= names, sorted(spec - names)

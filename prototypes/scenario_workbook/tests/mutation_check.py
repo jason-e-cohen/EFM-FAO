@@ -1,21 +1,34 @@
-"""Test 20: mutation check [v0.6.1] (spec section 11). Run on demand; pytest does not collect this file.
+"""Test 20: mutation check [v0.6.1, v0.6.2] (spec section 11). Run on demand; pytest does not collect this file.
 
-Applies each mutant below, one at a time, to a scratch copy of sw/, tests/ and config/, runs the full suite there
-(stopping at the first failure, slow tests last) and reports which mutants survive. Acceptance: no survivor except
-those listed in EQUIVALENT, each with the reason it cannot change any result on valid input.
+Applies each mutant below, one at a time, to a scratch copy of the prototype (everything except output/), runs the
+suite there (stopping at the first failure, slow tests last) and reports which mutants survive. Acceptance: no
+survivor except those listed in EQUIVALENT, each with the reason it cannot change any result on valid input.
+
+Two modes:
+  Python (default)  the Python mutants (MUTANTS) against every test, with SW_SKIP_EXCEL set (the workbook tests
+                    compare Excel with Python, so any Python mutant would fail them for a trivial reason)
+  Excel (--excel)   the workbook-formula mutants (EXCEL_MUTANTS, sw/workbook.py) against tests 3, 8, 9 and 18,
+                    with LibreOffice recalculating every build [v0.6.2, P2-01]
 
     cd prototypes/scenario_workbook
     ../../.venv/bin/python tests/mutation_check.py
+    ../../.venv/bin/python tests/mutation_check.py --excel --jobs 6
     ../../.venv/bin/python tests/mutation_check.py --jobs 6 --only L8,P3
+
+Guards [v0.6.2, P2-02]: the unmutated baseline always runs, in a copy made the same way as the mutant copies, and
+must pass; every mutant run must collect the same number of tests as the baseline ("count mismatch" otherwise); the
+report warns when one test accounts for more than half of the catches.
 
 Mutant sources:
   A    the 24 survivors in Review_Phase1_Build.md Appendix A (their IDs)
   A+   the 46 mutants Appendix A lists as caught, reconstructed from its one-line descriptions (the review's own
        mutant code was not saved), IDs X01 to X45
   1.1  mutants of the Phase 1.1 changes and of the choices recorded in spec v0.6.1 (R-05, R-07, R-08, OP-1, OP-3,
-       OP-5), IDs N01 to N13
-Exit status: 0 when every survivor is in EQUIVALENT and every mutant applied; 1 otherwise. Report JSON:
-output/mutation/report.json.
+       OP-5), IDs N01 to N17
+  2.1  mutants of the Phase 2.1 Python changes (spec v0.6.2), IDs N18 to N22
+  XL, XL+, 2.1 (Excel mode)  see EXCEL_MUTANTS, IDs E01 to E59
+Exit status: 0 when every survivor is in EQUIVALENT, every mutant applied and every run collected the baseline's test
+count; 1 otherwise. Report JSON: output/mutation/report.json (Python) or report_excel.json (Excel).
 """
 import argparse
 import json
@@ -29,6 +42,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SLOW_LAST = ["test_13_segment_incentive.py", "test_05_shape.py", "test_04_cf_vs_sim.py"]
+EXCEL_TESTS = ["test_03_excel_equals_python.py", "test_08_levers.py", "test_09_reconciliation.py",
+               "test_18_v06_blocks.py"]
 
 # (id, source, file, old, new, description). `old` must occur exactly once in the file.
 MUTANTS = [
@@ -322,8 +337,9 @@ MUTANTS = [
      "(e[below] * lc.award_base[below])",
      "R-07 reverted: example award in plan-year dollars (award_base)"),
     ("N03", "1.1", "sw/strip.py",
-     "        below = (lc.award_base < lc.tuition - 1e-6) & (e > 0)",
-     "        below = (lc.award_base < lc.tuition - 1e-6) & (lc.award > 0) & (e > 0)",
+     "        below = (~np.asarray(scen.full_tuition, bool)) & (scen.award_usd < t_base - 1e-6) & (e > 0)",
+     "        below = (~np.asarray(scen.full_tuition, bool)) & (scen.award_usd < t_base - 1e-6) & (lc.award > 0) & "
+     "(e > 0)",
      "R-07 reverted: example award excludes zero awards"),
     ("N04", "1.1", "sw/ledger.py",
      "SEGMENT_APPROX_BELOW = 30",
@@ -368,13 +384,13 @@ MUTANTS = [
      '        for lvl in ("residency", "all"):',
      "R-08c: pooling fallback skips the score group"),
     ("N14", "1.1", "sw/strip.py",
-     "        below = (lc.award_base < lc.tuition - 1e-6) & (e > 0)",
-     "        below = (lc.award < lc.tuition - 1e-6) & (e > 0)",
+     "        below = (~np.asarray(scen.full_tuition, bool)) & (scen.award_usd < t_base - 1e-6) & (e > 0)",
+     "        below = (~np.asarray(scen.full_tuition, bool)) & (lc.award < t_base - 1e-6) & (e > 0)",
      "P1.1-4 reverted: example-award membership judged on the award after the incentive"),
     ("N15", "1.1", "sw/strip.py",
-     "        below = (lc.award_base < lc.tuition - 1e-6) & (e > 0)",
-     "        below = (lc.award_base <= lc.tuition) & (e > 0)",
-     "P1.1-4: flagged (full-tuition) cells included in the example award"),
+     "        below = (~np.asarray(scen.full_tuition, bool)) & (scen.award_usd < t_base - 1e-6) & (e > 0)",
+     "        below = (scen.award_usd < t_base - 1e-6) & (e > 0)",
+     "Q-5: flagged (full-tuition) cells included in the example award"),
     ("N16", "1.1", "sw/ledger.py",
      "    return np.asarray(scen.full_tuition, bool) & (np.asarray(scen.award_usd, float) != np.asarray(ref, float))",
      "    return np.asarray(scen.full_tuition, bool)",
@@ -383,6 +399,160 @@ MUTANTS = [
      "        ref = parent.award_usd",
      "        ref = cells.award[:, cells.col(cfg[\"cycle\"][\"base_cycle\"])]",
      "P1.1-1: child conflicts judged against the latest-cohort award, not the parent's"),
+
+    # ---- 2.1: Phase 2.1 Python changes [v0.6.2] ----------------------------------------------------------------
+    ("N18", "2.1", "sw/strip.py",
+     "        below = (~np.asarray(scen.full_tuition, bool)) & (scen.award_usd < t_base - 1e-6) & (e > 0)",
+     "        below = (lc.award_base < lc.tuition - 1e-6) & (e > 0)",
+     "Q-5 reverted to the P1.1-4 rule (award_base below plan-year tuition)"),
+    ("N19", "2.1", "sw/ledger.py",
+     "    changed = (ft != np.asarray(parent.full_tuition, bool)) | ((scen.award_usd != parent.award_usd) & ~ft)",
+     "    changed = (ft != np.asarray(parent.full_tuition, bool)) | (scen.award_usd != parent.award_usd)",
+     "P2-03: ignored award entries counted as award changes"),
+    ("N20", "2.1", "sw/ledger.py",
+     '                    "gap": None if a is None else (implied - float(a)) / float(a)})',
+     '                    "gap": None if a is None else (float(a) - implied) / float(a)})',
+     "Q-8f: history reconciliation gap with the wrong sign"),
+    ("N21", "2.1", "sw/narrative.py",
+     '        return ["Baseline: no parent scenario.", ("awards_ignored", "ignored")]',
+     '        return ["Baseline: no parent scenario."]',
+     "Q-6, P2-03: Baseline narrative drops ignored award entries"),
+    ("N22", "2.1", "sw/config.py",
+     '    "budget_basis": "total_aid",',
+     '    "budget_basis": "merit",',
+     "Q-8e: budget basis defaults to merit"),
+]
+
+# Excel-formula mutants [v0.6.2, P2-01] (spec section 11, test 20; run with --excel). Each changes one formula string in
+# sw/workbook.py; the workbook is rebuilt, recalculated in LibreOffice and run against tests 3, 8, 9 and 18. Sources:
+#   XL   the 13 survivors of Review_Phase2_Build.md section 2, reconstructed from its table (the review's own mutant
+#        code was not saved); E-number = the review's X-number
+#   XL+  the review's 34 caught mutants, reconstructed from its scope (formula strings in sw/workbook.py; their
+#        descriptions were not published), numbered in the remaining slots E02 to E46
+#   2.1  mutants of the Phase 2.1 workbook changes, E48 to E59
+W = "sw/workbook.py"
+EXCEL_MUTANTS = [
+    ("E01", "XL", W, '''f"IF({ft_c}=1,{T},MIN({lever},{T}))"''', '''f"IF({ft_c}=1,{T},{lever})"''',
+     "Award base not capped at tuition for an unflagged cell (review X01)"),
+    ("E02", "XL+", W, '''f'*IF({LVf("bonus_min_score")}="",1,IF(''', '''f'*IF(1,1,IF(''',
+     "Incentive eligibility ignores bonus_min_score"),
+    ("E03", "XL+", W, '''IF({S_("upper")}=1,{LVf("pool_multiplier")},1)*\'''', '''{LVf("pool_multiplier")}*\'''',
+     "Pool multiplier applied below the pool threshold"),
+    ("E04", "XL+", W, '''(1+{LVf("segment_pool_lift_pct")}/100*{B("in_seg")})', lc.apps[i]''',
+     '''(1+{LVf("segment_pool_lift_pct")}/100)', lc.apps[i]''', "Segment lift applied outside the segment"),
+    ("E05", "XL", W,
+     '''            yf = (f'MIN({S_("cap")},MAX({S_("floor")},MIN({S_("cap")},MAX({S_("floor")},{S_("y0")}+in_slope_{k}/100*'
+                  f'({B("award")}-{S_("a0")})/1000))+{B("shift")}/100))')''',
+     '''            yf = (f'MIN({S_("cap")},MAX({S_("floor")},{S_("y0")}+in_slope_{k}/100*'
+                  f'({B("award")}-{S_("a0")})/1000))+{B("shift")}/100')''',
+     "Yield: outer clip (after the shift) removed (review X05)"),
+    ("E06", "XL", W,
+     '''            yf = (f'MIN({S_("cap")},MAX({S_("floor")},MIN({S_("cap")},MAX({S_("floor")},{S_("y0")}+in_slope_{k}/100*'
+                  f'({B("award")}-{S_("a0")})/1000))+{B("shift")}/100))')''',
+     '''            yf = (f'MIN({S_("cap")},MAX({S_("floor")},{S_("y0")}+in_slope_{k}/100*'
+                  f'({B("award")}-{S_("a0")})/1000+{B("shift")}/100))')''',
+     "Yield: inner clip (response, before the shift) removed (review X06)"),
+    ("E07", "XL+", W, '''f'MIN({B("award_base")}+{bonus_usd}*{B("elig")},{T})\'''', '''f'{B("award_base")}+{bonus_usd}*{B("elig")}\'''',
+     "Award with incentive not capped at tuition"),
+    ("E08", "XL+", W, '''lever = f'IF({LVf("award_scale_with_tuition")}=1,{aw_c}*(1+{P}/100),{aw_c})\'''', '''lever = f'{aw_c}\'''',
+     "Awards never scale with tuition"),
+    ("E09", "XL", W, '''IF({LVf("yield_shift_pts_in")}<>"",{LVf("yield_shift_pts_in")},\'''', '''IF(0,0,\'''',
+     "In-state yield-shift override ignored (review X09)"),
+    ("E10", "XL", W, '''f'IF({nt}="",in_need_total,{nt})/in_need_reference_class\'''', '''f'in_need_total/in_need_reference_class\'''',
+     "need_total override on Levers ignored (review X10)"),
+    ("E11", "XL+", W, '''f'IF({B("in_seg")}*({LVf("yield_shift_pts_segment")}<>"")=1,{LVf("yield_shift_pts_segment")},\'''',
+     '''f'IF(0,0,\'''', "Segment yield-shift override ignored"),
+    ("E12", "XL+", W, '''IF({LVf("yield_shift_pts_out")}<>"",{LVf("yield_shift_pts_out")},\'''', '''IF(0,0,\'''',
+     "Out-of-state yield-shift override ignored"),
+    ("E13", "XL+", W, '''IF(({B("award")}>={S_("award_lo")}-\'''', '''IF(({B("award")}>={S_("award_lo")}-0*\'''',
+     "Evidence tolerance ignored below the observed range"),
+    ("E14", "XL+", W, '''f'{T}-{B("award")}-{NR}\'''', '''f'{T}-{B("award")}\'''', "Net tuition weight without need"),
+    ("E15", "XL+", W, '''f"ROUND(in_tuition_base*(1+{LVf('tuition_increase_pct')}/100)/in_tuition_rounding_usd,"''',
+     '''f"ROUND(in_tuition_base*(1+{LVf('tuition_increase_pct')}/100)/in_tuition_rounding_usd+0.5,"''',
+     "Scenario tuition rounded up instead of to the nearest step"),
+    ("E16", "XL+", W, '''return f"1-NORMSDIST(({d['CAP']}+0.5-{M})/{SDV})"''', '''return f"1-NORMSDIST(({d['CAP']}-{M})/{SDV})"''',
+     "P(class over cap) without the continuity correction"),
+    ("E17", "XL+", W, '''        V = f"(SUMPRODUCT({A},{Y},1-{Y})+{sd}^2*{M}^2)"''', '''        V = f"(SUMPRODUCT({A},{Y},1-{Y}))"''',
+     "Class variance without the shock term"),
+    ("E18", "XL+", W, '''return f"IF({gross}>0,{aid}/({gross}),0)"''', '''return f"IF({gross}>0,{merit}/({gross}),0)"''',
+     "Discount rate counts merit only"),
+    ("E19", "XL+", W, '''return f"SUMPRODUCT(({AW}>={d['T']}-0.000001)*{E})"''', '''return f"SUMPRODUCT(({AW}>={d['T']}-10000)*{E})"''',
+     "Full-tuition count with a $10,000 tolerance"),
+    ("E20", "XL+", W, '''Ca = f"SUMPRODUCT(({I}>0)*(({Ep}<={Es})*{Ep}+({Ep}>{Es})*{Es})*{I})"''',
+     '''Ca = f"SUMPRODUCT(({I}>0)*{Ep}*{I})"''', "C_any without the elementwise minimum"),
+    ("E21", "XL+", W, '''-{Ep}*{dp['w']}))"''', '''-{Ep}*{d['w']}))"''', "dNTR prices the parent with the child's weights"),
+    ("E22", "XL+", W, '''VS = f"(SUMPRODUCT({SEG},{A},{Y},1-{Y})+{sd}^2*{MS}^2)"''', '''VS = f"(SUMPRODUCT({SEG},{A},{Y},1-{Y}))"''',
+     "Segment variance without the shock term"),
+    ("E23", "XL", W, '''1-NORMSDIST(({ceil_x(gl)}-0.5-{MS})/\'''', '''1-NORMSDIST(({gl}-0.5-{MS})/\'''',
+     "Segment goal not rounded up in P(segment goal) (review X23)"),
+    ("E24", "XL+", W, '''r_ = rho if name == "p_median_t" else "0.5"''', '''r_ = rho''',
+     "rho 0.5 sensitivity uses the configured rho"),
+    ("E25", "XL+", W, '''return f"1-NORMSDIST((-0.5-({gp}-{gm}))/SQRT(MAX({vm},1E-300)))"''',
+     '''return f"1-NORMSDIST((0-({gp}-{gm}))/SQRT(MAX({vm},1E-300)))"''', "P(median) without the continuity correction"),
+    ("E26", "XL+", W, '''es = f"SUMPRODUCT(({d['scored']}=1)*{E})"''', '''es = f"SUM({E})"''',
+     "Share at or above t over all enrolled, not enrolled with a score"),
+    ("E27", "XL+", W, '''f = (f'IF({c("scored")}=0,IF(in_unscored_in_median="excluded",0,-1),\'''', '''f = (f'IF({c("scored")}=0,-1,\'''',
+     "Unscored counted below the score median whatever unscored_in_median says"),
+    ("E28", "XL", W, '''for key in ("rate", "award", "ft"))''', '''for key in ("rate", "award"))''',
+     "Validity check ignores the full_tuition column (review X28)"),
+    ("E29", "XL+", W, '''for f in L.VALIDITY_FIELDS)''', '''for f in L.VALIDITY_FIELDS[:1])''',
+     "Validity check compares the pool multiplier only"),
+    ("E30", "XL+", W, '''M = f"({P('lo', 'M')}+{m}*{P('hi', 'M')})"''', '''M = f"({P('lo', 'M')}+{P('hi', 'M')})"''',
+     "Pool strip: class ignores the multiplier"),
+    ("E31", "XL+", W, '''V = f"({P('lo', 'V')}+{m}*{P('hi', 'V')}+{sd}^2*{M}^2)"''', '''V = f"({P('lo', 'V')}+{m}*{P('hi', 'V')})"''',
+     "Pool strip: class variance without the shock"),
+    ("E32", "XL", W, '''{C(4)}*{C(5)}*MAX(0,{C(3)}-{fr})/{C(3)},0)"''', '''{C(4)}*{C(5)},0)"''',
+     "Trim: removable enrollment ignores floor_rate (review X32)"),
+    ("E33", "XL+", W, '''({info['M']}-{Nref}-{C(8)})/{C(7)}''', '''({info['M']}-{Nref})/{C(7)}''',
+     "Trim: removed share ignores what earlier cells removed"),
+    ("E34", "XL", W, '''f"{rL}-({rL}-{fr})*INDEX(''', '''f"{rL}-{rL}*INDEX(''', "Trim: trimmed rate ignores floor_rate (review X34)"),
+    ("E35", "XL+", W, '''f = f"SUMPRODUCT(({d['scored']}=1)*({d['score_lo']}={b:g})*({AB}-{AN}))"''',
+     '''f = f"SUMPRODUCT(({d['scored']}=1)*({d['score_lo']}={b:g})*({AN}-{AB}))"''', "Class table: admits cut with the wrong sign"),
+    ("E36", "XL", W, '''f"IF({sa}>=in_pooling_min_admits,{se}/{sa},''', '''f"IF({sa}>in_pooling_min_admits,{se}/{sa},''',
+     "Segment pool needs more than the pool size (review X36)"),
+    ("E37", "XL+", W, '''+in_pooling_k*{c('ypool')})/({c('n')}+in_pooling_k),''', '''+in_pooling_k*{c('ypool')})/({c('n')}),''',
+     "Partial pooling denominator without k"),
+    ("E38", "XL", W, '''-2*in_shock_corr*{Gp}*{Gm}))"''', '''-2*{Gp}*{Gm}))"''', "Pool strip median ignores rho (review X38)"),
+    ("E39", "XL+", W, '''self.fx(sheet, r, cc, f'MIN(IF({ft_c}=1,{Tp},MIN({lev},{Tp}))+{bonus_usd}*{B("elig")},{Tp})',''',
+     '''self.fx(sheet, r, cc, f'{B("award")}',''', "Tuition what-if: awards not recomputed at T(p)"),
+    ("E40", "XL+", W, '''(SUM({E})*{Tp}-{ntr})/(SUM({E})*{Tp})''', '''(SUM({E})*{Tp}-{ntr}-{SP})/(SUM({E})*{Tp})''',
+     "Tuition what-if discount column wrong"),
+    ("E41", "XL+", W, '''cond = f"({FT}=0)*({LEV}<in_tuition_base-0.000001)*({E}>0)"''',
+     '''cond = f"({LEV}<in_tuition_base-0.000001)*({E}>0)"''', "Example award: flagged cells included"),
+    ("E42", "XL", W, '''self.s_fx(self.sr, 1, f"SUMPRODUCT(({A}>0)*''', '''self.s_fx(self.sr, 1, f"0*SUMPRODUCT(({A}>0)*''',
+     "Yield-strip clip count always 0 (review X42)"),
+    ("E43", "XL+", W, '''({d["TGT"]}-SUMPRODUCT({A},{Y}))/SUM({A})*100''', '''({d["CAP"]}-SUMPRODUCT({A},{Y}))/SUM({A})*100''',
+     "Class break-even aims at the cap"),
+    ("E44", "XL+", W, '''/SUMPRODUCT({W},{A})*100,""))\'''', '''/SUM({A})*100,""))\'''', "NTR break-even with the wrong denominator"),
+    ("E45", "XL+", W, '''f"SUMPRODUCT(({Rs}<>{Rp})*1)"''', '''f"SUMPRODUCT(({Rs}<{Rp})*1)"''',
+     "Admit rates changed counts decreases only"),
+    ("E46", "XL+", W, '''f"IF(({ft}=1)*({aw}<>{refv})=1,1,0)"''', '''f"IF(({ft}=1)=1,1,0)"''',
+     "P1.1-1 conflict flag on every flagged cell"),
+    ("E47", "XL", W, '''f'IF({Mref}-{N}>{RK}+0.000000001,"N not reachable''', '''f'IF({Mref}-{N}>{Mref}+0.000000001,"N not reachable''',
+     "Class table never reports the shortfall (review X47)"),
+    # ---- 2.1 ----
+    ("E48", "2.1", W, '''({LEV}<in_tuition_base-0.000001)''', '''({LEV}<{T}-0.000001)''',
+     "Q-5: example award judged against plan-year tuition"),
+    ("E49", "2.1", W, '''aw_terms = f"({Fs}<>{Fp})+({As}<>{Ap})*({Fs}=0)"''', '''aw_terms = f"({Fs}<>{Fp})+({As}<>{Ap})"''',
+     "P2-03: ignored award entries counted as changes on Levers"),
+    ("E50", "2.1", W, '''f"SUMPRODUCT(({Fs}=1)*({As}<>{Aref}))"''', '''f"SUMPRODUCT(({Fs}=1)*1)"''',
+     "P2-03: ignored count includes every flagged cell"),
+    ("E51", "2.1", W, '''default = "INDEX(in_seg_names,1)" if len(cfg["segments"]) == 1 else '""\'''', '''default = '""\'''',
+     "P2-07: blank Levers segment means no segment"),
+    ("E52", "2.1", W, '''xr = f'IF(in_budget_basis="merit",{mr},{ar})\'''', '''xr = ar''', "Q-8e: budget_basis ignored"),
+    ("E53", "2.1", W, '''TEXT(({imp}-{act})/{act}*100,"0.0")''', '''TEXT(({act}-{imp})/{act}*100,"0.0")''',
+     "Q-8f: reconciliation gap with the wrong sign"),
+    ("E54", "2.1", W, '''{PL}/SUMPRODUCT({E0},{EL})''', '''{PL}/SUM({E0})''',
+     "Q-8d: implied bonus over all Baseline enrolled, not those in scope"),
+    ("E55", "2.1", W, '''{stale},{xs(labels.EXACT_CURRENT)})))\'''', '''{xs(labels.EXACT_CURRENT)},{xs(labels.EXACT_CURRENT)})))\'''',
+     "P2-06: exact probability never marked stale"),
+    ("E56", "2.1", W, '''f'IF({self.inp_list["median_thresholds"][0]}={t0:g},"OK",{rb(f"{t0:g}")})\'''', '''f'"OK"\'''',
+     "P2-06: rebuild check on the first median threshold never fires"),
+    ("E57", "2.1", W, '''{xs(labels.SCOPE_ERROR)},"OK")\'''', '''"OK","OK")\'''', "P2-07: scope error never shown"),
+    ("E58", "2.1", W, '''f'IF(({a1(r, c0 + 2, False)}=1)*({a1(r, c0 + 1, False)}<>{aref})=1,\'''',
+     '''f'IF(({a1(r, c0 + 2, False)}=1)=1,\'''', "P2-03: note marks every flagged cell"),
+    ("E59", "2.1", W, '''f'IF(in_protect_segment={xs(ps)},"OK",{rb(ps)})\'''', '''f'"OK"\'''',
+     "P2-06: rebuild check on protect_segment never fires"),
 ]
 
 # Survivors accepted because they cannot change any result on valid input: id -> reason. Empty unless a run shows
@@ -391,21 +561,37 @@ EQUIVALENT = {}
 
 
 def _copy_tree(dst):
-    ign = shutil.ignore_patterns("__pycache__", ".pytest_cache", "*.pyc", "mutation_check.py")
-    for d in ("sw", "tests", "config"):
-        shutil.copytree(os.path.join(ROOT, d), os.path.join(dst, d), ignore=ign)
+    """Copy the prototype, everything except output/ and caches [v0.6.2, P2-02]: requirements.lock feeds the build id,
+    so a partial copy fails test 3's two-builds test in every run."""
+    ign = shutil.ignore_patterns("__pycache__", ".pytest_cache", "*.pyc", ".DS_Store")
+    for name in os.listdir(ROOT):
+        if name in ("output", "__pycache__", ".pytest_cache", ".DS_Store"):
+            continue
+        s, d = os.path.join(ROOT, name), os.path.join(dst, name)
+        if os.path.isdir(s):
+            shutil.copytree(s, d, ignore=ign)
+        else:
+            shutil.copy2(s, d)
 
 
-def _test_files():
+def _test_files(excel=False):
+    if excel:
+        return [f"tests/{n}" for n in EXCEL_TESTS]
     names = sorted(f for f in os.listdir(os.path.join(ROOT, "tests")) if f.startswith("test_") and f.endswith(".py"))
     return [f"tests/{n}" for n in names if n not in SLOW_LAST] + [f"tests/{n}" for n in SLOW_LAST if n in names]
 
 
-def _env():
-    # SW_SKIP_EXCEL: the workbook tests (3, 8, 9, 10, 18) compare Excel with Python, so any Python mutant would fail
-    # them; the check measures the Python tests only.
-    return dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1",
-                VECLIB_MAXIMUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1", SW_SKIP_EXCEL="1")
+def _env(excel=False, count_file=None):
+    # Python mode sets SW_SKIP_EXCEL: the workbook tests (3, 8, 9, 10, 18) compare Excel with Python, so any Python
+    # mutant would fail them; that mode measures the Python tests only. Excel mode runs the workbook tests.
+    env = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1",
+               VECLIB_MAXIMUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+    env.pop("SW_SKIP_EXCEL", None)
+    if not excel:
+        env["SW_SKIP_EXCEL"] = "1"
+    if count_file:
+        env["SW_COLLECT_COUNT_FILE"] = count_file
+    return env
 
 
 def _first_failure(stdout):
@@ -415,7 +601,30 @@ def _first_failure(stdout):
     return ""
 
 
-def run_one(m, timeout):
+def _test_id(caught_by):
+    """'FAILED tests/x.py::test_y - msg' -> 'tests/x.py::test_y'."""
+    s = caught_by.split(" ", 1)[1] if " " in caught_by else caught_by
+    return s.split(" - ", 1)[0].strip()
+
+
+def _run_suite(work, excel, timeout, stop_first):
+    count_file = os.path.join(work, "collected.txt")
+    cmd = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *(["-x"] if stop_first else []),
+           *_test_files(excel)]
+    try:
+        r = subprocess.run(cmd, cwd=work, env=_env(excel, count_file), capture_output=True, text=True,
+                           timeout=timeout)
+        code, out = r.returncode, r.stdout
+    except subprocess.TimeoutExpired:
+        code, out = "timeout", ""
+    collected = None
+    if os.path.exists(count_file):
+        with open(count_file) as f:
+            collected = int(f.read().strip() or -1)
+    return code, out, collected
+
+
+def run_one(m, timeout, excel, base_count):
     mid, src, path, old, new, desc = m
     work = tempfile.mkdtemp(prefix=f"sw_mut_{mid}_")
     try:
@@ -428,19 +637,17 @@ def run_one(m, timeout):
                     "detail": f"pattern found {n} times"}
         with open(f, "w") as fh:
             fh.write(text.replace(old, new))
-        cmd = [sys.executable, "-m", "pytest", "-x", "-q", "-p", "no:cacheprovider", *_test_files()]
         t0 = time.time()
-        try:
-            r = subprocess.run(cmd, cwd=work, env=_env(), capture_output=True, text=True, timeout=timeout)
-            code, out = r.returncode, r.stdout
-        except subprocess.TimeoutExpired:
-            code, out = "timeout", ""
+        code, out, collected = _run_suite(work, excel, timeout, stop_first=True)
         secs = round(time.time() - t0, 1)
-        if code == 0:
+        if collected != base_count:
+            status = "count mismatch"
+        elif code == 0:
             status = "equivalent" if mid in EQUIVALENT else "survived"
         else:
             status = "caught"
         return {"id": mid, "source": src, "file": path, "description": desc, "status": status, "seconds": secs,
+                "collected": collected,
                 "caught_by": _first_failure(out) if code not in (0, "timeout") else ("timeout" if code == "timeout"
                                                                                      else ""),
                 "reason": EQUIVALENT.get(mid, "")}
@@ -448,14 +655,14 @@ def run_one(m, timeout):
         shutil.rmtree(work, ignore_errors=True)
 
 
-def baseline_ok(timeout):
+def baseline(timeout, excel):
+    """The unmutated suite in a scratch copy made the same way as the mutant copies. Returns (ok, summary, count)."""
     work = tempfile.mkdtemp(prefix="sw_mut_base_")
     try:
         _copy_tree(work)
-        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", SW_SKIP_EXCEL="1")
-        cmd = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *_test_files()]
-        r = subprocess.run(cmd, cwd=work, env=env, capture_output=True, text=True, timeout=timeout)
-        return r.returncode == 0, r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
+        code, out, collected = _run_suite(work, excel, timeout, stop_first=False)
+        line = out.strip().splitlines()[-1] if out.strip() else ""
+        return code == 0, line, collected, _first_failure(out)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
@@ -465,47 +672,69 @@ def main():
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 2))
     ap.add_argument("--only", default="", help="comma-separated mutant IDs")
     ap.add_argument("--timeout", type=int, default=900, help="seconds per suite run")
-    ap.add_argument("--skip-baseline", action="store_true")
+    ap.add_argument("--excel", action="store_true",
+                    help="run the Excel-formula mutants (sw/workbook.py) against tests 3, 8, 9 and 18 in LibreOffice")
     args = ap.parse_args()
 
-    ids = [m[0] for m in MUTANTS]
+    pool = EXCEL_MUTANTS if args.excel else MUTANTS
+    ids = [m[0] for m in MUTANTS + EXCEL_MUTANTS]
     assert len(ids) == len(set(ids)), "duplicate mutant IDs"
-    chosen = MUTANTS
+    chosen = pool
     if args.only:
         want = set(args.only.split(","))
-        unknown = want - set(ids)
+        unknown = want - {m[0] for m in pool}
         if unknown:
-            sys.exit(f"unknown mutant IDs: {sorted(unknown)}")
-        chosen = [m for m in MUTANTS if m[0] in want]
+            sys.exit(f"unknown mutant IDs for this mode: {sorted(unknown)}")
+        chosen = [m for m in pool if m[0] in want]
 
-    if not args.skip_baseline:
-        ok, line = baseline_ok(args.timeout)
-        print(f"unmutated suite: {line}")
-        if not ok:
-            sys.exit("the unmutated suite fails; fix it before running the mutation check")
+    # Baseline [v0.6.2, P2-02]: always run, in a copy made like the mutant copies; its collected-test count is the
+    # count every mutant run must match.
+    ok, line, base_count, fail = baseline(args.timeout, args.excel)
+    print(f"unmutated suite ({'Excel' if args.excel else 'Python'} mode): {line}; {base_count} tests collected")
+    if not ok:
+        sys.exit(f"the unmutated suite fails in the scratch copy ({fail}); fix it before running the mutation check")
 
     t0 = time.time()
     with ThreadPoolExecutor(max_workers=args.jobs) as ex:
-        results = list(ex.map(lambda m: run_one(m, args.timeout), chosen))
+        results = list(ex.map(lambda m: run_one(m, args.timeout, args.excel, base_count), chosen))
     wall = round(time.time() - t0, 1)
 
-    print(f"\n{'ID':<5} {'src':<4} {'status':<12} {'sec':>6}  description / caught by")
+    print(f"\n{'ID':<5} {'src':<4} {'status':<14} {'sec':>6}  description / caught by")
     for r in results:
         extra = r.get("reason") or r.get("caught_by") or r.get("detail", "")
-        print(f"{r['id']:<5} {r['source']:<4} {r['status']:<12} {r.get('seconds', 0):>6}  {r['description']}"
-              + (f"\n{'':<30}{extra}" if extra else ""))
+        if r["status"] == "count mismatch":
+            extra = f"collected {r.get('collected')} tests, baseline {base_count}"
+        print(f"{r['id']:<5} {r['source']:<4} {r['status']:<14} {r.get('seconds', 0):>6}  {r['description']}"
+              + (f"\n{'':<32}{extra}" if extra else ""))
     counts = {}
     for r in results:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
     print(f"\n{len(results)} mutants: " + ", ".join(f"{v} {k}" for k, v in sorted(counts.items()))
           + f" ({wall} s, {args.jobs} jobs)")
 
+    # Which tests catch the mutants; warn when one test accounts for most catches [v0.6.2, P2-02].
+    by_test = {}
+    for r in results:
+        if r["status"] == "caught" and r["caught_by"] not in ("", "timeout"):
+            by_test[_test_id(r["caught_by"])] = by_test.get(_test_id(r["caught_by"]), 0) + 1
+    caught = sum(by_test.values())
+    warning = ""
+    if caught:
+        top, top_n = max(by_test.items(), key=lambda kv: kv[1])
+        print(f"catching tests: {len(by_test)}; most catches: {top} ({top_n} of {caught})")
+        if caught >= 5 and top_n > caught / 2:
+            warning = (f"WARNING: one test accounts for {top_n} of {caught} catches ({top}). Check that it tests the "
+                       "mutated logic rather than failing for an unrelated reason.")
+            print(warning)
+
     out_dir = os.path.join(ROOT, "output", "mutation")
     os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, "report.json"), "w") as f:
-        json.dump({"counts": counts, "wall_seconds": wall, "jobs": args.jobs, "results": results,
-                   "equivalent": EQUIVALENT}, f, indent=1)
-    bad = [r for r in results if r["status"] in ("survived", "not applied")]
+    name = "report_excel.json" if args.excel else "report.json"
+    with open(os.path.join(out_dir, name), "w") as f:
+        json.dump({"mode": "excel" if args.excel else "python", "baseline": line, "baseline_collected": base_count,
+                   "counts": counts, "catches_by_test": by_test, "warning": warning, "wall_seconds": wall,
+                   "jobs": args.jobs, "results": results, "equivalent": EQUIVALENT}, f, indent=1)
+    bad = [r for r in results if r["status"] in ("survived", "not applied", "count mismatch")]
     sys.exit(1 if bad else 0)
 
 

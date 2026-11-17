@@ -144,6 +144,9 @@ def build(cfg_path, data, scenarios_path, out_root, seed=101, pdf=False, sentine
     specs = yaml.safe_load(scen_bytes)["scenarios"]
     scenarios = scenarios_from_specs(specs, cells, cfg)
     meta.update(input_hashes(cfg_path, cells, scen_bytes))
+    # Levers shows a blank segment cell (the default: the only configured segment) unless Baseline names one
+    # [v0.6.2, P2-07]
+    meta["baseline_segment_named"] = bool(specs[0].get("segment"))
     meta["git_commit"] = git_commit()
     meta["config_path"] = os.path.relpath(cfg_path, ROOT)
     meta["scenarios_path"] = os.path.relpath(scenarios_path, ROOT)

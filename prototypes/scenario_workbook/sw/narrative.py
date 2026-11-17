@@ -45,6 +45,9 @@ def _py(v, fmt, ctx):
         return labels.fmt_prob(v, ctx["shock_source"])
     if fmt == "seg_d1":
         return v if isinstance(v, str) else f"{v:,.1f}"
+    if fmt == "ignored":
+        k = int(v)
+        return "" if k == 0 else " " + (labels.AWARDS_IGNORED_ONE if k == 1 else labels.AWARDS_IGNORED_MANY.format(k=k))
     raise ValueError(fmt)
 
 
@@ -71,6 +74,9 @@ def _xl(r, fmt, ctx):
                 f'IF({r}>0.95,{xs(labels.PROB_OVER)},{pct})),{pct})')
     if fmt == "seg_d1":
         return f'IF({r}={xs(labels.NO_SEGMENT_CELLS)},{r},TEXT({r},"#,##0.0"))'
+    if fmt == "ignored":
+        many = template_formula(labels.AWARDS_IGNORED_MANY, {"k": r})
+        return f'IF({r}=0,"",IF({r}=1,{xs(" " + labels.AWARDS_IGNORED_ONE)}," "&{many}))'
     raise ValueError(fmt)
 
 
@@ -92,10 +98,12 @@ def formula(parts, refs, ctx):
 # Templates
 
 def changes_parts(has_parent):
+    """Spec section 8 [v0.6.2, Q-6, P2-03]: Baseline reads "Baseline: no parent scenario."; award entries ignored
+    under a full-tuition flag are not changes and are reported after the counts when there are any."""
     if not has_parent:
-        return ["Pool multiplier ", ("pool_multiplier", "g"), ". Baseline: no parent scenario."]
+        return ["Baseline: no parent scenario.", ("awards_ignored", "ignored")]
     return ["Pool multiplier ", ("pool_multiplier", "g"), ". Awards changed in ", ("awards_changed", "g"),
-            " cells; admit rates changed in ", ("rates_changed", "g"), " cells."]
+            " cells; admit rates changed in ", ("rates_changed", "g"), " cells.", ("awards_ignored", "ignored")]
 
 
 def outcome_parts(n_score_thresholds):
@@ -191,8 +199,10 @@ def values(run, vals, s):
         v[f"t{i}"], v[f"margin{i}"], v[f"p{i}"] = t, md["margin_t"], md["p_median_t"]
     gm = d["median"][("gpa", cfg["gpa"]["median_threshold"])]
     v["gpa_margin"], v["gpa_p"] = gm["margin_t"], gm["p_median_t"]
+    changed, ignored = L.award_changes(run.cells, cfg, s, p)
+    v["awards_ignored"] = int(ignored.sum())
     if p is not None:
-        v["awards_changed"] = int(((s.award_usd != p.award_usd) | (s.full_tuition != p.full_tuition)).sum())
+        v["awards_changed"] = int(changed.sum())
         v["rates_changed"] = int((s.admit_rate != p.admit_rate).sum())
     return v
 

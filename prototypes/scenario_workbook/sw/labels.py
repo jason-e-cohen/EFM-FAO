@@ -47,6 +47,20 @@ CT_NOT_APPLICABLE = "not applicable (N at or above expected class)"
 CT_ABOVE_CAP = "above cap"
 CT_SHORTFALL = "N not reachable: shortfall {shortfall}"
 
+# Award entries ignored under a full-tuition flag [v0.6.2, P2-03]
+AWARD_IGNORED = "award entry ignored: full-tuition flag set"
+AWARDS_IGNORED_ONE = "1 award entry ignored: full-tuition flag set."
+AWARDS_IGNORED_MANY = "{k} award entries ignored: full-tuition flag set."
+FT_CONFLICT_CHECK = "award entered on a full-tuition cell is ignored; clear the flag to use it"
+
+# Build-time inputs and static figures [v0.6.2, P2-06, P2-07]
+REBUILD_NEEDED = "rebuild needed: differs from its value at build ({build})"
+EXACT_CURRENT = "current"
+EXACT_STALE = "stale: segment expected enrollment or goal changed since the build; rebuild for the exact value"
+SCOPE_ERROR = ("error: bonus scope 'segment' with no segment cells and a bonus, lift or goal (Python refuses this "
+               "scenario)")
+SEGMENT_UNNAMED = "error: several segments are configured and none is named; name the active segment on Levers"
+
 # Evidence label (information only; never a judgment of the award)
 EVIDENCE_OBSERVED = "observed"
 EVIDENCE_EXTRAPOLATED = "extrapolated"

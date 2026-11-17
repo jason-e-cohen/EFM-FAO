@@ -254,8 +254,8 @@ def test_tuition_whatif_every_grid_value():
         assert r["label"] == labels.STICKER_LABEL
     assert expect[6.0][1] == pytest.approx(L.money(lc)["ntr_y1"], abs=1e-6)
     # net-tuition lines: fixed 53,000 - 50,000; scaled 0.06 x (50,000 - 20,000). The example award averages cells
-    # without the full_tuition flag, judged on the lever award before the incentive [v0.6.1, P1.1-4]: c5 (lever
-    # 45,000, lifted to the 53,000 cap by the incentive) counts; c1 (flagged) does not:
+    # without the full_tuition flag whose base-cycle lever award is below base-cycle tuition [v0.6.2, Q-5; P1.1-4]:
+    # c5 (lever 45,000, lifted to the 53,000 cap by the incentive) counts; c1 (flagged) does not:
     # (12 x 10,000 + 5 x 30,000 + 10.5 x 20,000 + 3.6 x 45,000 + 1.5 x 0) / 32.6 = 19,693 -> 20,000.
     # Judged on the award after the incentive (the pre-P1.1-4 rule) it would be 16,552 -> 17,000.
     assert tw["net_tuition_line_fixed"] == 3000.0
@@ -268,8 +268,8 @@ def test_tuition_whatif_every_grid_value():
 def test_tuition_whatif_scaled_awards():
     """Scenario W with award_scale_with_tuition. Ledger at 6.0%: c2 10,600, c3 31,800 + 10,000, c4 21,200 + 10,000;
     enrolled 4.6, 12.18, 5.36, 10.86, 3.6, 1.5 (class 38.1). NTR(p) = 29.9 T - 499,800 (1 + p) - 162,200 - 43,100.
-    Example award: base-cycle levers over cells without the flag, c5 included (lever 45,000; award_base 47,700
-    below 53,000) [v0.6.1, P1.1-4]: (121,800 + 160,800 + 217,200 + 3.6 x 45,000) / 33.5 = 19,755 -> 20,000. With
+    Example award: base-cycle levers over cells without the flag, c5 included (lever 45,000, below the base-cycle
+    tuition 50,000) [v0.6.2, Q-5; P1.1-4]: (121,800 + 160,800 + 217,200 + 3.6 x 45,000) / 33.5 = 19,755 -> 20,000. With
     award_base (plan-year dollars) it would be (529,788 + 171,720) / 33.5 = 20,941 -> 21,000; without zero awards,
     661,800 / 32 = 20,681 -> 21,000 [v0.6.1, R-07]."""
     cfg, cells, base = _setup()
@@ -601,3 +601,90 @@ def test_full_tuition_conflicts():
     b2 = L.derive(b, "b2", cfg, cells)
     b2.award_usd[cells.index("c1")] = 1.0
     assert L.full_tuition_conflicts(cells, cfg, b2)[cells.index("c1")]
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Phase 2.1 [v0.6.2]: scaled-line example rule (Q-5), award changes (P2-03, Q-4), history reconciliation (Q-8f),
+# budget basis (Q-8e), bonus_pool_usd (Q-8d), narrative wording (Q-6)
+
+def test_example_award_q5_rule():
+    """Q-5: the example award averages enrollees whose base-cycle lever award is below base-cycle tuition (50,000) and
+    whose cell has no full_tuition flag. Child X types 51,000 on c4 (unflagged, above 50,000 but below the plan
+    tuition 53,000) and flags c3 (lever 30,000): both are left out, so the members are c2, c5 and c6:
+    (12 x 10,000 + 2 x 45,000 + 1.5 x 0) / 15.5 = 13,548 -> 14,000. The P1.1-4 rule (award_base below plan tuition)
+    would keep c4 (yield 0.25 + 0.31 = 0.56, enrolled 16.8): 1,066,800 / 32.3 = 33,028 -> 33,000."""
+    cfg, cells, base = _setup()
+    X = L.derive(L.baseline(cells, cfg), "X", cfg, cells, award={"c4": 51000.0}, full_tuition={"c3": True})
+    lc = L.evaluate(cells, cfg, X, base, "middle")
+    e, aw = lc.enrolled, X.award_usd
+    keep = _i(cells, "c2", "c5", "c6")
+    want = float(L.xround((e[keep] * aw[keep]).sum() / e[keep].sum() / 1000.0) * 1000.0)
+    tw = strip.tuition(lc)
+    assert tw["example_award"] == want == 14000.0
+    old = _i(cells, "c2", "c4", "c5", "c6")
+    assert float(L.xround((e[old] * aw[old]).sum() / e[old].sum() / 1000.0) * 1000.0) == 33000.0
+    assert tw["net_tuition_line_scaled"] == pytest.approx(0.06 * (50000 - want), abs=1e-9)
+
+
+def test_award_changes_exclude_ignored_entries():
+    """P2-03, Q-4: an award typed on a flagged cell is ignored, not a change; a flag change is a change; Baseline has no
+    changes and judges ignored entries against the latest-cohort award."""
+    cfg, cells, base = _setup()
+    b = L.baseline(cells, cfg)
+    ch = L.derive(b, "ch", cfg, cells, award={"c1": 30000.0, "c2": 12000.0}, full_tuition={"c3": True})
+    changed, ignored = L.award_changes(cells, cfg, ch, b)
+    got = {c: (bool(changed[cells.index(c)]), bool(ignored[cells.index(c)])) for c in ("c1", "c2", "c3", "c4")}
+    assert got == {"c1": (False, True), "c2": (True, False), "c3": (True, False), "c4": (False, False)}
+    bc, bi = L.award_changes(cells, cfg, b)
+    assert not bc.any() and not bi.any()
+    from sw import narrative
+    import types
+    run = types.SimpleNamespace(cfg=cfg, cells=cells, parents={"ch": b, "Baseline": None},
+                                lcs={"ch": {"middle": L.evaluate(cells, cfg, ch, base, "middle")}})
+    v = narrative.values(run, {"sk": {("ch", "middle"): _sk_stub(cfg)}}, ch)
+    assert (v["awards_changed"], v["awards_ignored"]) == (2, 1)
+    ctx = {"shock_source": "illustrative"}
+    assert narrative.text(narrative.changes_parts(True), v, ctx).endswith(
+        "Awards changed in 2 cells; admit rates changed in 0 cells. " + labels.AWARDS_IGNORED_ONE)
+    assert narrative.text(narrative.changes_parts(False), dict(v, awards_ignored=0), ctx) == \
+        "Baseline: no parent scenario."
+    assert narrative.text(narrative.changes_parts(False), dict(v, awards_ignored=3), ctx) == \
+        "Baseline: no parent scenario. " + labels.AWARDS_IGNORED_MANY.format(k=3)
+
+
+def _sk_stub(cfg):
+    """Minimal Summary values for narrative.values (only the change counts are read in the test above)."""
+    med = {("score", t): {"margin_t": 0.0, "p_median_t": 0.5} for t in cfg["score"]["median_thresholds"]}
+    med[("gpa", cfg["gpa"]["median_threshold"])] = {"margin_t": 0.0, "p_median_t": 0.5}
+    d = {k: 0.0 for k in ("class_mean", "class_lo90", "class_hi90", "full_tuition_n", "no_merit_award_n", "ntr_y1",
+                          "ntr_lo90", "ntr_hi90", "discount_entering_y1", "segment_enrolled",
+                          "evidence_extrapolated_share")}
+    d["kpis"] = {"enrolled_below_floor": 0.0}
+    d["median"] = med
+    return d
+
+
+def test_history_reconciliation():
+    """Q-8f: toy history enrolled per cohort 4, 6, 4, 6, 4, 1 at awards 50,000, 10,000, 30,000, 20,000, 45,000, 0:
+    grid-implied merit 680,000 in each cohort. Reported 800,000 for 2026 only: gap -15.0%; the other cohorts are not
+    run."""
+    cfg, cells, _ = _setup(merit_actual_by_cohort={2026: 800000})
+    rec = {h["cohort"]: h for h in L.history_reconciliation(cells, cfg)}
+    assert [rec[y]["implied"] for y in (2024, 2025, 2026)] == [680000.0] * 3
+    assert rec[2026]["actual"] == 800000.0 and rec[2026]["gap"] == pytest.approx(-0.15, abs=1e-12)
+    assert rec[2024]["actual"] is None and rec[2024]["gap"] is None
+    with pytest.raises(ConfigError):
+        _setup(merit_actual_by_cohort={2019: 1})
+    with pytest.raises(ConfigError):
+        _setup(budget_basis="scholarships")
+    assert _setup()[0]["budget_basis"] == "total_aid"
+
+
+def test_bonus_implied_by_pool_scenario_input():
+    """Q-8d: bonus_pool_usd is a scenario field; pool / Baseline expected enrolled in scope. Toy Baseline Middle:
+    out-of-state enrolled c3 3, c4 7.5, c5 2 = 12.5, so a 100,000 pool implies 8,000."""
+    cfg, cells, base = _setup()
+    b = L.baseline(cells, cfg)
+    s = L.derive(b, "s", cfg, cells, bonus_usd=5000.0, bonus_pool_usd=100000.0)
+    assert L.bonus_implied_by_pool(s.bonus_pool_usd, L.evaluate(cells, cfg, b, base, "middle"), s) == \
+        pytest.approx(8000.0, abs=1e-9)

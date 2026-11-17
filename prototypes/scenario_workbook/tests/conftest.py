@@ -10,6 +10,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sw import config  # noqa: E402
 
 
+def pytest_collection_finish(session):
+    """Mutation check (test 20) [v0.6.2, P2-02]: record how many tests were collected, so a mutant run can be compared
+    with the baseline run."""
+    p = os.environ.get("SW_COLLECT_COUNT_FILE")
+    if p:
+        with open(p, "w") as f:
+            f.write(str(len(session.items)))
+
+
 @pytest.fixture(scope="session")
 def syn_cfg():
     return config.load(os.path.join(ROOT, "config", "synthetic.yaml"))
@@ -66,14 +75,14 @@ def lo_profile(soffice):
     shutil.rmtree(d, ignore_errors=True)
 
 
-def _build_and_recalc(tag, scenarios_path, profile, sentinel=False, seed=101):
+def _build_and_recalc(tag, scenarios_path, profile, sentinel=False, seed=101, cfg_path=None):
     import shutil
     import openpyxl
     from sw import build, lo
     out = os.path.join(PHASE2, tag)
     shutil.rmtree(out, ignore_errors=True)
-    path, info = build.build(os.path.join(ROOT, "config", "synthetic.yaml"), "synthetic", scenarios_path, out,
-                             seed=seed, sentinel=sentinel)
+    cfg_path = cfg_path or os.path.join(ROOT, "config", "synthetic.yaml")
+    path, info = build.build(cfg_path, "synthetic", scenarios_path, out, seed=seed, sentinel=sentinel)
     rc = lo.recalc(path, os.path.join(out, "recalculated"), profile=profile)
     return {"path": path, "recalc_path": rc, "info": info,
             "values": openpyxl.load_workbook(rc, data_only=True),
@@ -91,6 +100,14 @@ def sentinel_wb(lo_profile):
     """The same workbook with every cached value set to -999, recalculated (test 3 guard)."""
     return _build_and_recalc("sentinel", os.path.join(ROOT, "config", "scenarios_synthetic.yaml"), lo_profile,
                              sentinel=True)
+
+
+@pytest.fixture(scope="session")
+def edge_wb(lo_profile):
+    """The edge workbook of tests/edge.py [v0.6.2, P2-01], recalculated."""
+    import edge
+    cp, sp = edge.write(os.path.join(PHASE2, "edge_inputs"))
+    return _build_and_recalc("edge", sp, lo_profile, seed=edge.SEED, cfg_path=cp)
 
 
 def read_range(wb, name):

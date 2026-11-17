@@ -43,7 +43,9 @@ LEVER_FIELDS = [  # (field, label, kind): kind num, int01, text, opt (optional n
     ("pool_multiplier", "pool_multiplier", "num"), ("specialty_usd", "specialty_usd", "num"),
     ("need_total", "need_total", "num"), ("class_target", "class_target", "num"), ("class_cap", "class_cap", "num"),
     ("bonus_usd", "bonus_usd", "num"), ("bonus_scope", "bonus_scope", "text"),
-    ("bonus_min_score", "bonus_min_score (blank = none)", "opt"), ("segment", "segment (active)", "text"),
+    ("bonus_min_score", "bonus_min_score (blank = none)", "opt"),
+    ("bonus_pool_usd", "bonus_pool_usd (dollar pool, informational; blank = none)", "opt"),
+    ("segment", "segment (active; blank = the only configured segment)", "text"),
     ("segment_pool_lift_pct", "segment_pool_lift_pct", "num"), ("segment_goal", "segment_goal (blank = none)", "opt"),
     ("yield_shift_pts", "yield_shift_pts", "num"), ("yield_shift_pts_in", "yield_shift_pts_in (blank inherits)", "opt"),
     ("yield_shift_pts_out", "yield_shift_pts_out (blank inherits)", "opt"),
@@ -134,7 +136,7 @@ class Book:
             "t": F(base), "tw": F(dict(base, text_wrap=True, valign="top")),
             "note": F(dict(base, italic=True, font_color="#555555")),
             "notew": F(dict(base, italic=True, font_color="#555555", text_wrap=True, valign="top")),
-            "data": F(dict(base, num_format="#,##0.##########")),
+            "data": F(dict(base, num_format="#,##0")),           # counts [v0.6.2, P2-05]
             "datat": F(base),
         }
         nums = {"num": "General", "usd": "$#,##0", "n1": "#,##0.0", "n0": "#,##0", "r3": "0.000", "r4": "0.0000",
@@ -145,6 +147,7 @@ class Book:
             self.f["inh_" + k] = F(dict(inh, num_format=nf))
         self.f["in_textw"] = F(dict(inp, text_wrap=True))
         self.f["changed"] = F({"bg_color": "#D9D9D9"})
+        self.f["ignored"] = F({"font_strikeout": True, "font_color": "#555555"})
         self.f["clamp_lo"] = F({"num_format": '"under 5%"'})
         self.f["clamp_hi"] = F({"num_format": '"over 95%"'})
         self.f["mergew"] = F(dict(base, text_wrap=True, valign="top"))
@@ -159,7 +162,7 @@ class Book:
         if fmt == "prob":
             self.prob_rects.setdefault(sheet, []).append((r, c))
 
-    def val(self, sheet, r, c, v, fmt="data"):
+    def val(self, sheet, r, c, v, fmt="n0"):
         v = _clean(v)
         ws = self.ws[sheet]
         if v == "":
@@ -209,8 +212,9 @@ class Book:
         self.vrow_awards_changed = last + 1
         self.vrow_rates_changed = last + 2
         self.vrow_cells_changed = last + 3
-        self.vrow_colhead = last + 5
-        self.r0v = last + 6
+        self.vrow_ignored = last + 4
+        self.vrow_colhead = last + 6
+        self.r0v = last + 7
         self.vblock = {s.name: 6 + 4 * j for j, s in enumerate(S)}
         self.vmatrix = 6 + 4 * len(S) + 1
         # Ledger
@@ -433,6 +437,13 @@ class Book:
         one("discount_target", "discount_target (blank = none)", cfg.get("discount_target"), "in_pct1",
             "live (Baseline reads it)")
         one("budget_total", "budget_total (blank = none)", cfg.get("budget_total"), "in_usd", "live (Checks)")
+        one("budget_basis", "budget_basis (total_aid or merit)", cfg["budget_basis"], "in_text",
+            "live (Checks): total_aid compares merit + need + specialty; merit compares merit only (OD-10)")
+        self.ws["Inputs"].data_validation(self.ir - 1, 1, self.ir - 1, 1,
+                                          {"validate": "list", "source": ["total_aid", "merit"]})
+        mab = cfg.get("merit_actual_by_cohort") or {}
+        many("merit_actual_by_cohort", "merit_actual_by_cohort (reported merit; blank = not given)",
+             [mab.get(int(y)) for y in self.cohorts], "in_usd", "live (Checks: history reconciliation)")
         sec("Risk and response (placeholders until calibrated)")
         rk = cfg["risk"]
         one("common_shock_sd", "risk.common_shock_sd (s)", rk["common_shock_sd"], "in_num",
@@ -493,8 +504,6 @@ class Book:
             "live: the 'Selected case' block on Summary")
         self.ws["Inputs"].data_validation(self.ir - 1, 1, self.ir - 1, 1,
                                           {"validate": "list", "source": ["Low", "Middle", "High"]})
-        one("incentive_pool_usd", "dollar pool for 'bonus implied by a dollar pool' (informational)", None,
-            "in_usd", "live (Summary incentive block)")
         self.ws["Inputs"].freeze_panes(3, 1)
 
     # ------------------------------------------------------------------------------------------------------------
@@ -508,8 +517,8 @@ class Book:
             self.val(sheet, r, 1, cells.residency[i], "datat")
             self.val(sheet, r, 2, cells.segment[i] or SEG_NONE, "datat")
             s = cells.score_lo[i]
-            self.val(sheet, r, 3, None if np.isnan(s) else float(s), "data")
-            self.val(sheet, r, 4, 0 if np.isnan(s) else 1, "data")
+            self.val(sheet, r, 3, None if np.isnan(s) else float(s), "int")
+            self.val(sheet, r, 4, 0 if np.isnan(s) else 1, "int")
             self.val(sheet, r, 5, cells.gpa_class[i], "datat")
 
     def _static_heads(self, sheet, row):
@@ -544,19 +553,19 @@ class Book:
             for j in range(nc):
                 apps, adm = cells.apps[i, j], cells.admits[i, j]
                 aw, en = cells.award[i, j], cells.enrolled[i, j]
-                self.val("History", r, self.hcol["apps"] + j, apps)
-                self.val("History", r, self.hcol["admits"] + j, adm)
-                self.val("History", r, self.hcol["award"] + j, aw)
-                self.val("History", r, self.hcol["enrolled"] + j, en)
+                self.val("History", r, self.hcol["apps"] + j, apps, "n0")
+                self.val("History", r, self.hcol["admits"] + j, adm, "n0")
+                self.val("History", r, self.hcol["award"] + j, aw, "usd")
+                self.val("History", r, self.hcol["enrolled"] + j, en, "n0")
                 A = a1(r, self.hcol["apps"] + j, False)
                 D = a1(r, self.hcol["admits"] + j, False)
                 W = a1(r, self.hcol["award"] + j, False)
                 E = a1(r, self.hcol["enrolled"] + j, False)
                 self.fx("History", r, self.hcol["rate"] + j, f'IF({A}>0,{D}/{A},"")', adm / apps if apps > 0 else "",
-                        "r3")
+                        "r4")
                 self.fx("History", r, self.hcol["award_pct"] + j, f"{W}/{tbc[j]}", aw / T[j], "pct1")
                 self.fx("History", r, self.hcol["yield"] + j, f'IF({D}>0,{E}/{D},"")', en / adm if adm > 0 else "",
-                        "r3")
+                        "r4")
         # totals
         r = self.r0h + self.n + 1
         groups = [("Total in-state", f'(RES="in")', cells.residency == "in"),
@@ -583,9 +592,9 @@ class Book:
                 D = a1(r, self.hcol["admits"] + j, False)
                 E = a1(r, self.hcol["enrolled"] + j, False)
                 self.fx("History", r, self.hcol["rate"] + j, f'IF({A}>0,{D}/{A},"")',
-                        rowv["admits"] / rowv["apps"] if rowv["apps"] > 0 else "", "r3")
+                        rowv["admits"] / rowv["apps"] if rowv["apps"] > 0 else "", "r4")
                 self.fx("History", r, self.hcol["yield"] + j, f'IF({D}>0,{E}/{D},"")',
-                        rowv["enrolled"] / rowv["admits"] if rowv["admits"] > 0 else "", "r3")
+                        rowv["enrolled"] / rowv["admits"] if rowv["admits"] > 0 else "", "r4")
                 adm, aw = self.HR("admits", j), self.HR("award", j)
                 m = (cells.admits[:, j] * cells.award[:, j])[mask].sum()
                 d = cells.admits[mask, j].sum()
@@ -686,9 +695,9 @@ class Book:
                      f"+in_pooling_k*{c('ypool')})/({c('n')}+in_pooling_k),{c('ypool')})")
                 self.fx("Response", r, self.rcol[f"y0_{k}"], f, base.y0[k][i], "r4")
             self.fx("Response", r, self.rcol["floor"],
-                    f"IF({c('upper')}=1,in_yield_floor_upper,in_yield_floor_lower)", base.floor[i], "r3")
+                    f"IF({c('upper')}=1,in_yield_floor_upper,in_yield_floor_lower)", base.floor[i], "r4")
             self.fx("Response", r, self.rcol["cap"], f"IF({c('upper')}=1,in_yield_cap_upper,in_yield_cap_lower)",
-                    base.cap[i], "r3")
+                    base.cap[i], "r4")
             lo_terms = ",".join(f"IF({ref('History', hr, self.hcol['admits'] + j)}>0,"
                                 f"{ref('History', hr, self.hcol['award'] + j)},{BIG})" for j in range(nc))
             hi_terms = ",".join(f"IF({ref('History', hr, self.hcol['admits'] + j)}>0,"
@@ -720,7 +729,7 @@ class Book:
                     r = self.r0r + i
                     cc = lambda kk: a1(r, self.rcol[kk], False)  # noqa: E731
                     self.fx("Response", r, col, f"MIN({cc('cap')},MAX({cc('floor')},{cc('y0_' + k)}+in_slope_{k}/100*"
-                                                f"({rref}-{cc('a0')})/1000))", vals[i], "r3")
+                                                f"({rref}-{cc('a0')})/1000))", vals[i], "r4")
             c += len(rungs) + 2
         ws.freeze_panes(self.r0r, 1)
 
@@ -733,7 +742,8 @@ class Book:
         self.txt("Levers", 0, 0, "Levers: scenario inputs (Baseline is scenario 0)", "title")
         self.txt("Levers", 1, 0, "Blue: input. Italic blue: inherited from the parent by formula; type over it to "
                                  "override. Grey fill: differs from the parent. While full_tuition is 1 the award is "
-                                 "tuition and award_usd is ignored (Checks lists such cells).", "note")
+                                 "tuition and award_usd is ignored: such an entry is struck through, marked in the note "
+                                 "column, counted separately and listed on Checks.", "note")
         ws.set_column(0, 0, 30)
         ws.set_column(1, 4, 8)
         ws.set_column(5, 5, 2)
@@ -745,6 +755,7 @@ class Book:
         self.txt("Levers", self.vrow_awards_changed, 0, "awards changed from parent (cells)")
         self.txt("Levers", self.vrow_rates_changed, 0, "admit rates changed from parent (cells)")
         self.txt("Levers", self.vrow_cells_changed, 0, "cells changed from parent (any lever)")
+        self.txt("Levers", self.vrow_ignored, 0, "award entries ignored (full-tuition flag set)")
         self._static_heads("Levers", self.vrow_colhead)
         for i in range(self.n):
             r = self.r0v + i
@@ -752,15 +763,21 @@ class Book:
             self.val("Levers", r, 1, cells.residency[i], "datat")
             self.val("Levers", r, 2, cells.segment[i] or SEG_NONE, "datat")
             s_ = cells.score_lo[i]
-            self.val("Levers", r, 3, None if np.isnan(s_) else float(s_), "data")
+            self.val("Levers", r, 3, None if np.isnan(s_) else float(s_), "int")
             self.val("Levers", r, 4, cells.gpa_class[i], "datat")
         self.txt("Levers", self.vrow_colhead, 4, "gpa_class", "h")
         self.txt("Levers", self.vrow_colhead, 3, "score_lo", "h")
         self.txt("Levers", self.vrow_colhead, 5, "", "h")
         seg_names = [sg["name"] for sg in cfg["segments"]]
+        # A blank segment cell means the default, the only configured segment [v0.6.2, P2-07]. Baseline shows it blank
+        # unless the scenario file names a segment; children inherit it.
+        seg_blank = len(seg_names) == 1 and not run.meta.get("baseline_segment_named", True)
+        hist_award = rng("History", self.r0h, self.hcol["award"] + self.jbase, self.r0h + self.n - 1,
+                         self.hcol["award"] + self.jbase)
         for j, s in enumerate(self.S):
             c0 = self.vblock[s.name]
             p = run.parents[s.name]
+            ws.set_column(c0 + 3, c0 + 3, 34)
             self.txt("Levers", self.vrow_name, c0, s.name, "hl")
             self.txt("Levers", self.vrow_parent, c0, p.name if p else "(none)")
             for f, lab, kind in LEVER_FIELDS:
@@ -769,8 +786,9 @@ class Book:
                 if kind == "int01":
                     v = int(bool(v))
                 if f == "segment":
-                    v = v or ""
-                fmt_kind = "text" if kind == "text" else ("pct1" if f == "discount_target" else "num")
+                    v = "" if (seg_blank and v == seg_names[0]) else (v or "")
+                fmt_kind = ("text" if kind == "text" else "pct1" if f == "discount_target"
+                            else "usd" if f == "bonus_pool_usd" else "num")
                 if p is None:
                     if f == "tuition_increase_pct":
                         yrs = range(cfg["cycle"]["base_cycle"] + 1, s.plan_year + 1)
@@ -790,7 +808,7 @@ class Book:
                     if kind == "int01":
                         pv = int(bool(pv))
                     if f == "segment":
-                        pv = pv or ""
+                        pv = "" if (seg_blank and pv == seg_names[0]) else (pv or "")
                     pref = a1(r, self.vblock[p.name])
                     if v == pv or (v is None and pv is None):
                         frm = f'IF({pref}="","",{pref})' if kind in ("opt", "text") else pref
@@ -803,10 +821,11 @@ class Book:
                     ws.data_validation(r, c0, r, c0, {"validate": "list", "source": seg_names, "ignore_blank": True})
                 if kind == "int01":
                     ws.data_validation(r, c0, r, c0, {"validate": "list", "source": ["0", "1"]})
-            for k, h in enumerate(["admit_rate", "award_usd", "full_tuition (1/0)"]):
+            for k, h in enumerate(["admit_rate", "award_usd", "full_tuition (1/0)", "note"]):
                 self.txt("Levers", self.vrow_colhead, c0 + k, h, "h")
+            changed, ignored = self.vals["award_changes"][s.name]
             arrs = [s.admit_rate, s.award_usd, s.full_tuition.astype(int)]
-            fmts = ["r4", "num", "int"]
+            fmts = ["r4", "usd", "int"]
             for i in range(self.n):
                 r = self.r0v + i
                 for k in range(3):
@@ -821,23 +840,40 @@ class Book:
                             self.val("Levers", r, c0 + k, v, "in_" + fmts[k])
             ws.data_validation(self.r0v, c0 + 2, self.r0v + self.n - 1, c0 + 2,
                                {"validate": "list", "source": ["0", "1"]})
+            # Award entries ignored under the full-tuition flag [v0.6.2, P2-03]: struck through and marked in the note
+            # column; counted separately, not as changes. The reference is the inherited award (the parent's; for
+            # Baseline, the latest-cohort award on History).
+            As, Fs = self.LVR(s.name, "award"), self.LVR(s.name, "ft")
+            Aref = hist_award if p is None else self.LVR(p.name, "award")
+            for i in range(self.n):
+                r = self.r0v + i
+                aref = (ref("History", self.r0h + i, self.hcol["award"] + self.jbase) if p is None
+                        else a1(r, self.vblock[p.name] + 1, False))
+                self.fx("Levers", r, c0 + 3, f'IF(({a1(r, c0 + 2, False)}=1)*({a1(r, c0 + 1, False)}<>{aref})=1,'
+                                             f'{xs(labels.AWARD_IGNORED)},"")',
+                        labels.AWARD_IGNORED if ignored[i] else "", "note")
+            r0a = a1(self.r0v, c0 + 1, False)
+            aref0 = (ref("History", self.r0h, self.hcol["award"] + self.jbase).replace("$", "") if p is None
+                     else a1(self.r0v, self.vblock[p.name] + 1, False))
+            ws.conditional_format(self.r0v, c0 + 1, self.r0v + self.n - 1, c0 + 1, {
+                "type": "formula", "format": self.f["ignored"],
+                "criteria": f"=({a1(self.r0v, c0 + 2, False)}=1)*({r0a}<>{aref0})"})
+            self.fx("Levers", self.vrow_ignored, c0, f"SUMPRODUCT(({Fs}=1)*({As}<>{Aref}))", int(ignored.sum()), "int")
             if p is not None:
                 pc = self.vblock[p.name]
                 ws.conditional_format(self.r0v, c0, self.r0v + self.n - 1, c0 + 2, {
                     "type": "formula", "format": self.f["changed"],
                     "criteria": f"={a1(self.r0v, c0, False)}<>{a1(self.r0v, pc, False)}"})
                 Rs, Rp = self.LVR(s.name, "rate"), self.LVR(p.name, "rate")
-                As, Ap = self.LVR(s.name, "award"), self.LVR(p.name, "award")
-                Fs, Fp = self.LVR(s.name, "ft"), self.LVR(p.name, "ft")
-                aw_ch = int(((s.award_usd != p.award_usd) | (s.full_tuition != p.full_tuition)).sum())
+                Ap, Fp = self.LVR(p.name, "award"), self.LVR(p.name, "ft")
+                aw_ch = int(changed.sum())
                 rt_ch = int((s.admit_rate != p.admit_rate).sum())
-                any_ch = int(((s.award_usd != p.award_usd) | (s.full_tuition != p.full_tuition)
-                              | (s.admit_rate != p.admit_rate)).sum())
-                self.fx("Levers", self.vrow_awards_changed, c0, f"SUMPRODUCT((({As}<>{Ap})+({Fs}<>{Fp})>0)*1)", aw_ch,
-                        "int")
+                any_ch = int((changed | (s.admit_rate != p.admit_rate)).sum())
+                aw_terms = f"({Fs}<>{Fp})+({As}<>{Ap})*({Fs}=0)"
+                self.fx("Levers", self.vrow_awards_changed, c0, f"SUMPRODUCT((({aw_terms})>0)*1)", aw_ch, "int")
                 self.fx("Levers", self.vrow_rates_changed, c0, f"SUMPRODUCT(({Rs}<>{Rp})*1)", rt_ch, "int")
-                self.fx("Levers", self.vrow_cells_changed, c0,
-                        f"SUMPRODUCT((({Rs}<>{Rp})+({As}<>{Ap})+({Fs}<>{Fp})>0)*1)", any_ch, "int")
+                self.fx("Levers", self.vrow_cells_changed, c0, f"SUMPRODUCT((({Rs}<>{Rp})+{aw_terms}>0)*1)", any_ch,
+                        "int")
             else:
                 for rr in (self.vrow_awards_changed, self.vrow_rates_changed, self.vrow_cells_changed):
                     self.txt("Levers", rr, c0, "(no parent)", "note")
@@ -895,8 +931,8 @@ class Book:
                     f = (f'IF({c("gpa_class")}="hi",1,IF({c("gpa_class")}="lo",-1,'
                          f'IF(in_unscored_in_median="excluded",0,-1)))')
                 self.fx(sheet, r, st[f"g{j}"], f, signs[j][i], "int")
-            self.fx(sheet, r, st["floor"], self.Rc("floor", i), base.floor[i], "r3")
-            self.fx(sheet, r, st["cap"], self.Rc("cap", i), base.cap[i], "r3")
+            self.fx(sheet, r, st["floor"], self.Rc("floor", i), base.floor[i], "r4")
+            self.fx(sheet, r, st["cap"], self.Rc("cap", i), base.cap[i], "r4")
             self.fx(sheet, r, st["a0"], self.Rc("a0", i), base.a0[i], "usd")
             self.fx(sheet, r, st["y0"], self.Rc(f"y0_{k}", i), base.y0[k][i], "r4")
             self.fx(sheet, r, st["award_lo"], self.Rc("award_lo", i), base.award_lo[i], "usd")
@@ -929,7 +965,9 @@ class Book:
         self.fx(sheet, 5, c0 + 1, f'IF({nt}="",in_need_total,{nt})/in_need_reference_class', lc.need_rate, "usd")
         self.txt(sheet, 6, c0, "segment")
         sg = LVf("segment")
-        self.fx(sheet, 6, c0 + 1, f'IF({sg}="","",{sg})', L.active_segment(cfg, s) or "", "t")
+        # blank: the only configured segment; none when no segment or several are configured [v0.6.2, P2-07]
+        default = "INDEX(in_seg_names,1)" if len(cfg["segments"]) == 1 else '""'
+        self.fx(sheet, 6, c0 + 1, f'IF({sg}="",{default},{sg})', L.active_segment(cfg, s) or "", "t")
         for key, cc in col.items():
             h = BLOCK_HEAD.get(key)
             if key.startswith("tw"):
@@ -1042,7 +1080,7 @@ class Book:
             self.fx("Trim", top + 1, 2, f"SUM({self.LR('middle', s.name, 'mu')})", M, "n1")
             info["M"] = ref("Trim", top + 1, 2)
             self.txt("Trim", top + 1, 4, "floor_rate")
-            self.fx("Trim", top + 1, 5, "in_trim_floor_rate", cfg["trim"]["floor_rate"], "r3")
+            self.fx("Trim", top + 1, 5, "in_trim_floor_rate", cfg["trim"]["floor_rate"], "r4")
             fr = ref("Trim", top + 1, 5)
             hr = top + 3
             d0 = top + 4
@@ -1267,7 +1305,8 @@ class Book:
                 return (f"IF({dE}>=0.5,{xs(labels.AID_PER_ADDITIONAL)},IF({dE}<=-0.5,{xs(labels.SAVINGS_PER_LOST)},"
                         f"{UH}))")
             if name == "incentive_valid":
-                eqs = "*".join(f"({self.LV(s, f)}={self.LV(p.name, f)})" for f in L.VALIDITY_FIELDS)
+                eqs = "*".join(f"({self.LH('middle', s, 'seg')}={self.LH('middle', p.name, 'seg')})" if f == "segment"
+                               else f"({self.LV(s, f)}={self.LV(p.name, f)})" for f in L.VALIDITY_FIELDS)
                 arr = "+".join(f"({self.LVR(s, key)}<>{self.LVR(p.name, key)})" for key in ("rate", "award", "ft"))
                 return (f"IF({eqs}*(SUMPRODUCT(({arr}>0)*1)=0)=1,{xs(labels.INCENTIVE_VALID)},"
                         f"{xs(labels.INCENTIVE_NOT_VALID)})")
@@ -1570,6 +1609,26 @@ class Book:
             return f"{v!r}", v
         self._row(S, "P(segment enrolled at or above goal), exact (static, from the build)", "probability", exact,
                   "prob")
+
+        def status(s):
+            # [v0.6.2, P2-06] the static exact value is stale once the segment's expected enrollment or goal differs
+            # from its value at build
+            d = self.g("middle", s)
+            SEG, MU, GL = d["in_seg"], d["mu"], d["GOAL"]
+            v = self.vals["seg_exact"][s]
+            stale = xs(labels.EXACT_STALE)
+            if isinstance(v, float):
+                lc = self.run.lcs[s]["middle"]
+                b = float(lc.mu[lc.in_segment].sum())
+                gb = int(math.ceil(self.run.scen(s).segment_goal))
+                MS = f"SUMPRODUCT({SEG},{MU})"
+                return (f'IF(SUM({SEG})=0,{stale},IF({GL}="",{stale},IF((MAX({MS}-{b!r},{b!r}-{MS})>'
+                        f'1E-9*MAX(1,{b!r}))+({ceil_x(GL)}<>{gb})>0,{stale},{xs(labels.EXACT_CURRENT)})))',
+                        labels.EXACT_CURRENT)
+            return f'IF((SUM({SEG})>0)*({GL}<>"")=1,{stale},"")', ""
+        self.exact_status_row = self.sr
+        self._row(S, "Exact value status (static value against the current segment enrollment and goal)", "",
+                  status, "t")
         self._direct_row(S, "Approximation flag", "", "segment_approximate", "t")
 
     def sw_incentive(self, S):
@@ -1592,13 +1651,14 @@ class Book:
         b0 = self.S[0].name
 
         def implied(s):
+            # [v0.6.2, Q-8d] scenario input bonus_pool_usd (Levers)
             sc = self.run.scen(s)
-            pool = self.cfg.get("incentive_pool_usd")
+            pool = sc.bonus_pool_usd
             v = None if pool is None else L.bonus_implied_by_pool(pool, self.run.lcs[b0]["middle"], sc)
             E0 = self.LR("middle", b0, "enrolled")
             EL = self.LR("middle", s, "elig")
-            return (f'IF(in_incentive_pool_usd="","",IF(SUMPRODUCT({E0},{EL})>0,in_incentive_pool_usd/'
-                    f'SUMPRODUCT({E0},{EL}),""))', v)
+            PL = self.LV(s, "bonus_pool_usd")
+            return f'IF({PL}="","",IF(SUMPRODUCT({E0},{EL})>0,{PL}/SUMPRODUCT({E0},{EL}),""))', v
         self._row(S, "Bonus implied by a dollar pool (pool / Baseline enrolled in scope; informational)", "USD",
                   implied, "usd")
 
@@ -1664,10 +1724,11 @@ class Book:
                 tw = self.vals["strips"][s]["tuition_whatif"]
                 T = self.LH("middle", s, "T")
                 E = self.LR("middle", s, "enrolled")
-                AB = self.LR("middle", s, "award_base")
                 LEV = self.LVR(s, "award")
+                FT = self.LVR(s, "ft")
                 P = self.LV(s, "tuition_increase_pct")
-                cond = f"({AB}<{T}-0.000001)*({E}>0)"
+                # [v0.6.2, Q-5; P1.1-4] base-cycle lever award below base-cycle tuition, cells without the flag
+                cond = f"({FT}=0)*({LEV}<in_tuition_base-0.000001)*({E}>0)"
                 den = f"SUMPRODUCT({E}*{cond})"
                 r = self.sr
                 self.s_fx(r, 1, f"{T}-in_tuition_base", tw["net_tuition_line_fixed"], "usd")
@@ -1685,8 +1746,9 @@ class Book:
         self.s_name("TW_NET_TUITION_LINE_FIXED", r0, 1, self.sr - 1, 1)
         self.s_name("TW_NET_TUITION_LINE_SCALED", r0, 3, self.sr - 1, 3)
         self.s_note("Both lines are arithmetic at constant award; neither changes yield. Example award: "
-                    "enrolled-weighted mean base-cycle lever award over cells without the full-tuition flag "
-                    "(judged before any incentive), zero awards included, rounded to $1,000.")
+                    "enrolled-weighted mean base-cycle lever award over enrollees whose lever award, before any "
+                    "incentive, is below base-cycle tuition and whose cell has no full-tuition flag, zero awards "
+                    "included, rounded to $1,000.")
 
     def sw_yield(self, S):
         cfg = self.cfg
@@ -1910,7 +1972,8 @@ class Book:
             sc = self.run.scen(s)
             p = self.run.parents[s]
             # references
-            r = {"pool_multiplier": self.LV(s, "pool_multiplier")}
+            r = {"pool_multiplier": self.LV(s, "pool_multiplier"),
+                 "awards_ignored": ref("Levers", self.vrow_ignored, self.vblock[s])}
             if p is not None:
                 r["awards_changed"] = ref("Levers", self.vrow_awards_changed, self.vblock[s])
                 r["rates_changed"] = ref("Levers", self.vrow_rates_changed, self.vblock[s])
@@ -1965,8 +2028,13 @@ class Book:
 
     def sw_labels(self):
         self.s_sec("Labels and range kinds")
+        self.s_txt(self.sr, 0, "SHOCK_LABEL", "hl")
+        # [v0.6.2, P2-04] the template filled in from Inputs (live)
+        self.s_fx(self.sr, 1, NAR.template_formula(labels.SHOCK_LABEL, {"s": "in_common_shock_sd"}),
+                  labels.shock_label(self.cfg["risk"]["common_shock_sd"]), "t")
+        self.sr += 1
         items = [("RESPONSE_LABEL", labels.RESPONSE_LABEL), ("ASSUMPTION_LABEL", labels.ASSUMPTION_LABEL),
-                 ("SHOCK_LABEL", labels.SHOCK_LABEL), ("SEGMENT_SHARE_LABEL", labels.SEGMENT_SHARE_LABEL),
+                 ("SEGMENT_SHARE_LABEL", labels.SEGMENT_SHARE_LABEL),
                  ("Range kind", f"{labels.RANGE_OUTCOME} ({labels.RANGE_OUTCOME_NOTE})"),
                  ("Range kind", f"{labels.RANGE_CASES} ({labels.RANGE_CASES_NOTE})"),
                  ("Probability display", f"while shock_source is illustrative: '{labels.PROB_UNDER}' and "
@@ -2016,10 +2084,6 @@ class Book:
                         self.s_fx(self.sr, 2 + j, self.fm(name, k, s, ti), self.pv(name, k, s, ti), fmt)
                 self.sr += 1
         self.s_name(rn, r0, 2, self.sr - 1, 2 + len(S) - 1)
-        if not self.dry:
-            for alias, target in K.ALIASES.items():
-                if target == rn:
-                    self.name(alias, "Summary", r0, 2, self.sr - 1, 2 + len(S) - 1)
 
     # ------------------------------------------------------------------------------------------------------------
     # Checks
@@ -2123,21 +2187,33 @@ class Book:
             row("Class target within the supported range", s,
                 f'IF(({tgt}>={self.inp_list["supported_range"][0]})*({tgt}<={self.inp_list["supported_range"][1]})=1,'
                 f'"OK",{notice})', v)
-        # budget
+        # budget [v0.6.2, Q-8e]: total aid by default, merit only when budget_basis is merit
         for s in S:
-            aid = self.vals["sk"][(s, "middle")]["aid"]
+            sk = self.vals["sk"][(s, "middle")]
             b = cfg.get("budget_total")
+            kind = "merit" if cfg["budget_basis"] == "merit" else "aid"
+            x = sk[kind]
             v = "not set (budget_total blank)" if b is None else (
-                "OK: aid " + f"${aid:,.0f}" + " within budget" if aid <= b else f"aid ${aid:,.0f} above budget")
+                f"OK: {kind} ${x:,.0f} within budget" if x <= b else f"{kind} ${x:,.0f} above budget")
             ar = self.sref("aid", "middle", s)
-            row("Spend (aid) against budget_total (Middle case)", s,
-                f'IF(in_budget_total="","not set (budget_total blank)",IF({ar}<=in_budget_total,"OK: aid $"&'
-                f'TEXT({ar},"#,##0")&" within budget","aid $"&TEXT({ar},"#,##0")&" above budget"))', v)
-        self.txt("Checks", self.cr, 0, "History reconciliation (grid-implied merit against reported actual merit)",
-                 "tw")
-        self.txt("Checks", self.cr, 1, "History")
-        self.txt("Checks", self.cr, 2, "not run: reported actual merit is not part of the cell data")
-        self.cr += 1
+            mr = self.sref("merit", "middle", s)
+            xr = f'IF(in_budget_basis="merit",{mr},{ar})'
+            kr = 'IF(in_budget_basis="merit","merit","aid")'
+            row("Spend against budget_total (Middle case; budget_basis: total aid, or merit only)", s,
+                f'IF(in_budget_total="","not set (budget_total blank)",IF({xr}<=in_budget_total,"OK: "&{kr}&" $"&'
+                f'TEXT({xr},"#,##0")&" within budget",{kr}&" $"&TEXT({xr},"#,##0")&" above budget"))', v)
+        # history reconciliation [v0.6.2, Q-8f]
+        for j, h in enumerate(self.vals["history_reconciliation"]):
+            act = self.inp_list["merit_actual_by_cohort"][j]
+            imp = f"SUMPRODUCT({self.HR('enrolled', j)},{self.HR('award', j)})"
+            y = h["cohort"]
+            v = (f"not run: merit_actual_by_cohort not given for {y}" if h["actual"] is None else
+                 f"grid-implied ${h['implied']:,.0f} against reported ${h['actual']:,.0f}: gap {100 * h['gap']:.1f}%")
+            row(f"History reconciliation {y}: grid-implied merit (enrolled x award over cells) against reported "
+                "merit (merit_actual_by_cohort; percent gap)", "History",
+                f'IF({act}="","not run: merit_actual_by_cohort not given for {y}","grid-implied $"&TEXT({imp},'
+                f'"#,##0")&" against reported $"&TEXT({act},"#,##0")&": gap "&TEXT(({imp}-{act})/{act}*100,"0.0")&"%")',
+                v)
         for k in CASES:
             terms = [f"({self.sref('class_mean', k, s)}-{self.LT(k, s, 'mu')})^2" for s in S]
             row("Summary expected class equals the Ledger total", CASE_SHEET[k],
@@ -2151,6 +2227,36 @@ class Book:
             row(f"Segment cells lie within their residency", sg["name"],
                 f'IF(SUMPRODUCT(({SEGc}={nref})*({RES}<>{wref}))=0,"OK",SUMPRODUCT(({SEGc}={nref})*({RES}<>{wref}))'
                 f'&" segment cells outside their residency")', "OK")
+        # empty-segment scope error and unnamed segment [v0.6.2, P2-07]
+        nseg = len(cfg["segments"])
+        for s in S:
+            SEG = self.LR("middle", s, "in_seg")
+            f = (f'IF(({self.LV(s, "bonus_scope")}="segment")*(SUM({SEG})=0)*(({self.LV(s, "bonus_usd")}>0)+'
+                 f'({self.LV(s, "segment_pool_lift_pct")}<>0)+({self.LV(s, "segment_goal")}<>"")>0)=1,'
+                 f'{xs(labels.SCOPE_ERROR)},"OK")')
+            row("Bonus scope 'segment' has segment cells when a bonus, lift or goal is set", s, f, "OK")
+            if nseg > 1:
+                row("Active segment named (several segments configured)", s,
+                    f'IF({self.LV(s, "segment")}="",{xs(labels.SEGMENT_UNNAMED)},"OK")', "OK")
+        # build-time inputs and the static exact probability [v0.6.2, P2-06]
+        rb = lambda b: xs(labels.REBUILD_NEEDED.format(build=b))  # noqa: E731
+        t0 = cfg["score"]["median_thresholds"][0]
+        row("Trim order: first median threshold equals its value at build", "Inputs",
+            f'IF({self.inp_list["median_thresholds"][0]}={t0:g},"OK",{rb(f"{t0:g}")})', "OK")
+        ps = cfg["trim"]["protect_segment"]
+        row("Trim order: trim.protect_segment equals its value at build", "Inputs",
+            f'IF(in_protect_segment={xs(ps)},"OK",{rb(ps)})', "OK")
+        ex = ", ".join(cfg["trim"]["exempt_cells"])
+        row("Trim: trim.exempt_cells equals its value at build", "Inputs",
+            f'IF(in_exempt_cells={xs(ex)},"OK",{rb(ex or "none")})', "OK")
+        for s in S:
+            seg = L.active_segment(cfg, run.scen(s)) or ""
+            row("Trim order: active segment equals its value at build", s,
+                f'IF({self.LH("middle", s, "seg")}={xs(seg)},"OK",{rb(seg or "none")})', "OK")
+        for j, s in enumerate(S):
+            st = ref("Summary", self.exact_status_row, 2 + j)
+            row("Static exact segment probability is current (Summary segment block)", s,
+                f'IF({st}={xs(labels.EXACT_STALE)},{xs(labels.EXACT_STALE)},"OK")', "OK")
         # full-tuition conflicts (P1.1-1)
         K_LIST = 10
         helper0 = 5
@@ -2161,7 +2267,7 @@ class Book:
         for i in range(n):
             self.val("Checks", 3 + i, helper0, cells.cell_id[i], "datat")
         self.ws["Checks"].set_column(helper0, helper0, 22)
-        msg = "award entered on a full-tuition cell is ignored; clear the flag to use it"
+        msg = labels.FT_CONFLICT_CHECK
         for j, s in enumerate(S):
             sc = run.scen(s)
             p = run.parents[s]
@@ -2222,7 +2328,7 @@ class Book:
         ws.set_column(0, 0, 34)
         ws.set_column(1, 1, 120)
         r = 0
-        self.txt("README", r, 0, "Scenario workbook (prototype, spec v0.6.1): README", "title")
+        self.txt("README", r, 0, "Scenario workbook (prototype, spec v0.6.2): README", "title")
         r += 2
         sections = [
             ("Purpose", "Scores the scenarios written on Levers with live formulas and shows the results with their "
@@ -2237,7 +2343,8 @@ class Book:
             ("Color key", "Blue on light blue: input. Italic blue: inherited input (formula to the parent; type over "
                           "it to override). Black: formula (locked). Grey fill: differs from the parent."),
             ("Labels", f"{labels.RESPONSE_LABEL}: every response-dependent output. {labels.ASSUMPTION_LABEL}: any "
-                       f"scenario with a non-zero yield shift or application lift. {labels.SHOCK_LABEL}: beside every "
+                       f"scenario with a non-zero yield shift or application lift. "
+                       f"{labels.SHOCK_LABEL.format(s='risk.common_shock_sd on Inputs')}: beside every "
                        "probability and range while shock_source is illustrative; probabilities below 5% or above "
                        f"95% then show as '{labels.PROB_UNDER}' or '{labels.PROB_OVER}'. "
                        f"{labels.SEGMENT_SHARE_LABEL}: every segment figure while share_source is assumed."),
@@ -2252,9 +2359,12 @@ class Book:
              "24). Ratios are ratios of expected values, E[X] / E[Y], everywhere."),
             ("Static and live", "Live: everything on History (rates), Response, Levers, the Ledgers, Summary, Trim and "
                                 "Checks recalculates from Inputs and Levers. Static: cell counts (History data), the "
-                                "trim order (fixed at build from the first median threshold and protect_segment), the "
-                                "number of grid values, the exact segment probability (labelled 'static, from the "
-                                "build'), RunLog. Inputs marked 'build-time' need a rebuild."),
+                                "trim order (fixed at build from the first median threshold, protect_segment, the "
+                                "exempt cells and each scenario's active segment), the number of grid values, the exact "
+                                "segment probability (labelled 'static, from the build'), RunLog. Inputs marked "
+                                "'build-time' need a rebuild; Checks shows 'rebuild needed' when a trim-order input "
+                                "differs from its value at build, and Summary marks the exact probability stale when "
+                                "the segment's expected enrollment or goal changes."),
             ("Policy choices", labels.POLICY_UNSCORED_TRIMMED_FIRST + " " + labels.POLICY_UNSCORED_EXCLUDED
              + " (unscored_in_median = " + cfg["unscored_in_median"] + ")."),
             ("Yield", "One Ledger column per case: clip(clip(y0 + b/100 (award - a0)/1000, floor, cap) + shift/100, "
@@ -2262,9 +2372,10 @@ class Book:
                       "change (D1); sticker price does not move applications or yield (D10)."),
             ("Not built here", "Reproduce mode and the Reproduce sheet (Phase 3); the Distribution sheet with step "
                                "sizes and the barbell detail (Phase 4); anything deferred in DECISIONS.md."),
-            ("Interface contract", "Summary named ranges (spec section 15 item 11): " + ", ".join(
-                rn for rn, _, _, _ in K.contract_table()) + ". Aliases: " + ", ".join(
-                f"{a} = {b}" for a, b in K.ALIASES.items()) + ". step_sizes waits for the Distribution sheet."),
+            ("Interface contract", "Named ranges (spec section 15 item 11; canonical names, no aliases): " + ", ".join(
+                rn for rn, _, _, _ in K.contract_table()) + ". AWARD_MATRIX is on Levers (resolved award). "
+                "p_segment_goal_exact is Python only (the Summary shows a static copy). step_sizes waits for the "
+                "Distribution sheet."),
             ("Handling", "Small cells are shown (small_cell_policy: " + cfg["client"]["small_cell_policy"]
              + "). Files go only to the client's named roles through the secure channel (methodology section 9). "
                "Client-facing use needs Jason's review first."),

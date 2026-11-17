@@ -56,6 +56,7 @@ class Scenario:
     yield_shift_pts_out: float | None = None
     yield_shift_pts_segment: float | None = None
     discount_target: float | None = None
+    bonus_pool_usd: float | None = None   # informational: "bonus implied by a dollar pool" [v0.6.2, Q-8d]
     notices: list = field(default_factory=list)
 
 
@@ -175,6 +176,33 @@ def full_tuition_conflicts(cells, cfg, scen, parent=None):
     else:
         ref = parent.award_usd
     return np.asarray(scen.full_tuition, bool) & (np.asarray(scen.award_usd, float) != np.asarray(ref, float))
+
+
+def award_changes(cells, cfg, scen, parent=None):
+    """Award edits relative to the parent [v0.6.2, P2-03, Q-4]. Returns (changed, ignored), boolean arrays.
+
+    ignored: award entries on full-tuition cells (full_tuition_conflicts); they change nothing and are counted
+    separately. changed: the flag differs from the parent's, or award_usd differs on a cell without the flag. Baseline
+    (no parent) has no changes; its ignored entries are judged against the latest-cohort award."""
+    ignored = full_tuition_conflicts(cells, cfg, scen, parent)
+    if parent is None:
+        return np.zeros(cells.n, dtype=bool), ignored
+    ft = np.asarray(scen.full_tuition, bool)
+    changed = (ft != np.asarray(parent.full_tuition, bool)) | ((scen.award_usd != parent.award_usd) & ~ft)
+    return changed, ignored
+
+
+def history_reconciliation(cells, cfg):
+    """Grid-implied merit (sum of enrolled x award over cells) against `merit_actual_by_cohort`, per history cohort
+    [v0.6.2, Q-8f]. Returns a list of dicts (cohort, implied, actual, gap); actual and gap are None when not given."""
+    act = cfg.get("merit_actual_by_cohort") or {}
+    out = []
+    for j, y in enumerate(cells.cohorts):
+        implied = float((cells.enrolled[:, j] * cells.award[:, j]).sum())
+        a = act.get(int(y))
+        out.append({"cohort": int(y), "implied": implied, "actual": None if a is None else float(a),
+                    "gap": None if a is None else (implied - float(a)) / float(a)})
+    return out
 
 
 def with_rates(scen, rates, name=None):

@@ -10,9 +10,10 @@ workbook and the tests:
   per-scenario lines and break-evens   rows: scenarios; one column
   AWARD_MATRIX     rows: cells (workbook order); columns: scenarios; the resolved award (plan-year dollars)
 
-The Spec table's short names (SUM_PCAP, SUM_PBAND, SUM_FT, SUM_NM, SUM_BB, SUM_PNTR, SUM_EVID) are defined as aliases of
-the same ranges. `p_segment_goal` in the workbook is the normal form (spec section 3); the Python exact value is shown
-beside it as a static figure from the build. Values: numbers, text, or None (an empty cell in Excel).
+Names are canonical: one range per figure, no aliases [v0.6.2, Q-1]; a short form in the spec's Source column (for
+example SUM_PCAP) is read as the prefix only. `p_segment_goal` in the workbook is the normal form (spec section 3);
+`p_segment_goal_exact` is Python only (`risk.segment_exact`) and the workbook shows a static copy with a stale flag
+[v0.6.2, Q-2, P2-06]. Values: numbers, text, or None (an empty cell in Excel).
 """
 import math
 
@@ -54,9 +55,9 @@ PER_SCENARIO = [("net_tuition_line_fixed", "TW", "strip.tuition"), ("net_tuition
                 ("breakeven_shift_ntr", "YS", "strip.yield_strip")]
 STRIPS = [("tuition_whatif", "TW", "strip.tuition"), ("yield_strip", "YS", "strip.yield_strip"),
           ("pool_strip", "PS", "strip.pool_strip"), ("class_table", "CT", "trim.class_table")]
-ALIASES = {"SUM_PCAP": "SUM_P_CLASS_OVER_CAP", "SUM_PBAND": "SUM_P_CLASS_IN_BAND", "SUM_FT": "SUM_FULL_TUITION_N",
-           "SUM_NM": "SUM_NO_MERIT_AWARD_N", "SUM_BB": "SUM_BARBELL", "SUM_PNTR": "SUM_P_NTR_Y1_GE_TARGET",
-           "SUM_EVID": "SUM_EVIDENCE_EXTRAPOLATED_SHARE"}
+# Contract figures with no workbook range (spec section 15 item 11): name -> python source. The dump carries them under
+# the contract name.
+PYTHON_ONLY = {"p_segment_goal_exact": "risk.segment_exact"}
 
 PARENT_ONLY = {"incentive_paid_anyway", "incentive_paid_anyway_share", "additional_enrollees", "aid_per_additional",
                "ntr_per_additional", "incentive_valid"}
@@ -107,7 +108,8 @@ def compute(run):
     cfg, cells, base = run.cfg, run.cells, run.base
     targets = risk.median_targets(cfg)
     out = {"sk": {}, "strips": {}, "lines": {}, "parts": {}, "ct_rates": {}, "seg_exact": {}, "conflicts": {},
-           "targets": targets, "score_ts": L.score_thresholds(cfg)}
+           "targets": targets, "score_ts": L.score_thresholds(cfg),
+           "history_reconciliation": L.history_reconciliation(cells, cfg)}
     for s in run.scenarios:
         p = run.parents[s.name]
         for k in CASES:
@@ -161,6 +163,7 @@ def compute(run):
                                 "breakeven_shift_ntr": ys["breakeven_shift_ntr"]}
         out["parts"][s.name] = ps["parts"]
         out["conflicts"][s.name] = L.full_tuition_conflicts(cells, cfg, s, p)
+        out.setdefault("award_changes", {})[s.name] = L.award_changes(cells, cfg, s, p)
         out["price_of_target"] = out.get("price_of_target", {})
         out["price_of_target"][s.name] = L.price_of_target(run.lcs[run.scenarios[0].name]["middle"], lcm)
     return out
@@ -225,8 +228,7 @@ def dump(run, vals=None):
     for which, prefix, _ in STRIPS:
         out[range_name(which, prefix)] = [[_num(x) for x in r[2]] for r in strip_rows(run, vals, which)]
     out["AWARD_MATRIX"] = [[_num(run.lcs[s]["middle"].award[i]) for s in names] for i in range(run.cells.n)]
-    for alias, target in ALIASES.items():
-        out[alias] = out[target]
+    out["p_segment_goal_exact"] = [[_num(vals["sk"][(s, k)]["p_segment_goal_exact"]) for s in names] for k in CASES]
     return out
 
 
@@ -240,6 +242,11 @@ def contract_table():
     return rows
 
 
+def python_only_table():
+    """(contract name, grain, python source) for figures the workbook does not carry as a range."""
+    return [(n, "s x k", src) for n, src in PYTHON_ONLY.items()]
+
+
 def label_for(name):
     if name in ("p_class_over_cap", "p_class_in_band", "class_mean", "class_lo90", "class_hi90", "margin_t",
                 "p_median_t", "p_median_t_rho05", "p_ntr_y1_ge_target"):
@@ -251,5 +258,5 @@ def label_for(name):
     return ""
 
 
-__all__ = ["compute", "dump", "contract_table", "strip_columns", "strip_rows", "band_keys", "range_name", "ALIASES",
-           "labels"]
+__all__ = ["compute", "dump", "contract_table", "python_only_table", "strip_columns", "strip_rows", "band_keys",
+           "range_name", "PYTHON_ONLY", "labels"]
