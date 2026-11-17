@@ -1,0 +1,90 @@
+# Synthetic-world shape targets (spec section 10). Ranges and parameters only; no fixture cell values or counts.
+# Provenance for every row: docs/shape_targets.md. Metrics are computed by sw/synth_cells.shape_metrics on the
+# residency-only view (segment cells merged back into their out-of-state cells), per history cohort unless pooled.
+# Asserted rows must hold in at least `min_pass_share` of the generator seeds (config/synthetic.yaml); the others
+# are reported.
+
+min_pass_share: 0.90
+
+rows:
+  - name: residency
+    asserted: true
+    checks:
+      - {metric: out_share_apps, kind: range_each_cohort, min: 0.67, max: 0.72}
+      - {metric: out_share_admits, kind: range_each_cohort, min: 0.67, max: 0.72}
+      - {metric: out_share_enrolled, kind: range_each_cohort, min: 0.49, max: 0.53}
+      - {metric: out_share_enrolled, kind: falling}
+      # "about 0.15": tolerance of 0.01 is a judgment call (docs/shape_targets.md)
+      - {metric: yield_out, kind: range_each_cohort, min: 0.14, max: 0.16}
+      - {metric: yield_in, kind: range_each_cohort, min: 0.33, max: 0.35}
+
+  - name: admit_rates_by_score_group
+    asserted: false
+    checks:
+      - {metric: admit_rate_upper, kind: near_by_cohort, values: [0.94, 0.85, 0.79], tol: 0.03}
+      - {metric: admit_rate_lower, kind: near_by_cohort, values: [0.33, 0.30, 0.25], tol: 0.03}
+      - {metric: admit_rate_upper, kind: falling}
+
+  - name: admit_rates_by_gpa
+    asserted: false
+    checks:
+      - {metric: admit_rate_gpa_hi, kind: range_each_cohort, min: 0.79, max: 0.85}
+      - {metric: admit_rate_gpa_lo, kind: range_each_cohort, min: 0.22, max: 0.31}
+
+  - name: yield_by_group
+    asserted: true
+    checks:
+      - {metric: yield_upper, kind: range_each_cohort, min: 0.18, max: 0.21}
+      - {metric: yield_lower, kind: range_each_cohort, min: 0.22, max: 0.23}
+      - {metric: yield_gpa_hi, kind: range_each_cohort, min: 0.12, max: 0.20}
+      - {metric: yield_gpa_lo, kind: range_each_cohort, min: 0.23, max: 0.29}
+      - {metric: yield_overall, kind: range_each_cohort, min: 0.209, max: 0.214}
+
+  - name: applicant_pool
+    asserted: false
+    checks:
+      - {metric: apps_total, kind: range_each_cohort, min: 1450, max: 1630}
+      # "rises from about 0.18 to 0.27"; the middle value is interpolated
+      - {metric: upper_share_apps, kind: near_by_cohort, values: [0.18, 0.225, 0.27], tol: 0.02}
+
+  - name: awards
+    asserted: false
+    checks:
+      - {metric: award_share_upper, kind: near_by_cohort, values: [0.98, 0.87, 0.79], tol: 0.03}
+      - {metric: award_share_lower, kind: near_by_cohort, values: [0.32, 0.26, 0.25], tol: 0.03}
+      - {metric: top_rung_equals_tuition, kind: flag}
+      # history steps only; the plan step (6.0%) is config tuition_increase_by_year
+      - {metric: tuition_growth_pct, kind: near_list, values: [3.7, 4.0], tol: 0.2}
+
+  - name: class_range
+    asserted: true
+    checks:
+      - {metric: class, kind: range_each_cohort, min: 133, max: 146}
+
+  - name: class_upper_share
+    asserted: false
+    checks:
+      # "rises from about 0.35 to 0.53"; the middle value is interpolated
+      - {metric: upper_share_enrolled, kind: near_by_cohort, values: [0.35, 0.44, 0.53], tol: 0.03}
+
+  - name: cell_sparsity
+    asserted: false
+    checks:
+      - {metric: median_admits_active, kind: range_each_cohort, min: 8, max: 12}
+      - {metric: share_active_under10_admits, kind: range_each_cohort, min: 0.45, max: 0.55}
+      - {metric: share_active_under10_enrolled, kind: min_each_cohort, min: 0.90}
+
+  - name: confounding
+    asserted: true
+    checks:
+      # admit-weighted WLS of cell yield (points) on award ($1,000), pooled over cohorts and active cells
+      - {metric: confounding_raw, kind: range_pooled, min: -0.17, max: -0.04}
+      # same, with indicators for score group, GPA class and residency
+      - {metric: confounding_adjusted, kind: range_pooled, min: -0.9, max: 0.1}
+
+# Synthetic assumptions with no fixture source (recorded in docs/shape_targets.md; set in config/synthetic.yaml)
+synthetic_assumptions:
+  segment_share_of_out: {upper: 0.25, lower: 0.25}
+  segment_yield_offset_pts: 0
+  segment_apps_trend: 0
+  true_slope_pts_per_1000: 1.2

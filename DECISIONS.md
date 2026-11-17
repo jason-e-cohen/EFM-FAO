@@ -4,6 +4,20 @@
 
 ## 1. Decisions by date
 
+### November 17, 2026 (Jason): Phase 1 review (`Review_Phase1_Build.md`)
+
+Applied as spec v0.6.1 (tags **[v0.6.1, R-n]** and **[v0.6.1, OP-n]** for the builder's open points).
+
+| Decision | IDs |
+|---|---|
+| Excel computes yield from the same formula as Python, in one Ledger column; the Response rung table is display only; both switch to rung interpolation together when the pipeline supplies a rung table (option A) | R-01, OP-2 |
+| Phase 1.1 fix pass before Phase 2: Python tests for every interface-contract output (test 19) and an on-demand mutation check (test 20); shrink path leaves uncut cells' rates unchanged; scaled net-tuition example uses base-cycle awards | R-02 to R-05, R-07 |
+| Spec records the code's unstated choices: double clip, 90% ranges clipped at zero, pooling fallback chain, fractional admits | R-08, OP-7a, OP-7b |
+| Full-tuition flag per cell (Levers column, inherited from the parent); `segment` scenario field; GPA median threshold equals the class boundary | OP-1, OP-5, OP-7d |
+| Class-band probability asserted at expected class 50 or more; segment "approximate" flag below 30 expected; rho applies to the median in test 4 | OP-3, OP-4 |
+| Test 5 is a calibration check of the stopgap generator; its confounding row is reported, not asserted, until W0L | R-06, OP-6 |
+| Richmond tuition stays null in config until Richmond's published figures and OD-09 arrive; needed before Phase 3 | OP-8 |
+
 ### November 16, 2026 (Jason): Session B design audit accepted in full
 
 Source: `Audit_Session_B_Design_Report.md`. Applied in `Prototype_Spec_Scenario_Workbook_v0.6.md`, `02_methodology_v2.8.md`, `S1_Requirements_and_User_Stories.md` v1.3, `03_technical_roadmap_v2.8.md`, `01_executive_read_v2.8.md`, `Handoff_Prototype_Phase1.md`, `CLAUDE.md` and the data request v3 source. Tags: **[v0.6, Bn-m]**, **[v2.8, Bn-m]**, **[v1.3, Bn-m]**.

@@ -1,0 +1,83 @@
+# Richmond client config (spec section 2). Client-confidential: Richmond values live only here (spec rule 7).
+# Values are those stated in Prototype_Spec_Scenario_Workbook_v0.6.md section 2 and CLAUDE.md.
+#
+# PENDING (Jason): tuition_by_cohort and tuition_base are null on purpose. The only source on hand is the
+# Yellow Arrows fixture, whose cell values may not be copied into config (spec rule 3). Enter Richmond's published
+# tuition by cohort; until then sw.config.load raises an error naming these fields.
+
+client:
+  id: richmond_law
+  name: University of Richmond School of Law
+  vertical: law
+  small_cell_policy: none          # named, authenticated roles only; methodology section 9 [v0.6, B2-3]
+
+cycle:
+  base_cycle: 2026
+  plan_cycle: 2027
+  history: [2024, 2025, 2026]
+
+tuition_by_cohort: null            # PENDING: {2024: ..., 2025: ..., 2026: ...}
+tuition_base: null                 # PENDING: tuition in base_cycle
+tuition_increase_by_year: {2027: 5.5}   # planning figure, unconfirmed until Brandon supplies it (OD-09); reproduce mode uses 6.0
+tuition_rounding_usd: 50
+
+score:
+  measure: LSAT
+  bands: [170, 167, 166, 165, 161, 158, 154, 152, 0]
+  pool_threshold: 165
+  floor: 154
+  median_thresholds: [166, 165]
+
+gpa:
+  measure: UGPA
+  hi_at_or_above: 3.83
+  classes: [hi, lo, blank]
+  median_threshold: 3.83
+
+unscored_in_median: excluded       # pending the 509 instructions (O41); reproduce mode uses below
+
+class:
+  cap: 140                         # hard this cycle
+  target: 140
+  band: 4
+  what_if: [100, 105, 110, 115, 120, 125, 130, 135, 140]
+  supported_range: [100, 140]
+  # reject_range: product default 0.6 x cap to 1.1 x cap
+
+need:
+  total: 200000
+  reference_class: 140
+
+ntr_target: null
+discount_target: null              # which discount rate the Dean means is open (OD-05)
+
+risk:
+  common_shock_sd: 0.10            # illustrative until calibrated (O37)
+  shock_source: illustrative
+  shock_corr_above_below: 1.0
+  sensitivity_slopes: {low: 0.5, middle: 1.0, high: 1.5}   # placeholders (D6)
+  yield_floor: {upper: 0.03, lower: 0.03}
+  yield_cap: {upper: 0.60, lower: 0.60}
+  yield_shift_grid: [-3, -2, -1, 0, 1, 2, 3]
+  pool_grid: [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6]
+  tuition_grid: [5.0, 5.5, 6.0, 6.5]
+
+pooling_k: 20
+integer_admits: false
+integer_enrolled: false
+evidence_tolerance_usd: 2500
+
+segments:
+  - name: target_states
+    within: {residency: out}
+    members_label: NY, PA
+    share_source: assumed          # until state-level counts arrive
+
+trim:
+  protect_segment: below_threshold
+  floor_rate: 0.0
+  exempt_cells: []
+
+pool_ytd_growth: null
+small_cell_suppression: none
+marginal_admit_yield_slope: 0
