@@ -4,6 +4,10 @@
 
 ## 1. Decisions by date
 
+### November 18, 2026 (Jason): spec v0.6.3
+
+Applied as section 0A of `Prototype_Spec_Scenario_Workbook_v0.6.md`: Brandon's points BM-1 to BM-6 as designed in `Review_Phase2_2_Plan.md` section 3 (for Phase 2.2), the Phase 3 reproduce rules (R3), and the Scenario 4 deliverable scope. Methodology Appendix F gains item 26 (score percentiles). Phase 2.2 runs from the `phase3-accepted` commit; reproduce-mode need-aid rounding per enrollee is added to it.
+
 ### November 18, 2026 (Jason): Phase 3 accepted
 
 Reproduce mode meets its criteria: 57 of 57 derivable criteria pass (3 Baseline criteria not derivable from the file; 2 cells not reproducible from the file, excluded and counted). Desktop Excel parity measured on the reproduce sentinel build `08c50a6fabaf` (Excel for Mac 16): 29,063 formula cells, 0 value mismatches, 0 cells still at -999, 0 formula-text differences; the rounding probe gives 3 in Excel, Python and LibreOffice, so the 15-significant-digit rounding stands (`output/phase3/excel_compare_report.json`). Mutation checks: Python 115 of 115, Excel 75 of 75 (before the sentinel file-name fix, which changed no formula). The History sheet's 509 check confirms the lower-band mismatch (LSAT 25th percentile in 2024 and 2025, median in 2024); OD-14 holds Scenario 4's median and percentile rows.
@@ -104,7 +108,7 @@ Source: `Audit_Session_B_Design_Report.md`. Applied in `Prototype_Spec_Scenario_
 - Class target under a hard cap (140 this cycle), supported 100 to 140; glide path toward 100 to 115 over five years, Brandon to confirm.
 - Shrink order: lowest LSAT band first, then GPA, target cells last (refined Nov 16, B1-16).
 - Application lift for the target group included, default 0.
-- Richmond planning tuition 5.5%, unconfirmed; reproduce mode 6.0%.
+- Richmond planning tuition 5.5%, unconfirmed; reproduce mode 6.0%. **Superseded Nov 18:** 2027 tuition is $63,500 in dollars (BM-2).
 - Data request additions: state-level counts, pacing, tuition path, class path.
 - Client facts from Dean Rooksby's note stay confidential to Richmond.
 
@@ -143,7 +147,7 @@ Net-price yield response; goal-seek helper and schedule authoring layer; dashboa
 | OD-13 | The percentile target Brandon wants (placeholder 25th percentile at 158) | Brandon |
 | OD-14 | Which LSAT the Yellow Arrows grid bands students by (highest, most recent or average); holds Scenario 4's median and percentile rows | Brandon |
 | OD-15 | Whether "full ride" means full tuition with no stipend (BM-8) | Brandon |
-| O41 | ABA 509 basis for unscored students in percentiles; how deferrals enter 509 yield | Jason (509 instructions) |
+| O41 | Basis closed Nov 18 (509 excludes unscored students, as the fixture does). Still open: the 509's exact percentile interpolation convention (immaterial at band level) and how deferrals enter 509 yield | Jason (509 instructions) |
 | O43 | Small-cell rule for files, the policy document and public material (methodology section 9) | Cat |
 | O36 | Screen re-run without the guardrail (frozen until a client considers a price test) | Later |
 | O37 | Year-shock calibration from public data | Phase 2 or before the live build |

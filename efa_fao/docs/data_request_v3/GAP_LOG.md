@@ -123,3 +123,10 @@ Applied on Jason's acceptance of `Audit_Session_B_Design_Report.md`:
 - **B2-11:** `aid_policy.guardrail_max_cut_pct` (the removed 5% guardrail) replaced by `client_max_cut_pct`: any limit the client's own policy sets, reported against, never imposed.
 - **B3-4:** `early_funnel_by_state.deposits` is labeled net of withdrawals by census; `early_pacing.deposits_cumulative` is labeled gross; `early_pacing.applications_cumulative` counts complete applications (the Applicant definition); `early_pacing.lsat_band` added (conditional) so growth in high-LSAT applications can be computed at the same week of the cycle.
 - Law and undergraduate outputs regenerated; `test_spec.py` 8 of 8 pass (plain Python loop).
+
+## 9. Spec v0.6.3 additions (November 18, 2026)
+
+- **R3-4:** `early_funnel_by_state.lsat_band` now asks for bands by each applicant's highest LSAT (the ABA 509 basis), because the History-sheet 509 check found the scenario workbook's lower bands disagree with Richmond's 509 percentiles.
+- **BM-4:** `early_planning_path.continuing_ntr_usd` (conditional): continuing-student net tuition for the plan year, for a revenue goal stated for the whole JD body.
+- **BM-1:** `early_planning_path.lsat_p25_target` and `lsat_p10_target` (conditional): the scores the school tracks at those percentiles.
+- Outputs regenerated; `test_spec.py` passes (plain Python loop).

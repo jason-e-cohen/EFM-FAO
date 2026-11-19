@@ -482,7 +482,7 @@ Required: Y = send it; C = send it under the condition stated; N = optional; bla
 |---|---|---|---|---|---|
 | `cohort` | int | Y | 1 | Entering class year. Send the last three completed cycles. | Four-digit year |
 | `state` | text | Y | 1 | State of the permanent address at application, as two-letter USPS codes. One row per state. Use XX for unknown and ZZ for outside the United States. Aggregate counts only. This is not the student-level `region_code`, and it carries no ZIP3. | Two-letter USPS code; XX; ZZ |
-| `lsat_band` | text | C | 1 | LSAT band of the applicant, if you can aggregate by band. Leave blank for the all-bands row. Send your own band edges and tell us what they are. Include a row with a blank band if you send bands, so the rows sum to the state total. | Your band label, as defined in your own reports |
+| `lsat_band` | text | C | 1 | LSAT band of the applicant, by each applicant's highest LSAT score (the score you report to the ABA), if you can aggregate by band. Leave blank for the all-bands row. Send your own band edges and tell us what they are. Include a row with a blank band if you send bands, so the rows sum to the state total. | Your band label, as defined in your own reports |
 | `applications` | int | Y | 1 | Applicants for the cohort, state and band, by the Applicant definition in this request. Send the count as it is, including small counts. Please do not suppress or round. | Whole number, zero or more |
 | `admits` | int | Y | 1 | Applicants offered admission, including from the waiting list, by the Admitted definition in this request. | Whole number, zero or more |
 | `deposits` | int | Y | 1 | Net deposits: admits who paid the first enrollment deposit and had not withdrawn by the cohort's census date. (Weekly pacing counts gross deposits.) State which deposit you count if you use two. | Whole number, zero or more |
@@ -511,6 +511,9 @@ Required: Y = send it; C = send it under the condition stated; N = optional; bla
 | `ug_tuition_usd` | decimal | Y | 1 | Published annual undergraduate tuition at your university for the same year, in dollars. Used for the tuition comparison between your programs. | Dollars |
 | `class_size_target` | int | Y | 1 | Target size of the entering JD class for that year. | Whole number |
 | `class_cap` | int | C | 1 | Hard cap on the entering class for that year, if there is one. Leave blank if the target is soft. | Whole number |
+| `continuing_ntr_usd` | decimal | C | 1 | Net tuition you expect from continuing JD students (second and third years) in that year, in dollars, after their scholarships. Needed if your revenue goal covers the whole JD student body rather than the entering class. Send your budget figure; we hold it fixed. | Dollars |
+| `lsat_p25_target` | int | C | 1 | The LSAT score you aim to hold at the 25th percentile of the entering class, if you track one. | LSAT score |
+| `lsat_p10_target` | int | C | 1 | The LSAT score you watch at the 10th percentile of the entering class, if you track one. | LSAT score |
 | `figure_status` | text | Y | 1 | Whether the tuition and class figures in the row are actual, decided but not yet published, or planned and still open to change. | Actual; Decided; Planned |
 
 
