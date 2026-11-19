@@ -411,3 +411,26 @@ def test_history_509_block_reached(repro_syn_wb):
     texts = [ws.cell(r, 3).value for r in range(1, ws.max_row + 1)]
     for sm in summaries:
         assert sm in texts
+
+
+def test_phase22_coverage(main_wb, edge_wb):
+    """[v0.6.3] The main and edge workbooks cover at least three percentile targets, one with fewer than 20 expected
+    below t (the 'approximate' label); the edge config adds all_jd, above_floor and a tuition_by_year_usd year, and its
+    growth to date has no as-of date."""
+    from sw import labels, risk
+    for bundle in (main_wb, edge_wb):
+        run = bundle["info"]["run"]
+        targets = risk.pct_targets(run.cfg)
+        assert len(targets) >= 3 and {q for q, _ in targets} - {0.5}
+        lc = run.lcs[run.scenarios[0].name]["middle"]
+        flags = [risk.pct(lc, q, t)["approximate"] for q, t in targets]
+        assert labels.PCT_APPROX_LABEL in flags and "" in flags
+    cfg = edge_wb["info"]["run"].cfg
+    assert cfg["ntr_goal_basis"] == "all_jd" and cfg["continuing_ntr_usd"] > 0
+    assert cfg["trim"]["protect_segment"] == "above_floor"
+    assert cfg["tuition_by_year_usd"] and cfg["cycle"]["plan_cycle"] in cfg["tuition_by_year_usd"]
+    assert cfg["pool_ytd_growth"] is not None and cfg["pool_ytd_as_of"] is None
+    base = edge_wb["info"]["run"].scenarios[0]
+    assert edge_wb["info"]["run"].lcs[base.name]["middle"].tuition == cfg["tuition_by_year_usd"][2027]
+    d = edge_wb["info"]["vals"]["sk"][(base.name, "middle")]
+    assert d["p_jd_ntr_ge_goal"] is not None and d["jd_ntr"] is not None

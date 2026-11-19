@@ -9,7 +9,7 @@ yield at the cap and at the floor (outer clip)     "Clip at floor and cap": in-s
 response clipped before the shift (inner clip)     "Inner clip": in-0-hi award raised to 90,000 (yield above the cap
                                                     before the -10 shift); out-167-hi award cut to 0 (below the floor
                                                     before the +5 shift)
-unflagged award above tuition                       "Inner clip": in-0-hi lever 90,000 against tuition 57,150
+unflagged award above tuition                       "Inner clip": in-0-hi lever 90,000 against tuition 57,000
 in-state yield-shift override                       both scenarios above; "Global shift, in-state override" sets a
                                                     non-zero global shift too, so replacing and adding differ
                                                     [v0.6.2, P21-02]
@@ -26,6 +26,11 @@ budget basis merit, history reconciliation          budget_total and budget_basi
 bonus_pool_usd, named segment on Baseline           "Goal 24.3"; Baseline names its segment
 scaled-line example award (Q-5)                     "Example award edges": zero-award cells flagged (left out), an
                                                     unflagged award between base-cycle and plan tuition (left out)
+[v0.6.3] revenue goal under all_jd                  ntr_goal_basis all_jd with continuing_ntr_usd (BM-4)
+[v0.6.3] segment protection above the floor         trim.protect_segment above_floor (BM-5)
+[v0.6.3] tuition in dollars                         tuition_by_year_usd for the plan year (BM-2)
+[v0.6.3] growth to date without a date              pool_ytd_growth set, pool_ytd_as_of blank (BM-6)
+[v0.6.3] percentile targets                         synthetic.yaml's four, one with fewer than 20 expected below t
 """
 import copy
 import os
@@ -36,6 +41,8 @@ import yaml
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SEED = 101
 EXEMPT = ["out-0-lo", "in-unscored-lo"]
+CONTINUING = 8000000          # synthetic continuing-student net tuition (all_jd)
+TUITION_2027 = 57000          # synthetic plan-year tuition in dollars (a multiple of tuition_rounding_usd)
 
 
 def world(cfg):
@@ -66,12 +73,19 @@ def config_dict():
     e["client"]["id"] = "synthetic_edge"
     e["client"]["name"] = "Synthetic law world (edge workbook)"
     e["risk"]["shock_corr_above_below"] = 0.5
-    e["trim"] = {"protect_segment": "below_threshold", "floor_rate": 0.2, "exempt_cells": list(EXEMPT)}
+    e["trim"] = {"protect_segment": "above_floor", "floor_rate": 0.2, "exempt_cells": list(EXEMPT)}
     e["pooling_min_admits"] = segment_pool_min(cells, cfg)
     e["class"]["what_if"] = [60, 80, 100, 120, 130, 150]
     e["budget_total"] = 1500000
     e["budget_basis"] = "merit"
     e["merit_actual_by_cohort"] = {2024: 1900000, 2025: 2100000}
+    # [v0.6.3] Phase 2.2 branches
+    e["ntr_goal_basis"] = "all_jd"
+    e["continuing_ntr_usd"] = CONTINUING
+    e["ntr_target"] = raw["ntr_target"] + CONTINUING
+    e["tuition_by_year_usd"] = {2027: TUITION_2027}
+    e["pool_ytd_growth"] = 0.33
+    e["pool_ytd_as_of"] = None
     for c in EXEMPT:
         assert c in list(cells.cell_id), c
     return e

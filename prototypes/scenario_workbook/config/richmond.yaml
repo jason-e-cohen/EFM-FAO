@@ -18,7 +18,10 @@ cycle:
 
 tuition_by_cohort: null            # PENDING: {2024: ..., 2025: ..., 2026: ...}
 tuition_base: null                 # PENDING: tuition in base_cycle
-tuition_increase_by_year: {2027: 5.5}   # planning figure, unconfirmed until Brandon supplies it (OD-09); reproduce mode uses 6.0
+# 2027 tuition in dollars [v0.6.3, BM-2]: $63,500 proposed (Brandon, Nov 17; confirmed by Jason Nov 18; Board approval
+# February 2027). Baseline's increase is the implied 100 x (63,500 / tuition_base - 1), unrounded. The 5.5% planning
+# placeholder is retired. Reproduce mode ignores this and uses reproduce.tuition_increase_pct with the fixture's tuition.
+tuition_by_year_usd: {2027: 63500}
 tuition_rounding_usd: 50
 
 score:
@@ -26,7 +29,13 @@ score:
   bands: [170, 167, 166, 165, 161, 158, 154, 152, 0]
   pool_threshold: 165
   floor: 154
-  median_thresholds: [166, 165]
+  # [v0.6.3, BM-1] percentile targets {q, t}; t must be a band lower bound. The two medians as before; q = 0.25 at 158 is
+  # a placeholder: the nearest band bound at or below Richmond's published ABA 509 25th percentile (158 in 2024, 159 in
+  # 2025) until Brandon names the target (OD-13). q = 0.10 is unset. score.median_thresholds is derived (q = 0.5).
+  percentile_targets:
+    - {q: 0.5, t: 166}
+    - {q: 0.5, t: 165}
+    - {q: 0.25, t: 158}          # placeholder, nearest band bound at or below the 509 figure; OD-13
 
 gpa:
   measure: UGPA
@@ -49,6 +58,8 @@ need:
   reference_class: 140
 
 ntr_target: null
+ntr_goal_basis: entering_y1        # [v0.6.3, BM-4] all_jd needs continuing_ntr_usd from Richmond (data need)
+continuing_ntr_usd: null
 discount_target: null              # which discount rate the Dean means is open (OD-05)
 
 risk:
@@ -89,10 +100,11 @@ segments:
     share_source: assumed          # until state-level counts arrive
 
 trim:
-  protect_segment: below_threshold
+  protect_segment: above_floor     # [v0.6.3, BM-5] NY/PA protected only at or above score.floor (Brandon, Nov 17)
   floor_rate: 0.0
   exempt_cells: []
 
-pool_ytd_growth: null
+pool_ytd_growth: null              # [v0.6.3, BM-6] applications at or above score.pool_threshold vs the same week last cycle
+pool_ytd_as_of: null
 small_cell_suppression: none
 marginal_admit_yield_slope: 0

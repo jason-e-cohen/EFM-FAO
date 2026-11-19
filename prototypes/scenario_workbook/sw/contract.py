@@ -6,6 +6,9 @@ workbook and the tests:
 
   grain s x k      rows: cases (low, middle, high); columns: scenarios (Baseline first)
   grain s x k x t  rows: for each threshold t (median targets, or score thresholds for shares), the three cases
+  grain s x k x target  rows: for each percentile target (q, t) in config order, the three cases [v0.6.3, BM-1]
+  PCT_BAND_Q       rows: q = 0.25, 0.75; columns: scenarios; the spread band's lower bound (Middle case)
+  POOL_BREAKEVEN_M rows: scenarios; columns: m_class, then m_q for each percentile target [v0.6.3, BM-6]
   strips (s x p, s x d, s x m, s x N)  rows: for each scenario, the grid values; columns: the fields in STRIP_COLUMNS
   per-scenario lines and break-evens   rows: scenarios; one column
   AWARD_MATRIX     rows: cells (workbook order); columns: scenarios; the resolved award (plan-year dollars)
@@ -35,7 +38,7 @@ SK = [  # (name, prefix, python source)
     ("gross_y1", "SUM", "ledger.money"), ("merit", "SUM", "ledger.money"), ("need", "SUM", "ledger.money"),
     ("specialty", "SUM", "ledger.money"), ("aid", "SUM", "ledger.money"), ("ntr_y1", "SUM", "ledger.money"),
     ("discount_entering_y1", "SUM", "ledger.money"), ("avg_aid", "SUM", "ledger.money"),
-    ("p_ntr_y1_ge_target", "SUM", "risk.ntr"),
+    ("p_ntr_y1_ge_target", "SUM", "risk.ntr"), ("p_jd_ntr_ge_goal", "SUM", "risk.ntr (all_jd)"),
     ("full_tuition_n", "SUM", "ledger.kpis"), ("no_merit_award_n", "SUM", "ledger.kpis"),
     ("barbell", "SUM", "ledger.kpis"),
     ("evidence_extrapolated_share", "SUM", "response.evidence"),
@@ -50,6 +53,10 @@ SK = [  # (name, prefix, python source)
 SKT = [("margin_t", "SUM", "risk.median"), ("p_median_t", "SUM", "risk.median"),
        ("p_median_t_rho05", "SUM", "risk.median")]
 SKT_SHARE = [("share_at_or_above_t", "SUM", "ledger.kpis")]
+SKQ = [("margin_q_t", "SUM", "risk.pct"), ("p_pct_q_t", "SUM", "risk.pct"),           # [v0.6.3, BM-1]
+       ("p_pct_q_t_rho05", "SUM", "risk.pct")]
+PER_SCENARIO_Q = [("pct_band_q", "SUM", "risk.pct_band")]                              # rows q, columns s
+POOL_BE = [("pool_breakeven_m", "PS", "strip.pool_strip")]                            # rows s, columns m_class, m_q
 PER_SCENARIO = [("net_tuition_line_fixed", "TW", "strip.tuition"), ("net_tuition_line_scaled", "TW", "strip.tuition"),
                 ("breakeven_shift_class", "YS", "strip.yield_strip"),
                 ("breakeven_shift_ntr", "YS", "strip.yield_strip")]
@@ -77,11 +84,16 @@ def strip_columns(cfg):
     med = []
     for meas, t in targets:
         med += [f"margin_{meas}_{t:g}", f"p_median_{meas}_{t:g}"]
+    pq = [(q, t) for q, t in risk.pct_targets(cfg)]
+    pct_cols = []
+    for q, t in pq:
+        pct_cols += [f"margin_q{q:g}_{t:g}", f"p_pct_q{q:g}_{t:g}"]
     return {
         "tuition_whatif": ["tuition", "ntr_y1", "net_tuition_per_student", "discount_entering_y1"],
         "yield_strip": ["class_mean", "p_class_over_cap", "p_class_in_band", "ntr_mean", "p_ntr_y1_ge_target"] + med,
-        "pool_strip": ["growth", "class_mean", "p_class_over_cap", "margin", "p_median", "ntr_mean", "ntr_sd"],
-        "class_table": (["f", "class_mean"] + med
+        "pool_strip": (["growth", "class_mean", "p_class_over_cap", "margin", "p_median", "ntr_mean", "ntr_sd"]
+                       + [f"p_pct_q{q:g}_{t:g}" for q, t in pq] + ["marker"]),          # [v0.6.3, BM-6]
+        "class_table": (["f", "class_mean", "p_class_over_cap"] + med + pct_cols          # [v0.6.3, BM-3, BM-1]
                         + ["ntr_y1", "discount_entering_y1", "segment_enrolled", "lowest_band_admitted"]
                         + [f"cut_{'unscored' if b == 'unscored' else format(b, 'g')}" for b in band_keys(cfg)]
                         + ["status"]),
@@ -107,8 +119,10 @@ def compute(run):
     """Every figure the workbook shows, from the Python reference functions. Returns a nested dict."""
     cfg, cells, base = run.cfg, run.cells, run.base
     targets = risk.median_targets(cfg)
+    ptargets = risk.pct_targets(cfg)
     out = {"sk": {}, "strips": {}, "lines": {}, "parts": {}, "ct_rates": {}, "seg_exact": {}, "conflicts": {},
-           "targets": targets, "score_ts": L.score_thresholds(cfg),
+           "targets": targets, "ptargets": ptargets, "score_ts": L.score_thresholds(cfg), "pct_band": {},
+           "pool_be": {},
            "history_reconciliation": L.history_reconciliation(cells, cfg),
            "aba509_reconciliation": L.aba509_reconciliation(cells, cfg)}
     for s in run.scenarios:
@@ -136,7 +150,14 @@ def compute(run):
                 "segment_approximate": sg["approximate"],
                 "kpis": kp, "money": mo,
                 "median": {(m, t): risk.median(lc, m, t) for m, t in targets},
+                "pct": {(q, t): risk.pct(lc, q, t) for q, t in ptargets},
                 "incentive_cost": mo["incentive_cost"],
+                # [v0.6.3, BM-4] P(continuing + ntr_y1 >= ntr_target) under all_jd: the same event as ntr_y1 >= the
+                # effective target; None under entering_y1
+                "p_jd_ntr_ge_goal": (nt.get("p_ntr_y1_ge_target") if cfg.get("ntr_goal_basis") == "all_jd"
+                                     else None),
+                "jd_ntr": (cfg["continuing_ntr_usd"] + mo["ntr_y1"] if cfg.get("ntr_goal_basis") == "all_jd"
+                           else None),
             }
             for key in ("gross_y1", "merit", "need", "specialty", "aid", "ntr_y1", "discount_entering_y1", "avg_aid"):
                 d[key] = mo[key]
@@ -153,6 +174,7 @@ def compute(run):
             out["sk"][(s.name, k)] = d
         out["seg_exact"][s.name] = out["sk"][(s.name, "middle")]["p_segment_goal_exact"]
         lcm = run.lcs[s.name]["middle"]
+        out["pct_band"][s.name] = {q: risk.pct_band(lcm, q) for q in risk.SPREAD_QS}
         tw = strip.tuition(lcm)
         ys = strip.yield_strip(lcm)
         ps = strip.pool_strip(cells, cfg, s, base)
@@ -163,6 +185,7 @@ def compute(run):
                                 "breakeven_shift_class": ys["breakeven_shift_class"],
                                 "breakeven_shift_ntr": ys["breakeven_shift_ntr"]}
         out["parts"][s.name] = ps["parts"]
+        out["pool_be"][s.name] = [ps["pool_breakeven_m"]["class"]] + [ps["pool_breakeven_m"][k] for k in ptargets]
         out["conflicts"][s.name] = L.full_tuition_conflicts(cells, cfg, s, p)
         out.setdefault("award_changes", {})[s.name] = L.award_changes(cells, cfg, s, p)
         out["price_of_target"] = out.get("price_of_target", {})
@@ -193,15 +216,18 @@ def strip_rows(run, vals, which):
             for r in st["pool_strip"]:
                 rows.append((s.name, r["pool_multiplier"],
                              [r["growth"], r["class_mean"], r["p_class_over_cap"], r["margin"], r["p_median"],
-                              r["ntr_mean"], r["ntr_sd"]]))
+                              r["ntr_mean"], r["ntr_sd"]] + [r["pct"][k]["p"] for k in vals["ptargets"]]
+                             + [r["marker"]]))
         else:
             for r in st["class_table"]:
                 if "class_mean" not in r:
                     v = [r["f"]] + [None] * (len(cols) - 2) + [r["status"]]
                 else:
-                    v = [r["f"], r["class_mean"]]
+                    v = [r["f"], r["class_mean"], r["p_class_over_cap"]]
                     for key in targets:
                         v += [r["median"][key]["margin"], r["median"][key]["p"]]
+                    for key in vals["ptargets"]:
+                        v += [r["pct"][key]["margin"], r["pct"][key]["p"]]
                     v += [r["ntr_y1"], r["discount_entering_y1"], r["segment_enrolled"], r["lowest_band_admitted"]]
                     cut = r["admits_cut_by_band"]
                     v += [cut.get(b, 0.0) for b in band_keys(cfg)]
@@ -224,6 +250,11 @@ def dump(run, vals=None):
                                          for tg in vals["targets"] for k in CASES]
     out["SUM_SHARE_AT_OR_ABOVE_T"] = [[_num(vals["sk"][(s, k)]["kpis"]["share_at_or_above_t"][t]) for s in names]
                                       for t in vals["score_ts"] for k in CASES]
+    for name, prefix, _ in SKQ:
+        out[range_name(name, prefix)] = [[_num(vals["sk"][(s, k)]["pct"][tg][name]) for s in names]
+                                         for tg in vals["ptargets"] for k in CASES]
+    out["SUM_PCT_BAND_Q"] = [[_num(vals["pct_band"][s][q]) for s in names] for q in risk.SPREAD_QS]
+    out["PS_POOL_BREAKEVEN_M"] = [[_num(x) for x in vals["pool_be"][s]] for s in names]
     for name, prefix, _ in PER_SCENARIO:
         out[range_name(name, prefix)] = [[_num(vals["lines"][s][name])] for s in names]
     for which, prefix, _ in STRIPS:
@@ -237,6 +268,9 @@ def contract_table():
     """(range name, contract name, grain, python source) for the README and test 9."""
     rows = [(range_name(n, p), n, "s x k", src) for n, p, src in SK]
     rows += [(range_name(n, p), n, "s x k x t", src) for n, p, src in SKT + SKT_SHARE]
+    rows += [(range_name(n, p), n, "s x k x target", src) for n, p, src in SKQ]
+    rows += [(range_name(n, p), n, "s x q", src) for n, p, src in PER_SCENARIO_Q]
+    rows += [(range_name(n, p), n, "s x (class, target)", src) for n, p, src in POOL_BE]
     rows += [(range_name(n, p), n, "s", src) for n, p, src in PER_SCENARIO]
     rows += [(range_name(n, p), f"{n}[grid]", "s x grid", src) for n, p, src in STRIPS]
     rows += [("AWARD_MATRIX", "award_matrix", "s x cell", "ledger.awards")]
@@ -250,7 +284,8 @@ def python_only_table():
 
 def label_for(name):
     if name in ("p_class_over_cap", "p_class_in_band", "class_mean", "class_lo90", "class_hi90", "margin_t",
-                "p_median_t", "p_median_t_rho05", "p_ntr_y1_ge_target"):
+                "p_median_t", "p_median_t_rho05", "p_ntr_y1_ge_target", "margin_q_t", "p_pct_q_t",
+                "p_pct_q_t_rho05", "p_jd_ntr_ge_goal"):
         return "SHOCK_LABEL"
     if name.startswith("segment") or name == "p_segment_goal":
         return "RESPONSE_LABEL, SEGMENT_SHARE_LABEL"

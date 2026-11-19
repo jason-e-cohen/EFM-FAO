@@ -19,8 +19,8 @@ class ConfigError(ValueError):
 REQUIRED = [
     "client.id", "client.name", "client.vertical", "client.small_cell_policy",
     "cycle.base_cycle", "cycle.plan_cycle", "cycle.history",
-    "tuition_by_cohort", "tuition_base", "tuition_increase_by_year", "tuition_rounding_usd",
-    "score.measure", "score.bands", "score.pool_threshold", "score.floor", "score.median_thresholds",
+    "tuition_by_cohort", "tuition_base", "tuition_rounding_usd",
+    "score.measure", "score.bands", "score.pool_threshold", "score.floor",
     "gpa.measure", "gpa.hi_at_or_above", "gpa.classes", "gpa.median_threshold",
     "class.cap", "class.target", "class.band", "class.what_if",
     "need.total", "need.reference_class",
@@ -41,6 +41,11 @@ DEFAULTS = {
     "budget_basis": "total_aid",                  # [v0.6.2, Q-8e] total aid (merit + need + specialty) or merit
     "merit_actual_by_cohort": None,               # [v0.6.2, Q-8f] optional; feeds the history reconciliation
     "pool_ytd_growth": None,
+    "pool_ytd_as_of": None,                       # [v0.6.3, BM-6] date of pool_ytd_growth (display only)
+    "tuition_increase_by_year": {},               # [v0.6.3, BM-2] optional when tuition_by_year_usd covers the years
+    "tuition_by_year_usd": {},                    # [v0.6.3, BM-2] takes precedence over tuition_increase_by_year
+    "ntr_goal_basis": "entering_y1",              # [v0.6.3, BM-4] entering_y1 or all_jd
+    "continuing_ntr_usd": None,                   # [v0.6.3, BM-4] required under all_jd
     "mode": "live",                               # live or reproduce (spec section 9); reproduce builds come from
                                                   # sw/reproduce.py, which sets it
     "reproduce": None,                            # reproduce-mode settings (spec section 9; DECISIONS Nov 18)
@@ -52,6 +57,8 @@ ABA_509_KEYS = ("first_year_class", "without_score", "without_gpa", "score_p25",
                 "gpa_p25", "gpa_p50", "gpa_p75")
 
 SHOCK_SOURCES = ("illustrative", "public", "client")
+PROTECT_SEGMENT = ("below_threshold", "above_floor", "none")     # [v0.6.3, BM-5]
+NTR_GOAL_BASES = ("entering_y1", "all_jd")                       # [v0.6.3, BM-4]
 SCORE_GROUPS = ("upper", "lower")
 
 
@@ -124,9 +131,22 @@ def validate(raw):
             raise ConfigError(f"tuition_by_cohort has no value for history cohort {y}")
     if abs(tbc[cyc["base_cycle"]] - float(cfg["tuition_base"])) > 0.5:
         raise ConfigError("tuition_base must equal tuition_by_cohort at base_cycle")
-    cfg["tuition_increase_by_year"] = {int(k): float(v) for k, v in cfg["tuition_increase_by_year"].items()}
-    if cyc["plan_cycle"] not in cfg["tuition_increase_by_year"]:
-        raise ConfigError("tuition_increase_by_year has no value for plan_cycle")
+    cfg["tuition_increase_by_year"] = {int(k): float(v) for k, v in (cfg["tuition_increase_by_year"] or {}).items()
+                                       if v is not None}
+    # [v0.6.3, BM-2] tuition in dollars by plan year; precedence over the increase for the same year
+    tby = {int(k): float(v) for k, v in (cfg["tuition_by_year_usd"] or {}).items() if v is not None}
+    unit = float(cfg["tuition_rounding_usd"])
+    for y, v in tby.items():
+        if y <= cyc["base_cycle"]:
+            raise ConfigError(f"tuition_by_year_usd: {y} is not a plan year (after base_cycle)")
+        if v <= 0:
+            raise ConfigError("tuition_by_year_usd values must be positive")
+        if abs(v / unit - round(v / unit)) > 1e-9:
+            raise ConfigError(f"tuition_by_year_usd {y}: {v:g} is not a multiple of tuition_rounding_usd ({unit:g}), "
+                              "so the implied increase cannot reproduce it")
+    cfg["tuition_by_year_usd"] = tby
+    if cyc["plan_cycle"] not in cfg["tuition_increase_by_year"] and cyc["plan_cycle"] not in tby:
+        raise ConfigError("tuition_increase_by_year (or tuition_by_year_usd) has no value for plan_cycle")
 
     # score and GPA
     sc = cfg["score"]
@@ -136,9 +156,7 @@ def validate(raw):
     for key in ("pool_threshold", "floor"):
         if sc[key] not in bands:
             raise ConfigError(f"score.{key} must be one of score.bands")
-    for t in sc["median_thresholds"]:
-        if t not in bands:
-            raise ConfigError("each score.median_thresholds value must be one of score.bands")
+    _percentile_targets(sc, bands)
     g = cfg["gpa"]
     if list(g["classes"]) != ["hi", "lo", "blank"]:
         raise ConfigError("gpa.classes must be [hi, lo, blank]")
@@ -210,13 +228,89 @@ def validate(raw):
         cfg["merit_actual_by_cohort"] = mab
 
     # trim
-    if cfg["trim"]["protect_segment"] not in ("below_threshold", "none"):
-        raise ConfigError("trim.protect_segment must be 'below_threshold' or 'none'")
+    if cfg["trim"]["protect_segment"] not in PROTECT_SEGMENT:
+        raise ConfigError(f"trim.protect_segment must be one of {PROTECT_SEGMENT}")
+
+    # NTR goal basis [v0.6.3, BM-4]
+    if cfg["ntr_goal_basis"] not in NTR_GOAL_BASES:
+        raise ConfigError(f"ntr_goal_basis must be one of {NTR_GOAL_BASES}")
+    if cfg["continuing_ntr_usd"] is not None:
+        cfg["continuing_ntr_usd"] = float(cfg["continuing_ntr_usd"])
+    if cfg["ntr_goal_basis"] == "all_jd" and cfg["continuing_ntr_usd"] is None:
+        raise ConfigError("ntr_goal_basis all_jd needs continuing_ntr_usd (continuing-student net tuition, "
+                          "client-supplied)")
+
+    # pool growth to date [v0.6.3, BM-6]: the as-of date is text on Inputs (ISO date when YAML gives a date)
+    if cfg["pool_ytd_as_of"] is not None:
+        a = cfg["pool_ytd_as_of"]
+        cfg["pool_ytd_as_of"] = a.isoformat() if hasattr(a, "isoformat") else str(a)
+    pg = [float(x) for x in cfg["risk"]["pool_grid"]]
+    if pg != sorted(pg) or len(set(pg)) != len(pg):
+        raise ConfigError("risk.pool_grid must be strictly ascending (the growth-to-date marker reads it in order)")
 
     if float(cfg["marginal_admit_yield_slope"]) != 0.0:
         notes.append(labels.MARGINAL_ADMIT_NOTE.format(x=cfg["marginal_admit_yield_slope"]))
     cfg["_notes"] = notes
     return cfg
+
+
+def _percentile_targets(sc, bands):
+    """[v0.6.3, BM-1] score.percentile_targets: list of {q, t}; q in (0, 1) with at most two decimals, t a band lower
+    bound. The legacy score.median_thresholds [t, ...] loads as {q: 0.5, t} each. median_thresholds is kept as the
+    derived list of q = 0.5 thresholds (reproduce mode and the median rows read it). Both may be given only when they
+    agree (a validated config carries both, so validation is idempotent). At least one q = 0.5 target is required:
+    the Trim threshold is the first one."""
+    pts = sc.get("percentile_targets")
+    legacy = sc.get("median_thresholds")
+    if pts is None and legacy is None:
+        raise ConfigError("missing required config values: score.percentile_targets (or the legacy "
+                          "score.median_thresholds)")
+    if pts is None:
+        pts = [{"q": 0.5, "t": t} for t in legacy]
+    out = []
+    for p in pts:
+        if not isinstance(p, dict) or set(p) != {"q", "t"}:
+            raise ConfigError("each score.percentile_targets entry is {q, t}")
+        q, t = float(p["q"]), p["t"]
+        if not 0.0 < q < 1.0:
+            raise ConfigError(f"score.percentile_targets: q = {q:g} must lie strictly between 0 and 1")
+        if abs(q * 100 - round(q * 100)) > 1e-9:
+            raise ConfigError(f"score.percentile_targets: q = {q!r} has more than two decimals")
+        if t not in bands:
+            raise ConfigError(f"score.percentile_targets: t = {t} must be one of score.bands (a band lower bound)")
+        out.append({"q": round(q, 2), "t": t})
+    keys = [(p["q"], p["t"]) for p in out]
+    if len(set(keys)) != len(keys):
+        raise ConfigError("score.percentile_targets lists a target twice")
+    med = [p["t"] for p in out if p["q"] == 0.5]
+    if not med:
+        raise ConfigError("score.percentile_targets needs at least one q = 0.5 target (the median; the Trim order's "
+                          "threshold is the first one)")
+    if legacy is not None and list(legacy) != med:
+        raise ConfigError("score.median_thresholds and score.percentile_targets disagree; give percentile_targets "
+                          "only (median_thresholds is derived from its q = 0.5 targets)")
+    sc["percentile_targets"] = out
+    sc["median_thresholds"] = med
+
+
+def pct_lattice_n(q):
+    """Denominator n of q = m/n in lowest terms (q has at most two decimals, so n divides 100): the smallest divisor
+    k of 100 with q x k a whole number. The continuity correction is 1/(2n) [v0.6.3, BM-1]."""
+    for k in (1, 2, 4, 5, 10, 20, 25, 50, 100):
+        if abs(q * k - round(q * k)) < 1e-9:
+            return k
+    raise ConfigError(f"q = {q!r} has more than two decimals")
+
+
+def ntr_target_effective(cfg, target=None):
+    """The target every ntr_target figure reads [v0.6.3, BM-4]: ntr_target under entering_y1; under all_jd (ntr_target
+    is the total JD goal) ntr_target - continuing_ntr_usd. None when no target is set."""
+    target = cfg.get("ntr_target") if target is None else target
+    if target is None:
+        return None
+    if cfg.get("ntr_goal_basis", "entering_y1") == "all_jd":
+        return float(target) - float(cfg["continuing_ntr_usd"])
+    return float(target)
 
 
 def check_class_target(cfg, target, cap):
@@ -236,10 +330,18 @@ def check_class_target(cfg, target, cap):
 
 
 def plan_increase_pct(cfg, plan_year):
-    """Cumulative tuition increase (percent) from base_cycle to plan_year from tuition_increase_by_year."""
+    """Cumulative tuition increase (percent) from base_cycle to plan_year from tuition_increase_by_year.
+
+    [v0.6.3, BM-2] A year in tuition_by_year_usd takes precedence: the factor relative to tuition_base becomes
+    tuition_by_year_usd / tuition_base there, so the implied increase 100 x (tuition_by_year_usd / tuition_base - 1)
+    is stored unrounded and round_to(tuition_base x (1 + p), tuition_rounding_usd) returns the dollar figure."""
     base = cfg["cycle"]["base_cycle"]
+    usd = cfg.get("tuition_by_year_usd") or {}
     f = 1.0
     for y in range(base + 1, plan_year + 1):
+        if y in usd:
+            f = usd[y] / float(cfg["tuition_base"])
+            continue
         if y not in cfg["tuition_increase_by_year"]:
             raise ConfigError(f"tuition_increase_by_year has no value for {y}")
         f *= 1.0 + cfg["tuition_increase_by_year"][y] / 100.0

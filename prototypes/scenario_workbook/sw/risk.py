@@ -14,6 +14,7 @@ from scipy.special import ndtr as Phi
 from scipy.stats import binom
 
 from . import labels
+from .config import ntr_target_effective, pct_lattice_n
 
 Z90 = 1.645
 
@@ -130,9 +131,79 @@ def median(lc, measure, t):
     }
 
 
+def pct_targets(cfg):
+    """(q, t) pairs of score.percentile_targets, in config order [v0.6.3, BM-1]."""
+    return [(float(p["q"]), p["t"]) for p in cfg["score"]["percentile_targets"]]
+
+
+def cf_pct(A, y, g, q, s, rho):
+    """Percentile q at or above t [v0.6.3, BM-1; Review_Phase2_2_Plan.md section 2]. g: median signs (+1 at or above
+    t, -1 below, 0 excluded). M_q = q G+ - (1 - q) G-; V_q = q^2 sum_above v + (1-q)^2 sum_below v + s^2 (q^2 G+^2 +
+    (1-q)^2 G-^2 - 2 rho q (1-q) G+ G-); P = 1 - Phi((-1/(2n) - E[M_q]) / sqrt(V_q)) with q = m/n in lowest terms
+    (half the lattice step of M_q). At q = 0.5 this equals cf_median's probability."""
+    mu = A * y
+    v = A * y * (1 - y)
+    gp = float(mu[g > 0].sum())
+    gm = float(mu[g < 0].sum())
+    E = q * gp - (1 - q) * gm
+    Vq = float(q * q * v[g > 0].sum() + (1 - q) * (1 - q) * v[g < 0].sum()
+               + s * s * (q * q * gp * gp + (1 - q) * (1 - q) * gm * gm - 2 * rho * q * (1 - q) * gp * gm))
+    corr = 1.0 / (2 * pct_lattice_n(q))
+    p = float(1 - Phi((-corr - E) / math.sqrt(max(Vq, 1e-300))))
+    return {"margin_expected": E, "g_plus": gp, "g_minus": gm, "v_q": Vq, "p": p, "correction": corr}
+
+
+def pct(lc, q, t):
+    """Percentile target (q, t): margin_q_t = q x N_scored - G- from enrolled (swaps at the same class size; the sum of
+    g_c e_c with g = q at or above t and -(1 - q) below), P(percentile q at or above t) at the configured rho and at
+    rho 0.5, the expected count below t and the "approximate" flag (fewer than PCT_APPROX_BELOW expected below t)."""
+    cfg = lc.cfg
+    g = median_signs(lc.cells, cfg, "score", t)
+    s = _s(lc)
+    rho = float(cfg["risk"]["shock_corr_above_below"])
+    r = cf_pct(lc.admits, lc.yld, g, q, s, rho)
+    r05 = cf_pct(lc.admits, lc.yld, g, q, s, 0.5)
+    return {
+        "margin_q_t": q * float(lc.enrolled[g > 0].sum()) - (1 - q) * float(lc.enrolled[g < 0].sum()),
+        "margin_expected": r["margin_expected"],
+        "p_pct_q_t": r["p"],
+        "p_pct_q_t_rho05": r05["p"],
+        "expected_below": r["g_minus"],
+        "approximate": labels.PCT_APPROX_LABEL if r["g_minus"] < PCT_APPROX_BELOW else "",
+        "labels": _shock_labels(lc),
+    }
+
+
+PCT_APPROX_BELOW = 20          # [v0.6.3, BM-1] "approximate" below 20 expected below t
+SPREAD_QS = (0.25, 0.75)       # [v0.6.3, BM-1] spread bands
+
+
+def pct_band(lc, q):
+    """Spread readout [v0.6.3, BM-1]: the score band whose lower bound is the largest band bound t with share below t
+    at most q (ratio of enrolled counts over enrollees with a score; unscored count below every t under
+    unscored_in_median 'below'). Returns t, or None when no one is counted or no bound qualifies. "band, not a
+    score"."""
+    cells, cfg = lc.cells, lc.cfg
+    e = lc.enrolled
+    sc = cells.score_lo
+    scored = ~np.isnan(sc)
+    uns = float(e[~scored].sum()) if cfg["unscored_in_median"] == "below" else 0.0
+    N = float(e[scored].sum()) + uns
+    if N <= 0:
+        return None
+    best = None
+    for b in sorted(float(x) for x in cfg["score"]["bands"]):
+        below = float(e[scored & (sc < b)].sum()) + uns
+        if below / N <= q:
+            best = b
+    return best
+
+
 def ntr(lc, target=None):
-    target = lc.cfg.get("ntr_target") if target is None else target
-    r = cf_ntr(lc.admits, lc.yld, lc.w, _s(lc), lc.specialty, target)
+    """NTR distribution and P(ntr_y1 >= target). The target defaults to the effective ntr_target: under ntr_goal_basis
+    all_jd, ntr_target - continuing_ntr_usd [v0.6.3, BM-4]. An explicit target is used as given."""
+    target = ntr_target_effective(lc.cfg) if target is None else target
+    r = cf_ntr(lc.admits, lc.yld, lc.w, _s(lc), lc.ntr_const, target)
     r["labels"] = _shock_labels(lc) + [labels.RESPONSE_LABEL]
     return r
 
@@ -215,6 +286,44 @@ def exact_median(A, y, g, s, rho, nodes=20):
     groups = None if rho >= 1.0 else (np.asarray(g) > 0)
     vals, pmf = exact_pmf(A, y, np.asarray(g, int), s, groups=groups, rho=rho, nodes=nodes)
     return float(pmf[vals >= 0].sum())
+
+
+def exact_pct(A, y, g, q, s, rho, nodes=20):
+    """P(percentile q at or above t), exact [Review_Phase2_2_Plan.md section 2]: with q = m/n in lowest terms, the event
+    m G+ >= (n - m) G-. Given the shocks, G+ (cells with g > 0) and G- (g < 0) are independent sums of cell binomials,
+    so the probability comes from their two one-dimensional distributions, mixed over 20-node Gauss-Hermite nodes
+    (20 x 20 at rho below 1). q may be a list: the distributions are computed once per node for every q."""
+    qs = list(q) if isinstance(q, (list, tuple, np.ndarray)) else [q]
+    A = np.asarray(A, float)
+    y = np.asarray(y, float)
+    g = np.asarray(g)
+    nn, f = _split(A)
+    up, dn = np.flatnonzero(g > 0), np.flatnonzero(g < 0)
+    mn = []
+    for qq in qs:
+        n_ = pct_lattice_n(qq)
+        mn.append((int(round(qq * n_)), n_))
+    cache = {}
+
+    def pmf(idx, e, key):
+        if key in cache:
+            return cache[key]
+        d = np.array([1.0])
+        for c in idx:
+            if nn[c] + (f[c] > 0) == 0:
+                continue
+            d = np.convolve(d, _cell_pmf(nn[c], f[c], min(1.0, max(0.0, e * y[c]))))
+        cache[key] = d
+        return d
+    total = np.zeros(len(qs))
+    for e1, e2, wt in _shock_nodes(s, rho, rho < 1.0, nodes):
+        pp, pm = pmf(up, e1, ("+", e1)), pmf(dn, e2, ("-", e2))
+        tail = np.concatenate([np.cumsum(pp[::-1])[::-1], [0.0]])     # tail[k] = P(G+ >= k)
+        j = np.arange(len(pm))
+        for i, (m_, n_) in enumerate(mn):
+            k = np.minimum(-((-(n_ - m_) * j) // m_), len(pp))           # ceil((n - m) j / m), exact
+            total[i] += wt * float((pm * tail[k]).sum())
+    return [float(x) for x in total] if len(qs) > 1 or isinstance(q, (list, tuple, np.ndarray)) else float(total[0])
 
 
 def exact_ntr(A, y, w, s, specialty, target, unit, nodes=20):

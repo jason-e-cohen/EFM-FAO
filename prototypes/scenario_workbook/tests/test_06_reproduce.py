@@ -534,8 +534,10 @@ def test_reproduce_workbook_equals_python(fx_wb):
 def _criteria_ids():
     with open(os.path.join(ROOT, "config", "richmond.yaml")) as f:
         cfg = yaml.safe_load(f)
-    ts = sorted(set(cfg["score"]["median_thresholds"]) | {cfg["score"]["pool_threshold"], cfg["score"]["floor"]},
-                reverse=True)
+    # [v0.6.3, BM-1] the median thresholds are the q = 0.5 percentile targets (legacy key read when present)
+    med = cfg["score"].get("median_thresholds") or [p["t"] for p in cfg["score"]["percentile_targets"]
+                                                     if float(p["q"]) == 0.5]
+    ts = sorted(set(med) | {cfg["score"]["pool_threshold"], cfg["score"]["floor"]}, reverse=True)
     crit = ["class", "merit", "ntr"] + [f"at_or_above_{t:g}" for t in ts] + \
         ["below_floor", "gpa_hi", "full_tuition", "no_merit_award", "margin_score", "margin_gpa"]
     return [(i, c) for i in (4, 0, 1, 2, 3) for c in crit]      # Scenario 4 first (BM-7, R3-1)
@@ -555,3 +557,58 @@ def test_pass_criterion(fxr, idx, criterion):
         pytest.skip(f"{names[idx]} {criterion}: not derivable from the file")
     assert row["pass"], (f"{names[idx]} {criterion}: ledger {row['ours']:g}, file {row['file']:g} ({row['source']}). "
                          f"Likeliest cause: {row['cause']}")
+
+
+def test_reproduce_need_whole_dollars():
+    """Spec section 0A item B5 (no fixture): in reproduce mode the need rate is rounded to whole dollars per enrollee
+    and a scenario's need_total departure from need.total is a fixed amount; live mode keeps the exact rate."""
+    from sw import build, ledger as L
+    from sw.config import validate
+    cfg_live, cfg, cells, scen, loaded = repro_synthetic()
+    raw = {k: v for k, v in cfg.items() if not k.startswith("_")}
+    cfg2 = validate(raw | {"need": {"total": 200000, "reference_class": 140}})
+    s0 = copy.copy(scen[0])
+    s0.need_total = 200000.0
+    s1 = copy.copy(scen[1])
+    s1.need_total = 190000.0
+    ld = {s0.name: dict(loaded[s0.name], need_total=200000.0), s1.name: dict(loaded[s1.name], need_total=190000.0)}
+    run = build.make_run(cfg2, cells, [s0, s1], {"build_id": "b5"}, loaded=ld)
+    for s, lump in ((s0, 0.0), (s1, -10000.0)):
+        lc = run.lcs[s.name]["middle"]
+        assert lc.need_rate == 1429.0 and lc.need_lump == lump
+        mo = L.money(lc)
+        assert mo["need"] == 1429.0 * lc.class_n + lump
+        assert mo["ntr_y1"] == pytest.approx(mo["gross_y1"] - mo["merit"] - 1429.0 * lc.class_n - lump
+                                             - lc.specialty, abs=1e-6)
+        # the risk functions and strips subtract the same constant (specialty plus the departure)
+        from sw import risk, strip
+        const = lc.specialty + lump
+        assert risk.ntr(lc)["ntr_mean"] == pytest.approx(float((lc.w * lc.mu).sum()) - const, abs=1e-6)
+        ys = strip.yield_strip(lc, grid=[0])
+        assert ys["yield_strip"][0]["ntr_mean"] == pytest.approx(float((lc.w * lc.mu).sum()) - const, abs=1e-6)
+        G = cfg2["ntr_target"]
+        assert G is not None
+        assert ys["breakeven_shift_ntr"] == pytest.approx(
+            (G - (float((lc.w * lc.admits * lc.yld).sum()) - const)) / float((lc.w * lc.admits).sum()) * 100,
+            rel=1e-12)
+        tw = strip.tuition(lc, grid=[s.tuition_increase_pct])["tuition_whatif"][0]
+        if tw["tuition"] == lc.tuition:
+            assert tw["ntr_y1"] == pytest.approx(mo["ntr_y1"], abs=1e-6)
+        else:   # synthetic loaded tuition is one rounding step above the formula's: compare at the formula tuition
+            aw = L.resolve_awards(s, tw["tuition"], s.tuition_increase_pct / 100.0, lc.eligible)[1]
+            assert tw["ntr_y1"] == pytest.approx(float((lc.enrolled * (tw["tuition"] - aw)).sum())
+                                                 - 1429.0 * lc.class_n - const, abs=1e-6)
+    live = validate({k: v for k, v in cfg_live.items() if not k.startswith("_")}
+                    | {"need": {"total": 200000, "reference_class": 140}})
+    from sw import response
+    lc = L.evaluate(cells, live, s0, response.base_yield(cells, live), "middle")
+    assert lc.need_rate == 200000 / 140 and lc.need_lump == 0.0
+
+
+def test_ntr_matches_the_file_exactly(fxr):
+    """Spec section 0A item B5: with the whole-dollar need rule, reproduce NTR equals the file's (the pass criterion
+    stays within $100, spec section 9)."""
+    rows = [r for r in fxr["rows"] if r["criterion"] == "ntr" and r["file"] is not None]
+    assert rows
+    for r in rows:
+        assert abs(r["ours"] - r["file"]) < 1e-6, r["scenario"]

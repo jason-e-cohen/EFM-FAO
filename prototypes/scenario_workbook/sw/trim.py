@@ -16,17 +16,21 @@ GPA_TRIM = {"blank": 0, "lo": 1, "hi": 2}
 def trim_order(lc):
     """Ascending score_lo (unscored first), then GPA (blank, lo, hi); ties: out of state outside the segment, in-state
     outside the segment, segment. With protect_segment: below_threshold, segment cells below the first median
-    threshold go after all non-segment cells below it and before any cell at or above it."""
+    threshold go after all non-segment cells below it and before any cell at or above it. With above_floor
+    [v0.6.3, BM-5], only segment cells with a score at or above score.floor (and below the threshold) are protected
+    that way; segment cells below the floor and unscored segment cells are trimmed in normal order."""
     cells, cfg = lc.cells, lc.cfg
     t = cfg["score"]["median_thresholds"][0]
-    protect = cfg["trim"]["protect_segment"] == "below_threshold"
+    mode = cfg["trim"]["protect_segment"]
+    protect = mode in ("below_threshold", "above_floor")
+    floor = float(cfg["score"]["floor"])
     seg = lc.in_segment
     keys = []
     for i in range(cells.n):
         s = cells.score_lo[i]
         below = np.isnan(s) or s < t
         tier = 0 if below else 2
-        if protect and below and seg[i]:
+        if protect and below and seg[i] and (mode == "below_threshold" or (not np.isnan(s) and s >= floor)):
             tier = 1
         tie = 2 if seg[i] else (0 if cells.residency[i] == "out" else 1)
         keys.append((tier, -np.inf if np.isnan(s) else s, GPA_TRIM[cells.gpa_class[i]], tie, i))
@@ -90,10 +94,14 @@ def _row_figures(lc):
     cfg = lc.cfg
     m = L.money(lc)
     row = {"class_mean": float(lc.mu.sum()), "ntr_y1": m["ntr_y1"],
-           "discount_entering_y1": m["discount_entering_y1"], "median": {}}
+           "discount_entering_y1": m["discount_entering_y1"], "median": {}, "pct": {},
+           "p_class_over_cap": risk.class_probs(lc)["p_class_over_cap"]}           # [v0.6.3, BM-3]
     for meas, t in risk.median_targets(cfg):
         md = risk.median(lc, meas, t)
         row["median"][(meas, t)] = {"margin": md["margin_t"], "p": md["p_median_t"]}
+    for q, t in risk.pct_targets(cfg):                                              # [v0.6.3, BM-1]
+        pc = risk.pct(lc, q, t)
+        row["pct"][(q, t)] = {"margin": pc["margin_q_t"], "p": pc["p_pct_q_t"]}
     row["segment_enrolled"] = float(lc.enrolled[lc.in_segment].sum()) if lc.in_segment.any() \
         else labels.NO_SEGMENT_CELLS
     adm = lc.admits > 0

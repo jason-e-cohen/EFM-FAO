@@ -113,9 +113,11 @@ def test_class_size_table(main_wb):
             if "class_mean" not in row:
                 assert all(v == "" for v in got[1:])
                 continue
-            want = [row["class_mean"]]
+            want = [row["class_mean"], row["p_class_over_cap"]]                    # [v0.6.3, BM-3]
             for key in targets:
                 want += [row["median"][key]["margin"], row["median"][key]["p"]]
+            for key in risk.pct_targets(cfg):                                       # [v0.6.3, BM-1]
+                want += [row["pct"][key]["margin"], row["pct"][key]["p"]]
             want += [row["ntr_y1"], row["discount_entering_y1"], row["segment_enrolled"],
                      "" if row["lowest_band_admitted"] is None else row["lowest_band_admitted"]]
             want += [row["admits_cut_by_band"].get(b, 0.0) for b in bands]
@@ -134,7 +136,9 @@ def test_pool_strip(main_wb):
         for g, row in enumerate(py):
             got = ps[j * len(grid) + g]
             want = [row["growth"], row["class_mean"], row["p_class_over_cap"], row["margin"], row["p_median"],
-                    row["ntr_mean"], row["ntr_sd"]]
+                    row["ntr_mean"], row["ntr_sd"]] + [row["pct"][k]["p"] for k in risk.pct_targets(run.cfg)] \
+                + [row["marker"]]                                                   # [v0.6.3, BM-6]
+            assert len(got) == len(want)
             for gv, wv in zip(got, want):
                 assert close(gv, wv), (s.name, row["pool_multiplier"])
 

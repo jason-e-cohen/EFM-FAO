@@ -8,7 +8,7 @@ import numpy as np
 from . import labels
 from . import ledger as L
 from . import risk
-from .config import scenario_tuition
+from .config import ntr_target_effective, pct_lattice_n, scenario_tuition
 
 
 def tuition(lc, grid=None, example_award=None):
@@ -21,10 +21,14 @@ def tuition(lc, grid=None, example_award=None):
     cls = float(e.sum())
     need = lc.need_rate * cls
     rows = []
+    if lc.cfg.get("ntr_goal_basis") == "all_jd":
+        held = labels.CONTINUING_HELD
+    else:
+        held = ""
     for pct in grid:
         T = scenario_tuition(cfg, pct)
         _, award = L.resolve_awards(scen, T, pct / 100.0, lc.eligible)
-        ntr = float((e * (T - award)).sum()) - need - lc.specialty
+        ntr = float((e * (T - award)).sum()) - need - lc.ntr_const
         gross = cls * T
         rows.append({
             "tuition_increase_pct": pct, "tuition": T, "ntr_y1": ntr,
@@ -54,6 +58,7 @@ def tuition(lc, grid=None, example_award=None):
             p=f"{labels.xl(100 * lc.p, 1):.1f}%", x=f"${labels.xl(x):,.0f}",
             award=f"${labels.xl(example_award):,.0f}"),
         "labels": [labels.STICKER_LABEL],
+        "continuing_note": held,                     # [v0.6.3, BM-4] under all_jd: continuing revenue held fixed
     }
 
 
@@ -67,12 +72,12 @@ def yield_strip(lc, grid=None):
     A, y = lc.admits, lc.yld
     targets = risk.median_targets(cfg)
     signs = {(m, t): risk.median_signs(lc.cells, cfg, m, t) for m, t in targets}
-    ntr_target = cfg.get("ntr_target")
+    ntr_target = ntr_target_effective(cfg)      # [v0.6.3, BM-4] all_jd: ntr_target - continuing_ntr_usd
     rows = []
     for d in grid:
         yd = y + d / 100.0
         c = risk.cf_class(A, yd, s, scen.class_cap, scen.class_target, cfg["class"]["band"])
-        n = risk.cf_ntr(A, yd, lc.w, s, lc.specialty, ntr_target)
+        n = risk.cf_ntr(A, yd, lc.w, s, lc.ntr_const, ntr_target)
         row = {"shift_pts": d, "class_mean": c["class_mean"], "p_class_over_cap": c["p_class_over_cap"],
                "p_class_in_band": c["p_class_in_band"], "ntr_mean": n["ntr_mean"],
                "p_ntr_y1_ge_target": n.get("p_ntr_y1_ge_target"), "median": {}}
@@ -86,7 +91,7 @@ def yield_strip(lc, grid=None):
     sumA = float(A.sum())
     M = float((A * y).sum())
     sumwA = float((lc.w * A).sum())
-    mean_ntr = float((lc.w * A * y).sum()) - lc.specialty
+    mean_ntr = float((lc.w * A * y).sum()) - lc.ntr_const
     be_class = (scen.class_target - M) / sumA * 100.0 if sumA > 0 else None
     be_ntr = (ntr_target - mean_ntr) / sumwA * 100.0 if (ntr_target is not None and sumwA != 0) else None
     return {
@@ -126,6 +131,14 @@ def pool_strip(cells, cfg, scen, base, grid=None):
             "W": float((w * mu)[msk].sum()), "Vn": float((w * w * v)[msk].sum()),
         }
     P, Q = parts["lo"], parts["hi"]
+    # [v0.6.3, BM-6] percentile targets: G+ and G- (and their binomial variances) split the same way
+    targets = risk.pct_targets(cfg)
+    pparts = {}
+    for q, tq in targets:
+        gq = risk.median_signs(cells, cfg, "score", tq)
+        pparts[(q, tq)] = {name: {"Gp": float(mu[msk & (gq > 0)].sum()), "Gm": float(mu[msk & (gq < 0)].sum()),
+                                  "Vp": float(v[msk & (gq > 0)].sum()), "Vm": float(v[msk & (gq < 0)].sum())}
+                           for name, msk in (("lo", lo), ("hi", hi))}
     rows = []
     for m in grid:
         M = P["M"] + m * Q["M"]
@@ -140,9 +153,30 @@ def pool_strip(cells, cfg, scen, base, grid=None):
             "pool_multiplier": m, "growth": m - 1.0, "class_mean": M,
             "p_class_over_cap": float(1 - risk.Phi((cap + 0.5 - M) / math.sqrt(max(V, 1e-300)))),
             "margin": Gp - Gm, "p_median": float(1 - risk.Phi((-0.5 - (Gp - Gm)) / math.sqrt(max(Vm, 1e-300)))),
-            "ntr_mean": Wm - lc1.specialty, "ntr_sd": math.sqrt(max(Vn, 0.0)),
+            "ntr_mean": Wm - lc1.ntr_const, "ntr_sd": math.sqrt(max(Vn, 0.0)),
+            "pct": {key: _pool_pct(pparts[key], key[0], m, s, rho) for key in pparts},
         })
+    # [v0.6.3, BM-6] growth-to-date marker: the grid row nearest 1 + pool_ytd_growth (ties to the lower row)
+    g_ytd = cfg.get("pool_ytd_growth")
+    nearest = None
+    if g_ytd is not None:
+        target = 1.0 + float(g_ytd)
+        nearest = 1 + sum(1 for a, b in zip(grid[:-1], grid[1:]) if (a + b) / 2 < target)
+    marker = labels.POOL_YTD_MARKER.format(as_of=cfg.get("pool_ytd_as_of") or labels.POOL_YTD_NO_DATE)
+    for gi, row in enumerate(rows):
+        row["marker"] = marker if nearest == gi + 1 else ""
+    # [v0.6.3, BM-6] break-even pool multipliers (expectations, not probabilities)
+    be = {"class": (scen.class_target - P["M"]) / Q["M"] if Q["M"] != 0 else None}
+    for key, pp in pparts.items():
+        q = key[0]
+        e_lo = q * pp["lo"]["Gp"] - (1 - q) * pp["lo"]["Gm"]
+        e_hi = q * pp["hi"]["Gp"] - (1 - q) * pp["hi"]["Gm"]
+        be[key] = -e_lo / e_hi if e_hi != 0 else None
     return {
+        "pool_breakeven_m": be,
+        "pool_breakeven_label": labels.POOL_BREAKEVEN_LABEL,
+        "pct_parts": pparts,
+        "nearest_row": nearest,
         "pool_strip": rows,
         "threshold": t,
         "parts": parts,
@@ -151,3 +185,16 @@ def pool_strip(cells, cfg, scen, base, grid=None):
         "label": labels.POOL_STRIP_LABEL,
         "rounding_note": "ledger rounds admits; strip does not" if cfg["integer_admits"] else "",
     }
+
+
+def _pool_pct(pp, q, m, s, rho):
+    """P(percentile q at or above t) at pool multiplier m from the lo/hi split (risk.cf_pct on the split sums)."""
+    gp = pp["lo"]["Gp"] + m * pp["hi"]["Gp"]
+    gm = pp["lo"]["Gm"] + m * pp["hi"]["Gm"]
+    vp = pp["lo"]["Vp"] + m * pp["hi"]["Vp"]
+    vm = pp["lo"]["Vm"] + m * pp["hi"]["Vm"]
+    E = q * gp - (1 - q) * gm
+    V = q * q * vp + (1 - q) * (1 - q) * vm + s * s * (q * q * gp * gp + (1 - q) * (1 - q) * gm * gm
+                                                       - 2 * rho * q * (1 - q) * gp * gm)
+    corr = 1.0 / (2 * pct_lattice_n(q))
+    return {"margin": E, "p": float(1 - risk.Phi((-corr - E) / math.sqrt(max(V, 1e-300))))}

@@ -155,3 +155,54 @@ def test_zero_admit_cells(syn_cfg, worlds):
     with np.errstate(all="raise"):
         tr = trim.trim_rates(lc, 110)
     assert np.isfinite(tr["rates"]).all()
+
+
+def test_percentile_shares_and_cap_probability_along_the_walk(syn_cfg, worlds):
+    """[v0.6.3, BM-1, BM-3] For every percentile target t, the share at or above t is non-decreasing as N falls while
+    the walk cuts cells below t. P(class > cap) in the class-size table at each N equals risk.cf_class on a ledger
+    evaluated at that N's trimmed rates; the table's percentile margins and probabilities equal risk.pct there."""
+    from sw import risk
+    cfg = syn_cfg
+    ts = sorted({t for _, t in risk.pct_targets(cfg)} | set(cfg["score"]["median_thresholds"]), reverse=True)
+    for seed, cells in worlds.items():
+        base = response.base_yield(cells, cfg)
+        sc = _scen(cells, cfg)
+        lc = L.evaluate(cells, cfg, sc, base, "middle")
+        M = float(lc.mu.sum())
+        order = trim.trim_order(lc)
+        prev = {t: None for t in ts}
+        walking = {t: True for t in ts}
+        for N in sorted(cfg["class"]["what_if"], reverse=True):
+            if N >= M:
+                continue
+            tr = trim.trim_rates(lc, N)
+            lcN = L.evaluate(cells, cfg, L.with_rates(sc, tr["rates"]), base, "middle")
+            cut = order[tr["removed_share"][order] > 0]
+            last = cut[-1]
+            kp = L.kpis(lcN)
+            e = lcN.enrolled
+            scored = ~np.isnan(cells.score_lo)
+            for t in ts:
+                last_below = np.isnan(cells.score_lo[last]) or cells.score_lo[last] < t
+                share = float(e[scored & (cells.score_lo >= t)].sum()) / float(e[scored].sum())
+                if t in kp["share_at_or_above_t"]:
+                    assert share == pytest.approx(kp["share_at_or_above_t"][t], abs=1e-12)
+                if walking[t] and last_below:
+                    if prev[t] is not None:
+                        assert share >= prev[t] - 1e-12, (seed, N, t)
+                    prev[t] = share
+                else:
+                    walking[t] = False
+        ct = trim.class_table(cells, cfg, sc, base)["class_table"]
+        for row in ct:
+            if "class_mean" not in row:
+                continue
+            rates = row["rates"]
+            lcN = L.evaluate(cells, cfg, L.with_rates(sc, rates), base, "middle")
+            cf = risk.cf_class(lcN.admits, lcN.yld, cfg["risk"]["common_shock_sd"], sc.class_cap, sc.class_target,
+                               cfg["class"]["band"])
+            assert row["p_class_over_cap"] == pytest.approx(cf["p_class_over_cap"], abs=1e-12), (seed, row["N"])
+            for q, t in risk.pct_targets(cfg):
+                pc = risk.pct(lcN, q, t)
+                assert row["pct"][(q, t)]["margin"] == pytest.approx(pc["margin_q_t"], abs=1e-9)
+                assert row["pct"][(q, t)]["p"] == pytest.approx(pc["p_pct_q_t"], abs=1e-12)

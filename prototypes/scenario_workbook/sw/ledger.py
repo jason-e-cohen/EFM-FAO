@@ -90,6 +90,12 @@ class LedgerCase:
     ycap: np.ndarray
     cells: object
     cfg: dict
+    need_lump: float = 0.0           # reproduce mode: need_total's departure from need.total, a fixed amount (B5)
+
+    @property
+    def ntr_const(self):
+        """Constant subtracted from sum_c w_c e_c to give ntr_y1: specialty, plus the reproduce-mode need departure."""
+        return self.specialty + self.need_lump
 
     @property
     def w(self):
@@ -389,11 +395,17 @@ def evaluate(cells, cfg, scen, base, case):
     enrolled = xround(mu) if cfg["integer_enrolled"] else mu.copy()
     need_total = cfg["need"]["total"] if scen.need_total is None else scen.need_total
     need_rate = float(need_total) / float(cfg["need"]["reference_class"])
+    need_lump = 0.0
+    if rep:
+        # Reproduce mode (spec section 0A item B5): the need rate rounded to whole dollars per enrollee, as the file
+        # computes it, and a scenario's departure from need.total as a fixed amount (the fixture's need rule)
+        need_rate = float(xround(float(cfg["need"]["total"]) / float(cfg["need"]["reference_class"])))
+        need_lump = float(need_total) - float(cfg["need"]["total"])
     return LedgerCase(
         scenario=scen, case=case, tuition=tuition, p=p, need_rate=need_rate, specialty=float(scen.specialty_usd),
         in_segment=in_seg, upper=upper, eligible=elig, apps=apps, rate=scen.admit_rate.copy(), admits=admits,
         award_base=award_base, incentive=incentive, award=award, shift=shift, yld=yld, mu=mu, enrolled=enrolled,
-        yfloor=base.floor, ycap=base.cap, cells=cells, cfg=cfg,
+        yfloor=base.floor, ycap=base.cap, cells=cells, cfg=cfg, need_lump=need_lump,
     )
 
 
@@ -409,7 +421,7 @@ def money(lc):
     e = lc.enrolled
     cls = float(e.sum())
     merit = float((e * lc.award).sum())
-    need = lc.need_rate * cls
+    need = lc.need_rate * cls + lc.need_lump
     gross = cls * lc.tuition
     aid = merit + need + lc.specialty
     return {

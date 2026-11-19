@@ -30,6 +30,19 @@ POOL_YTD_LABEL = "growth to date; final growth may differ if applicants file ear
 LINEAR_APPROX = "linear approximation"
 RHO_SENSITIVITY = "if high-score and other admits' yields move differently year to year"
 
+# Percentile targets, revenue goal and pool growth [v0.6.3, BM-1, BM-4, BM-6]
+PCT_APPROX_LABEL = "approximate (fewer than 20 expected below t)"
+BAND_NOT_SCORE_LABEL = "band, not a score"
+CONTINUING_LABEL = "continuing-student revenue as supplied by the client; attrition and renewals not modeled"
+CONTINUING_HELD = "continuing revenue held at the supplied figure"
+POOL_BREAKEVEN_LABEL = ("pool multiplier at which the expected class meets the target / the expected margin is zero; "
+                        "not a probability")
+POOL_YTD_MARKER = "growth to date ({as_of}) is about here"
+POOL_YTD_NO_DATE = "date not given"
+PCT_MARGIN_UNIT = ("margin: swaps of an enrollee below t for one at or above t, at the same class size; adding k "
+                   "enrollees below t uses k(1 - q)")
+GPA_PCT_NOTE = "GPA percentiles are not supported (the cell schema has one GPA boundary)."
+
 # Segment block [v0.6, B1-8, B1-14]
 NO_SEGMENT_CELLS = "no segment cells in the data"
 SEGMENT_APPROX = "approximate (fewer than 30 expected)"          # [v0.6.1, OP-3]

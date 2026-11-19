@@ -24,7 +24,12 @@ score:
   bands: [170, 167, 166, 165, 161, 158, 154, 152, 0]
   pool_threshold: 165
   floor: 154
-  median_thresholds: [166, 165]
+  # [v0.6.3, BM-1] two medians, a 25th and a 10th percentile (the 10th has fewer than 20 expected below t: approximate)
+  percentile_targets:
+    - {q: 0.5, t: 166}
+    - {q: 0.5, t: 165}
+    - {q: 0.25, t: 161}
+    - {q: 0.10, t: 154}
 
 gpa:
   measure: gpa
@@ -75,7 +80,8 @@ trim:
   floor_rate: 0.0
   exempt_cells: []
 
-pool_ytd_growth: null
+pool_ytd_growth: 0.12              # synthetic growth to date [v0.6.3, BM-6]
+pool_ytd_as_of: 2026-11-15
 marginal_admit_yield_slope: 0
 
 # ---------------------------------------------------------------------------------------------------------------

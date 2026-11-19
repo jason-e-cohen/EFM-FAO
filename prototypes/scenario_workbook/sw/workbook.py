@@ -31,7 +31,8 @@ from . import narrative as NAR
 from . import response
 from . import risk
 from . import trim
-from .config import excel_round0, plan_increase_pct, round_apps_after_pool, round_to, scenario_tuition
+from .config import (excel_round0, ntr_target_effective, pct_lattice_n, plan_increase_pct, round_apps_after_pool,
+                     round_to, scenario_tuition)
 
 CASE_SHEET = {"low": "Ledger_Low", "middle": "Ledger_Middle", "high": "Ledger_High"}
 CASE_TITLE = {"low": "Low", "middle": "Middle", "high": "High"}
@@ -88,6 +89,22 @@ def ceil_x(x):
     return f"IF(ROUND({x},0)>={x},ROUND({x},0),ROUND({x},0)+1)"
 
 
+def lattice_corr_x(q):
+    """1/(2n) for q = m/n in lowest terms, as an Excel formula over the q cell [v0.6.3, BM-1]: n is the smallest
+    divisor k of 100 with q x k whole (q has at most two decimals), found with nested IF and ROUND."""
+    f = "100"
+    for k in (50, 25, 20, 10, 5, 4, 2, 1):
+        f = f"IF(ROUND({q}*{k},9)=ROUND({q}*{k},0),{k},{f})"
+    return f"1/(2*{f})"
+
+
+def ordinal(q):
+    """'25th' for q = 0.25; '10th', '50th', '33rd', '1st'."""
+    k = int(round(100 * q))
+    suf = "th" if 10 <= k % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(k % 10, "th")
+    return f"{k}{suf}"
+
+
 def _clean(v):
     if isinstance(v, (bool, np.bool_)):
         return int(v)
@@ -125,6 +142,7 @@ class Book:
         self.cohorts = list(self.cells.cohorts)
         self.jbase = self.cells.col(self.cfg["cycle"]["base_cycle"])
         self.targets = risk.median_targets(self.cfg)
+        self.ptargets = risk.pct_targets(self.cfg)               # [v0.6.3, BM-1]
         self.score_ts = L.score_thresholds(self.cfg)
         self.inp = {}
         self.inp_list = {}
@@ -231,6 +249,7 @@ class Book:
         self.r0l = 8
         stat = ["cell_id", "residency", "segment", "score_lo", "scored", "gpa_class", "upper"]
         stat += [f"g{j}" for j in range(len(self.targets))]
+        stat += [f"p{j}" for j in range(len(self.ptargets))]                 # [v0.6.3, BM-1] signs at each target t
         stat += ["floor", "cap", "a0", "y0", "award_lo", "award_hi", "apps_base"]
         self.lstat = {k: i for i, k in enumerate(stat)}
         self.ltw = [f"tw{i}" for i in range(len(self.cfg["risk"]["tuition_grid"]))]
@@ -291,6 +310,8 @@ class Book:
         return rng(CASE_SHEET[k], self.r0l, c, self.r0l + self.n - 1, c)
 
     def LH(self, k, s, key):
+        if key == "need_lump":                       # reproduce builds only (spec section 0A item B5)
+            return ref(CASE_SHEET[k], 5, self.lblock[(k, s)]["in_seg"] + 3)
         row = {"name": 2, "T": 3, "p": 4, "need_rate": 5, "seg": 6}[key]
         return ref(CASE_SHEET[k], row, self.lblock[(k, s)]["in_seg"] + 1)
 
@@ -349,8 +370,10 @@ class Book:
         cfg = self.cfg
         ws = self.ws["Inputs"]
         ws.set_column(0, 0, 44)
+        self.tyears = sorted(set(cfg["tuition_increase_by_year"]) | set(cfg.get("tuition_by_year_usd") or {}))
         lists = [len(cfg["score"]["bands"]), len(cfg["risk"]["pool_grid"]), len(cfg["class"]["what_if"]),
-                 len(cfg["risk"]["yield_shift_grid"]), len(cfg["risk"]["tuition_grid"]), len(self.cohorts), 4]
+                 len(cfg["risk"]["yield_shift_grid"]), len(cfg["risk"]["tuition_grid"]), len(self.cohorts), 4,
+                 len(self.tyears), len(self.ptargets)]
         self.inote = 2 + max(lists)
         ws.set_column(1, self.inote - 1, 11)
         ws.set_column(self.inote, self.inote, 70)
@@ -420,19 +443,61 @@ class Book:
         one("tuition_base", "tuition_base (tuition at base_cycle)", cfg["tuition_base"], "usd",
             "formula: tuition_by_cohort at base_cycle",
             formula=f"INDEX(in_tuition_by_cohort,MATCH(in_base_cycle,in_history,0))")
-        yrs = sorted(cfg["tuition_increase_by_year"])
-        many("tuition_increase_years", "tuition_increase_by_year: plan year", yrs, "in_int", "build-time")
-        many("tuition_increase_pct", "tuition_increase_by_year: increase (%)",
-             [cfg["tuition_increase_by_year"][y] for y in yrs], "in_pp",
-             "live (Baseline's tuition_increase_pct reads it)")
+        yrs = self.tyears
+        many("tuition_increase_years", "tuition plan year", yrs, "in_int", "build-time")
+        many("tuition_increase_pct", "tuition_increase_by_year: increase (%; blank = not given)",
+             [cfg["tuition_increase_by_year"].get(y) for y in yrs], "in_pp",
+             "live (Baseline's tuition_increase_pct reads it, unless tuition_by_year_usd is set for the year)")
+        usd = cfg.get("tuition_by_year_usd") or {}
+        many("tuition_by_year_usd", "tuition_by_year_usd (tuition in dollars; takes precedence; blank = use the "
+             "increase)", [usd.get(y) for y in yrs], "in_usd",
+             "live [v0.6.3, BM-2]: the implied increase is 100 x (tuition_by_year_usd / tuition_base - 1), unrounded")
         one("tuition_rounding_usd", "tuition_rounding_usd", cfg["tuition_rounding_usd"], "in_usd")
+        r = self.ir
+        self.ir += 1
+        self.txt("Inputs", r, 0, "implied increase from base_cycle (%)")
+        for i, y in enumerate(yrs):
+            self.fx("Inputs", r, 1 + i, f"({self.tuition_factor_x(y)}-1)*100", plan_increase_pct(cfg, y), "pp")
+        self.txt("Inputs", r, self.inote, "formula: cumulative from base_cycle; a year with tuition_by_year_usd "
+                                          "resets to that figure", "note")
+        self.name("in_tuition_implied_pct", "Inputs", r, 1, r, len(yrs))
         sec("Score and GPA")
         one("score_measure", "score.measure", cfg["score"]["measure"], "in_text", "build-time")
         many("score_bands", "score.bands (lower bounds)", cfg["score"]["bands"], "in_int", "build-time")
         one("pool_threshold", "score.pool_threshold", cfg["score"]["pool_threshold"], "in_int")
-        one("score_floor", "score.floor", cfg["score"]["floor"], "in_int")
-        many("median_thresholds", "score.median_thresholds", cfg["score"]["median_thresholds"], "in_int",
+        one("score_floor", "score.floor", cfg["score"]["floor"], "in_int",
+            "live; under trim.protect_segment above_floor the Trim order uses the build's floor (Checks flags a change)")
+        many("median_thresholds", "score.median_thresholds (the q = 0.5 percentile targets)",
+             cfg["score"]["median_thresholds"], "in_int",
              "live in the Ledger and Summary; the Trim order uses the build's first threshold")
+        # [v0.6.3, BM-1] percentile targets: q build-time (labels and layout), t live (a q = 0.5 target's t reads its
+        # median threshold), the continuity correction 1/(2n) by formula
+        med_i = 0
+        rq, rt, rc = self.ir, self.ir + 1, self.ir + 2
+        self.ir += 3
+        self.txt("Inputs", rq, 0, "score.percentile_targets: q (share below t at most q)")
+        self.txt("Inputs", rt, 0, "score.percentile_targets: t (a band lower bound)")
+        self.txt("Inputs", rc, 0, "continuity correction 1/(2n), q = m/n in lowest terms")
+        self.inp_list["pct_q"], self.inp_list["pct_t"], self.inp_list["pct_corr"] = [], [], []
+        for i, (q, t) in enumerate(self.ptargets):
+            self.val("Inputs", rq, 1 + i, q, "in_num")
+            if q == 0.5:
+                self.fx("Inputs", rt, 1 + i, self.inp_list["median_thresholds"][med_i], t, "inh_int")
+                med_i += 1
+            else:
+                self.val("Inputs", rt, 1 + i, t, "in_int")
+            self.fx("Inputs", rc, 1 + i, lattice_corr_x(a1(rq, 1 + i)), 1.0 / (2 * pct_lattice_n(q)), "r4")
+            for key, rr in (("pct_q", rq), ("pct_t", rt), ("pct_corr", rc)):
+                self.inp_list[key].append(ref("Inputs", rr, 1 + i))
+        self.txt("Inputs", rq, self.inote, "build-time (sets the rows and labels; Checks flags a change)", "note")
+        self.txt("Inputs", rt, self.inote, "live; a q = 0.5 target reads its median threshold (italic); Checks lists a t "
+                                           "that is not a band bound. " + labels.GPA_PCT_NOTE, "note")
+        self.txt("Inputs", rc, self.inote, "formula; half the lattice step of the margin (Review_Phase2_2_Plan.md "
+                                           "section 2)", "note")
+        n_p = len(self.ptargets)
+        for key, rr in (("pct_q", rq), ("pct_t", rt), ("pct_corr", rc)):
+            self.name(f"in_{key}", "Inputs", rr, 1, rr, n_p)
+            self.inp[key] = f"in_{key}"
         one("gpa_measure", "gpa.measure", cfg["gpa"]["measure"], "in_text", "build-time")
         one("gpa_hi_at_or_above", "gpa.hi_at_or_above (class boundary)", cfg["gpa"]["hi_at_or_above"], "in_num",
             "build-time (GPA classes are in the cell data)")
@@ -464,7 +529,18 @@ class Book:
         self.fx("Inputs", r, 1, '"Need aid: $"&TEXT(in_need_total,"#,##0")&" at a class of "&in_need_reference_class'
                                 '&" ($"&TEXT(in_need_rate,"#,##0")&" per enrollee; scales with class)"', need_lbl, "t")
         sec("Targets")
-        one("ntr_target", "ntr_target (ntr_y1; blank = none)", cfg.get("ntr_target"), "in_usd")
+        one("ntr_target", "ntr_target (blank = none; under all_jd the total JD goal)", cfg.get("ntr_target"), "in_usd")
+        one("ntr_goal_basis", "ntr_goal_basis (entering_y1 or all_jd)", cfg.get("ntr_goal_basis", "entering_y1"),
+            "in_text", "live [v0.6.3, BM-4]: all_jd compares continuing + ntr_y1 with ntr_target")
+        self.ws["Inputs"].data_validation(self.ir - 1, 1, self.ir - 1, 1,
+                                          {"validate": "list", "source": ["entering_y1", "all_jd"]})
+        one("continuing_ntr_usd", "continuing_ntr_usd (continuing-student net tuition, plan year)",
+            cfg.get("continuing_ntr_usd"), "in_usd", "live; " + labels.CONTINUING_LABEL)
+        one("ntr_target_eff", "effective entering target (what the ntr_target figures read)",
+            ntr_target_effective(cfg), "usd",
+            "formula: ntr_target under entering_y1; ntr_target - continuing_ntr_usd under all_jd",
+            formula='IF(in_ntr_target="","",IF(in_ntr_goal_basis="all_jd",in_ntr_target-in_continuing_ntr_usd,'
+                    'in_ntr_target))')
         one("discount_target", "discount_target (blank = none)", cfg.get("discount_target"), "in_pct1",
             "live (Baseline reads it)")
         one("budget_total", "budget_total (blank = none)", cfg.get("budget_total"), "in_usd", "live (Checks)")
@@ -522,20 +598,33 @@ class Book:
             self.name(f"in_{key}", "Inputs", r0, 1 + i, r1, 1 + i)
             self.inp[key] = f"in_{key}"
         sec("Shrink path (class-size table)")
-        one("protect_segment", "trim.protect_segment", cfg["trim"]["protect_segment"], "in_text",
-            "build-time (sets the Trim order)")
+        one("protect_segment", "trim.protect_segment (below_threshold, above_floor or none)",
+            cfg["trim"]["protect_segment"], "in_text", "build-time (sets the Trim order)")
         one("trim_floor_rate", "trim.floor_rate (absolute admit rate)", cfg["trim"]["floor_rate"], "in_num")
         one("exempt_cells", "trim.exempt_cells", ", ".join(cfg["trim"]["exempt_cells"]) or "", "in_text",
             "build-time")
         sec("Pool")
-        one("pool_ytd_growth", "pool_ytd_growth (annotation; no logic reads it)", cfg.get("pool_ytd_growth"),
-            "in_pct1", labels.POOL_YTD_LABEL)
+        one("pool_ytd_growth", "pool_ytd_growth (display only: marks the pool-strip row)", cfg.get("pool_ytd_growth"),
+            "in_pct1", "complete applications at or above score.pool_threshold against the same week of the prior "
+                       "cycle [v0.6.3, BM-6]; " + labels.POOL_YTD_LABEL)
+        one("pool_ytd_as_of", "pool_ytd_as_of (date of the growth figure)", cfg.get("pool_ytd_as_of"), "in_text",
+            "display only")
         sec("Display")
         one("case_selector", "case selector (Low, Middle, High)", "Middle", "in_text",
             "live: the 'Selected case' block on Summary")
         self.ws["Inputs"].data_validation(self.ir - 1, 1, self.ir - 1, 1,
                                           {"validate": "list", "source": ["Low", "Middle", "High"]})
         self.ws["Inputs"].freeze_panes(3, 1)
+
+    def tuition_factor_x(self, year):
+        """Excel factor tuition(year) / tuition_base, as config.plan_increase_pct computes it [v0.6.3, BM-2]: the
+        increases compound; a year with tuition_by_year_usd resets the factor to tuition_by_year_usd / tuition_base."""
+        f = "1"
+        for y in range(self.cfg["cycle"]["base_cycle"] + 1, year + 1):
+            i = self.tyears.index(y)
+            inc, usd = self.inp_list["tuition_increase_pct"][i], self.inp_list["tuition_by_year_usd"][i]
+            f = f'IF({usd}="",{f}*(1+{inc}/100),{usd}/in_tuition_base)'
+        return f
 
     # ------------------------------------------------------------------------------------------------------------
     # History
@@ -873,10 +962,9 @@ class Book:
                             else "usd" if f == "bonus_pool_usd" else "num")
                 if p is None:
                     if f == "tuition_increase_pct":
-                        yrs = range(cfg["cycle"]["base_cycle"] + 1, s.plan_year + 1)
-                        prod = "*".join(f"(1+INDEX(in_tuition_increase_pct,MATCH({y},in_tuition_increase_years,0))/100)"
-                                        for y in yrs)
-                        self.fx("Levers", r, c0, f"({prod}-1)*100", plan_increase_pct(cfg, s.plan_year), "inh_pp")
+                        # [v0.6.3, BM-2] cumulative increase; a year with tuition_by_year_usd takes its dollar figure
+                        self.fx("Levers", r, c0, f"({self.tuition_factor_x(s.plan_year)}-1)*100",
+                                plan_increase_pct(cfg, s.plan_year), "inh_pp")
                     elif f in ("need_total", "class_target", "class_cap"):
                         src = {"need_total": "in_need_total", "class_target": "in_class_target",
                                "class_cap": "in_class_cap"}[f]
@@ -1049,6 +1137,8 @@ class Book:
                  "apps_base": "applications (base cycle)"}
         for j, (meas, t) in enumerate(self.targets):
             heads[f"g{j}"] = f"median sign {'GPA' if meas == 'gpa' else 'score'} {t:g}"
+        for j, (q, t) in enumerate(self.ptargets):
+            heads[f"p{j}"] = f"percentile sign q {q:g}, t {t:g}"
         self._static_heads(sheet, self.r0l - 1)
         for key, h in heads.items():
             self.txt(sheet, self.r0l - 1, st[key], h, "h")
@@ -1057,6 +1147,7 @@ class Book:
         self._cell_static(sheet, self.r0l)
         upper = response.score_group_upper(cells, cfg).astype(int)
         signs = [risk.median_signs(cells, cfg, m, t) for m, t in self.targets]
+        psigns = [risk.median_signs(cells, cfg, "score", t) for q, t in self.ptargets]
         med_refs = self.inp_list["median_thresholds"]
         for i in range(n):
             r = self.r0l + i
@@ -1070,6 +1161,10 @@ class Book:
                     f = (f'IF({c("gpa_class")}="hi",1,IF({c("gpa_class")}="lo",-1,'
                          f'IF(in_unscored_in_median="excluded",0,-1)))')
                 self.fx(sheet, r, st[f"g{j}"], f, signs[j][i], "int")
+            for j in range(len(self.ptargets)):
+                fp = (f'IF({c("scored")}=0,IF(in_unscored_in_median="excluded",0,-1),'
+                      f'IF({c("score_lo")}>={self.inp_list["pct_t"][j]},1,-1))')
+                self.fx(sheet, r, st[f"p{j}"], fp, psigns[j][i], "int")
             self.fx(sheet, r, st["floor"], self.Rc("floor", i), base.floor[i], "r4")
             self.fx(sheet, r, st["cap"], self.Rc("cap", i), base.cap[i], "r4")
             self.fx(sheet, r, st["a0"], self.Rc("a0", i), base.a0[i], "usd")
@@ -1111,7 +1206,15 @@ class Book:
         self.fx(sheet, 4, c0 + 1, LVf("tuition_increase_pct"), s.tuition_increase_pct, "pp")
         self.txt(sheet, 5, c0, "need rate")
         nt = LVf("need_total")
-        self.fx(sheet, 5, c0 + 1, f'IF({nt}="",in_need_total,{nt})/in_need_reference_class', lc.need_rate, "usd")
+        nrf = f'IF({nt}="",in_need_total,{nt})/in_need_reference_class'
+        if self.repro:
+            # spec section 0A item B5: reproduce mode takes the need rate rounded to whole dollars per enrollee and a
+            # scenario's need_total departure from need.total as a fixed amount (the fixture's need rule)
+            nrf = f'IF(in_mode="Reproduce",ROUND(in_need_total/in_need_reference_class,0),{nrf})'
+            self.txt(sheet, 5, c0 + 2, "need departure")
+            self.fx(sheet, 5, c0 + 3, f'IF(in_mode="Reproduce",IF({nt}="",0,{nt}-in_need_total),0)', lc.need_lump,
+                    "usd")
+        self.fx(sheet, 5, c0 + 1, nrf, lc.need_rate, "usd")
         self.txt(sheet, 6, c0, "segment")
         sg = LVf("segment")
         # blank: the only configured segment; none when no segment or several are configured [v0.6.2, P2-07]
@@ -1210,8 +1313,8 @@ class Book:
         Ns = cfg["class"]["what_if"]
         self.txt("Trim", 0, 0, "Trim: shrink path (live mode), Middle case. " + labels.POLICY_UNSCORED_TRIMMED_FIRST,
                  "title")
-        self.txt("Trim", 1, 0, "Left: cells in trim order (fixed at build from the first median threshold and "
-                               "trim.protect_segment); rm_k = A y max(0, r - floor_rate) / r; removed_share_k(N) = "
+        self.txt("Trim", 1, 0, "Left: cells in trim order (fixed at build from the first median threshold, "
+                               "trim.protect_segment and, under above_floor, score.floor); rm_k = A y max(0, r - floor_rate) / r; removed_share_k(N) = "
                                "MIN(1, MAX(0, (M - N - R_(k-1)) / rm_k)). Right: per N, rate_k(N) = r - (r - floor_rate)"
                                " x removed_share, admits and a helper for the lowest band admitted, in Ledger order.",
                  "note")
@@ -1323,11 +1426,16 @@ class Book:
         R = lambda key: self.LR(k, s, key)  # noqa: E731
         d = {key: R(key) for key in BLOCK}
         d.update({f"g{j}": self.LSR(k, f"g{j}") for j in range(len(self.targets))})
+        d.update({f"p{j}": self.LSR(k, f"p{j}") for j in range(len(self.ptargets))})
         for key in ("scored", "score_lo", "upper", "residency", "floor", "cap", "gpa_class"):
             d[key] = self.LSR(k, key)
         d["T"], d["NR"] = self.LH(k, s, "T"), self.LH(k, s, "need_rate")
         d["SPEC"], d["CAP"], d["TGT"] = self.LV(s, "specialty_usd"), self.LV(s, "class_cap"), self.LV(s, "class_target")
         d["GOAL"] = self.LV(s, "segment_goal")
+        # K: the constant subtracted from sum w e for ntr_y1: specialty, plus (reproduce builds) the need departure
+        # (spec section 0A item B5). NL: that departure (0 in live builds).
+        d["NL"] = self.LH(k, s, "need_lump") if self.repro else None
+        d["K"] = f"({d['SPEC']}+{d['NL']})" if self.repro else d["SPEC"]
         return d
 
     def fm(self, name, k, s, t_index=None):
@@ -1340,9 +1448,9 @@ class Book:
         SDV = f"SQRT(MAX({V},1E-300))"
         cls = f"SUM({E})"
         merit = f"SUM({d['spend']})"
-        need = f"{d['NR']}*{cls}"
+        need = f"{d['NR']}*{cls}" + (f"+{d['NL']}" if self.repro else "")
         gross = f"{cls}*{d['T']}"
-        aid = f"({merit}+{need}+{d['SPEC']})"
+        aid = f"({merit}+{d['NR']}*{cls}+{d['K']})"
         SW = f"SUMPRODUCT({d['w']},{MU})"
         VN = f"(SUMPRODUCT({d['w']},{d['w']},{A},{Y},1-{Y})+{sd}^2*{SW}^2)"
         SEG = d["in_seg"]
@@ -1379,13 +1487,18 @@ class Book:
             return f"IF({gross}>0,{aid}/({gross}),0)"
         if name == "avg_aid":
             return f"IF({cls}>0,{aid}/{cls},0)"
-        if name == "p_ntr_y1_ge_target":
-            return (f'IF(in_ntr_target="","",1-NORMSDIST((in_ntr_target-({SW}-{d["SPEC"]}))/'
-                    f"MAX(SQRT(MAX({VN},0)),1E-300)))")
+        if name in ("p_ntr_y1_ge_target", "p_jd_ntr_ge_goal"):
+            # [v0.6.3, BM-4] the effective target: ntr_target - continuing_ntr_usd under all_jd. P(continuing + ntr_y1
+            # >= ntr_target) is the same event; it shows only under all_jd
+            f = (f'IF(in_ntr_target_eff="","",1-NORMSDIST((in_ntr_target_eff-({SW}-{d["K"]}))/'
+                 f"MAX(SQRT(MAX({VN},0)),1E-300)))")
+            return f if name == "p_ntr_y1_ge_target" else f'IF(in_ntr_goal_basis="all_jd",{f},"")'
+        if name == "jd_ntr":
+            return f'IF(in_ntr_goal_basis="all_jd",in_continuing_ntr_usd+{gross}-{aid},"")'
         if name == "ntr_lo90":
-            return f"{SW}-{d['SPEC']}-1.645*SQRT(MAX({VN},0))"
+            return f"{SW}-{d['K']}-1.645*SQRT(MAX({VN},0))"
         if name == "ntr_hi90":
-            return f"{SW}-{d['SPEC']}+1.645*SQRT(MAX({VN},0))"
+            return f"{SW}-{d['K']}+1.645*SQRT(MAX({VN},0))"
         if name == "full_tuition_n":
             return f"SUMPRODUCT(({AW}>={d['T']}-0.000001)*{E})"
         if name == "no_merit_award_n":
@@ -1470,6 +1583,21 @@ class Book:
             gp, gm = f"SUMPRODUCT(({G}=1)*{MU})", f"SUMPRODUCT(({G}=-1)*{MU})"
             vm = f"(SUMPRODUCT(({G}<>0)*{A}*{Y}*(1-{Y}))+{sd}^2*({gp}^2+{gm}^2-2*{r_}*{gp}*{gm}))"
             return f"1-NORMSDIST((-0.5-({gp}-{gm}))/SQRT(MAX({vm},1E-300)))"
+        if name in ("margin_q_t", "p_pct_q_t", "p_pct_q_t_rho05", "pct_expected_below", "pct_approximate"):
+            # [v0.6.3, BM-1] percentile target t_index: weights q at or above t, -(1 - q) below
+            G = d[f"p{t_index}"]
+            q, cr = self.inp_list["pct_q"][t_index], self.inp_list["pct_corr"][t_index]
+            gp, gm = f"SUMPRODUCT(({G}=1)*{MU})", f"SUMPRODUCT(({G}=-1)*{MU})"
+            if name == "margin_q_t":
+                return f"{q}*SUMPRODUCT(({G}=1)*{E})-(1-{q})*SUMPRODUCT(({G}=-1)*{E})"
+            if name == "pct_expected_below":
+                return gm
+            if name == "pct_approximate":
+                return f'IF({gm}<{risk.PCT_APPROX_BELOW},{xs(labels.PCT_APPROX_LABEL)},"")'
+            r_ = rho if name == "p_pct_q_t" else "0.5"
+            vq = (f"({q}^2*SUMPRODUCT(({G}=1)*{A}*{Y}*(1-{Y}))+(1-{q})^2*SUMPRODUCT(({G}=-1)*{A}*{Y}*(1-{Y}))"
+                  f"+{sd}^2*({q}^2*{gp}^2+(1-{q})^2*{gm}^2-2*{r_}*{q}*(1-{q})*{gp}*{gm}))")
+            return f"1-NORMSDIST((-{cr}-({q}*{gp}-(1-{q})*{gm}))/SQRT(MAX({vq},1E-300)))"
         if name == "share_at_or_above_t":
             t = self.score_ts[t_index]
             es = f"SUMPRODUCT(({d['scored']}=1)*{E})"
@@ -1496,6 +1624,12 @@ class Book:
         kp = v["kpis"]
         if name in ("margin_t", "p_median_t", "p_median_t_rho05"):
             return v["median"][self.targets[t_index]][name]
+        if name in ("margin_q_t", "p_pct_q_t", "p_pct_q_t_rho05"):
+            return v["pct"][self.ptargets[t_index]][name]
+        if name == "pct_expected_below":
+            return v["pct"][self.ptargets[t_index]]["expected_below"]
+        if name == "pct_approximate":
+            return v["pct"][self.ptargets[t_index]]["approximate"]
         if name == "share_at_or_above_t":
             return kp["share_at_or_above_t"][self.score_ts[t_index]]
         if name == "enrolled_at_or_above":
@@ -1679,6 +1813,7 @@ class Book:
             self._cref_row(S, f"P(median holds), {nm} {t:g}", "probability", "p_median_t", "prob", t=ti)
             self._cref_row(S, f"P(median holds), {nm} {t:g}, rho 0.5: {labels.RHO_SENSITIVITY}", "probability",
                            "p_median_t_rho05", "prob", t=ti)
+        self.sw_percentiles(S)
         self._cref_row(S, "Full-tuition enrolled (award at or above tuition)", "students", "full_tuition_n", "n1")
         self._cref_row(S, "No-merit-award enrolled (award zero)", "students", "no_merit_award_n", "n1")
         self._cref_row(S, "Barbell index", "ratio", "barbell", "r3")
@@ -1691,7 +1826,16 @@ class Book:
         self._cref_row(S, "ntr_y1 (first-year net tuition revenue, entering class)", "USD", "ntr_y1", "usd")
         self._direct_row(S, f"ntr_y1, {labels.RANGE_OUTCOME}: low", "USD", "ntr_lo90", "usd")
         self._direct_row(S, f"ntr_y1, {labels.RANGE_OUTCOME}: high", "USD", "ntr_hi90", "usd")
-        self._cref_row(S, "P(ntr_y1 at or above ntr_target)", "probability", "p_ntr_y1_ge_target", "prob")
+        self._cref_row(S, "P(ntr_y1 at or above ntr_target; under all_jd the effective entering target)",
+                       "probability", "p_ntr_y1_ge_target", "prob")
+        # [v0.6.3, BM-4] JD revenue goal (blank under entering_y1)
+        all_jd = cfg.get("ntr_goal_basis") == "all_jd"
+        self._row(S, f"Continuing-student net tuition, all_jd ({labels.CONTINUING_LABEL})", "USD",
+                  lambda s: ('IF(in_ntr_goal_basis="all_jd",in_continuing_ntr_usd,"")',
+                             cfg.get("continuing_ntr_usd") if all_jd else None), "usd")
+        self._direct_row(S, "Projected JD net tuition = continuing (client-supplied) + ntr_y1", "USD", "jd_ntr", "usd")
+        self._cref_row(S, "P(continuing + ntr_y1 at or above ntr_target), all_jd", "probability", "p_jd_ntr_ge_goal",
+                       "prob")
         self._cref_row(S, labels.DISCOUNT_LABEL, "ratio", "discount_entering_y1", "pct1")
         self._cref_row(S, "Average aid per enrollee", "USD", "avg_aid", "usd")
         base0 = self.S[0].name
@@ -1716,6 +1860,47 @@ class Book:
         self._cref_row(S, "Share of enrolled in cells where the yield is extrapolated", "ratio",
                        "evidence_extrapolated_share", "pct1")
 
+    def sw_percentiles(self, S):
+        """[v0.6.3, BM-1] Percentile block (Middle case): per target the margin in swaps, P(percentile q at or above t),
+        the rho 0.5 line and the approximation flag; then the spread bands for q = 0.25 and 0.75."""
+        cfg = self.cfg
+        meas = cfg["score"]["measure"]
+        self.s_note(f"Percentile targets (score.percentile_targets; {labels.PCT_MARGIN_UNIT}). The q = 0.5 rows "
+                    f"repeat the median at half its margin. {labels.GPA_PCT_NOTE}")
+        for ti, (q, t) in enumerate(self.ptargets):
+            lab = f"{ordinal(q)} percentile (q {q:g}) at or above {meas} {t:g}"
+            self._cref_row(S, f"{lab}: margin (swaps at the same class size)", "students", "margin_q_t", "n1", t=ti)
+            self._cref_row(S, f"P({lab})", "probability", "p_pct_q_t", "prob", t=ti)
+            self._cref_row(S, f"P({lab}), rho 0.5: {labels.RHO_SENSITIVITY}", "probability", "p_pct_q_t_rho05",
+                           "prob", t=ti)
+            self._direct_row(S, f"{lab}: expected enrolled below t", "students", "pct_expected_below", "n1", t=ti)
+            self._direct_row(S, f"{lab}: approximation flag", "", "pct_approximate", "t", t=ti)
+        r0 = self.sr
+        for q in risk.SPREAD_QS:
+            def gen(s, q=q):
+                d = self.g("middle", s)
+                E, SC, SL = d["enrolled"], d["scored"], d["score_lo"]
+                U = f'IF(in_unscored_in_median="below",SUMPRODUCT(({SC}=0)*{E}),0)'
+                N = f"(SUMPRODUCT(({SC}=1)*{E})+{U})"
+                terms = ",".join(f"IF((SUMPRODUCT(({SC}=1)*({SL}<{b})*{E})+{U})/{N}<={q},{b},-1)"
+                                 for b in self.inp_list["score_bands"])
+                return f'IF({N}<=0,"",IF(MAX({terms})<0,"",MAX({terms})))', self.vals["pct_band"][s][q]
+            self._row(S, f"Spread: {ordinal(q)} percentile band, lower bound ({labels.BAND_NOT_SCORE_LABEL})",
+                      meas, gen, "num")
+        self.s_name("SUM_PCT_BAND_Q", r0, 2, self.sr - 1, 2 + len(S) - 1)
+        lows = sorted(float(b) for b in cfg["score"]["bands"])
+        for qi, q in enumerate(risk.SPREAD_QS):
+            def gen_t(s, q=q, qi=qi):
+                t = self.vals["pct_band"][s][q]
+                v = "" if t is None else L._range_text(lows, lows.index(t), lows.index(t), lambda x: f"{x:g}")
+                c = a1(r0 + qi, 2 + S.index(s))
+                k = f"MATCH({c},in_score_bands,0)"
+                lo0 = min(lows)
+                f = (f'IF({c}="","",IF({k}=1,{c}&"+",IF(({c}={lo0:g})*({c}<=0)=1,"below "&INDEX(in_score_bands,{k}-1),'
+                     f'{c}&" to below "&INDEX(in_score_bands,{k}-1))))')
+                return f, v
+            self._row(S, f"Spread: {ordinal(q)} percentile band ({labels.BAND_NOT_SCORE_LABEL})", "", gen_t, "t")
+
     def sw_lowhigh(self, S):
         self.s_sec(f"{labels.RANGE_CASES} ({labels.RANGE_CASES_NOTE})")
         self.s_scen_head(S, "figure", "case")
@@ -1723,6 +1908,8 @@ class Book:
         rows = [("Expected class", "class_mean", "n1", None), ("ntr_y1", "ntr_y1", "usd", None)]
         for ti, (m, t) in enumerate(self.targets):
             rows.append((f"P(median holds), {'GPA' if m == 'gpa' else meas} {t:g}", "p_median_t", "prob", ti))
+        for ti, (q, t) in enumerate(self.ptargets):                       # [v0.6.3, BM-1]
+            rows.append((f"P({ordinal(q)} percentile at or above {meas} {t:g})", "p_pct_q_t", "prob", ti))
         for lab, nm, fmt, ti in rows:
             for k in ("low", "high"):
                 self.s_txt(self.sr, 0, lab)
@@ -1857,7 +2044,7 @@ class Book:
             AWp = rng("Ledger_Middle", self.r0l, col, self.r0l + self.n - 1, col)
             E = self.LR("middle", s, "enrolled")
             NR = self.LH("middle", s, "need_rate")
-            SP = self.LV(s, "specialty_usd")
+            SP = self.g("middle", s)["K"]
             ntr = f"({Tp}*SUM({E})-SUMPRODUCT({E},{AWp})-{NR}*SUM({E})-{SP})"
             return [(Tp, st["tuition"]), (ntr, st["ntr_y1"]),
                     (f"IF(SUM({E})>0,{ntr}/SUM({E}),0)", st["net_tuition_per_student"]),
@@ -1866,7 +2053,11 @@ class Book:
                                    ["tuition T(p)", "ntr_y1", "net tuition per student", labels.DISCOUNT_LABEL],
                                    ["usd", "usd", "usd", "pct1"], gen)
         self.s_name("TW_TUITION_WHATIF", r0, 2, r1, 2 + len(cols) - 1)
-        self.sr += 1
+        # [v0.6.3, BM-4] under all_jd the what-if shows ntr_y1 only, with continuing revenue held fixed
+        self.s_txt(self.sr, 0, "Continuing revenue (all_jd)")
+        self.s_fx(self.sr, 2, f'IF(in_ntr_goal_basis="all_jd",{xs(labels.CONTINUING_HELD)},"")',
+                  labels.CONTINUING_HELD if cfg.get("ntr_goal_basis") == "all_jd" else "", "t")
+        self.sr += 2
         # the two net-tuition lines
         self.s_txt(self.sr, 0, "scenario", "h")
         for c, h in enumerate(["fixed-dollar line (T_s - T_base)", "example award A", "scaled line p (T_base - A)",
@@ -1938,8 +2129,8 @@ class Book:
                    (f"1-NORMSDIST(({d['CAP']}+0.5-{M})/{SDV})", row["p_class_over_cap"]),
                    (f"NORMSDIST(({d['TGT']}+in_class_band+0.5-{M})/{SDV})-NORMSDIST(({d['TGT']}-in_class_band-0.5-{M})"
                     f"/{SDV})", row["p_class_in_band"]),
-                   (f"{SW}-{d['SPEC']}", row["ntr_mean"]),
-                   (f'IF(in_ntr_target="","",1-NORMSDIST((in_ntr_target-({SW}-{d["SPEC"]}))/'
+                   (f"{SW}-{d['K']}", row["ntr_mean"]),
+                   (f'IF(in_ntr_target_eff="","",1-NORMSDIST((in_ntr_target_eff-({SW}-{d["K"]}))/'
                     f"MAX(SQRT(MAX({VN},0)),1E-300)))", row["p_ntr_y1_ge_target"])]
             for ti, key in enumerate(self.targets):
                 G = d[f"g{ti}"]
@@ -1970,8 +2161,8 @@ class Book:
                                       f"{d['floor']}))>0))", ys["clip_count"], "int")
                 self.s_fx(self.sr, 2, f'IF(SUM({A})>0,({d["TGT"]}-SUMPRODUCT({A},{Y}))/SUM({A})*100,"")',
                           ys["breakeven_shift_class"], "r3")
-                self.s_fx(self.sr, 3, f'IF(in_ntr_target="","",IF(SUMPRODUCT({W},{A})<>0,(in_ntr_target-'
-                                      f'(SUMPRODUCT({W},{A},{Y})-{d["SPEC"]}))/SUMPRODUCT({W},{A})*100,""))',
+                self.s_fx(self.sr, 3, f'IF(in_ntr_target_eff="","",IF(SUMPRODUCT({W},{A})<>0,(in_ntr_target_eff-'
+                                      f'(SUMPRODUCT({W},{A},{Y})-{d["K"]}))/SUMPRODUCT({W},{A})*100,""))',
                           ys["breakeven_shift_ntr"], "r3")
             self.sr += 1
         self.s_name("YS_BREAKEVEN_SHIFT_CLASS", r0, 2, self.sr - 1, 2)
@@ -1980,20 +2171,40 @@ class Book:
     def sw_pool(self, S):
         cfg = self.cfg
         t0 = cfg["score"]["median_thresholds"][0]
+        meas = cfg["score"]["measure"]
         self.s_sec(f"Pool strip (Middle case): {labels.POOL_STRIP_LABEL}",
                    f"Every lever applied except the pool multiplier, which m replaces (the segment lift stays). Median "
-                   f"at {cfg['score']['measure']} {t0:g}. Pool growth to date: see Inputs pool_ytd_growth ("
-                   f"{labels.POOL_YTD_LABEL}).")
-        self.s_txt(self.sr, 0, "Pool growth to date (pool_ytd_growth)")
+                   f"at {meas} {t0:g}; P(holds) for each percentile target. Growth to date (Inputs pool_ytd_growth: "
+                   f"complete applications at or above score.pool_threshold against the same week of the prior cycle; "
+                   f"{labels.POOL_YTD_LABEL}) marks the row nearest 1 + growth.")
+        self.s_txt(self.sr, 0, "Pool growth to date (pool_ytd_growth), as of, grid row nearest 1 + growth")
         self.s_fx(self.sr, 2, 'IF(in_pool_ytd_growth="","not set",in_pool_ytd_growth)',
                   "not set" if cfg.get("pool_ytd_growth") is None else cfg["pool_ytd_growth"], "pct1")
+        self.s_fx(self.sr, 3, f'IF(in_pool_ytd_as_of="",{xs(labels.POOL_YTD_NO_DATE)},in_pool_ytd_as_of)',
+                  cfg.get("pool_ytd_as_of") or labels.POOL_YTD_NO_DATE, "t")
+        # [v0.6.3, BM-6] nearest grid row: 1 + the number of midpoints between adjacent grid values below 1 + growth
+        # (the grid is ascending; a tie goes to the lower row)
+        gsh, gr, gc0, _, gc1 = self.names["in_pool_grid"]
+        if gc1 > gc0:
+            lo_r, hi_r = rng(gsh, gr, gc0, gr, gc1 - 1), rng(gsh, gr, gc0 + 1, gr, gc1)
+            nf = f'IF(in_pool_ytd_growth="","",1+SUMPRODUCT((({lo_r}+{hi_r})/2<1+in_pool_ytd_growth)*1))'
+        else:
+            nf = 'IF(in_pool_ytd_growth="","",1)'
+        nearest = self.vals["strips"][S[0]]["pool_strip"]["nearest_row"] if S else None
+        self.s_fx(self.sr, 4, nf, nearest, "int")
+        self.pool_nearest = a1(self.sr, 4)
+        self.marker_cells = [("Summary", self.sr, 2), ("Summary", self.sr, 4)]
         self.sr += 1
         # parts at m = 1
         pk = ["M", "V", "Gp", "Gm", "Vm", "W", "Vn"]
+        qk = [(j, x) for j in range(len(self.ptargets)) for x in ("Gp", "Gm", "Vp", "Vm")]
         self.s_txt(self.sr, 0, "scenario: split at m = 1", "h")
         self.s_txt(self.sr, 1, "part", "h")
         for c, h in enumerate(pk):
             self.s_txt(self.sr, 2 + c, h, "h")
+        for c, (j, x) in enumerate(qk):
+            q, t = self.ptargets[j]
+            self.s_txt(self.sr, 2 + len(pk) + c, f"{x} q {q:g}, t {t:g}", "h")
         self.sr += 1
         self.pool_parts = {}
         sd = "in_common_shock_sd"
@@ -2013,12 +2224,25 @@ class Book:
                     v = self.vals["parts"][s][part][key] if not self.dry else 0
                     self.s_fx(self.sr, 2 + c, fs[key], v, "usd" if key in ("W", "Vn") else "num")
                     self.pool_parts[(s, part, key)] = a1(self.sr, 2 + c)
+                pp = self.vals["strips"][s]["pool_strip"]["pct_parts"] if not self.dry else None
+                for c, (j, x) in enumerate(qk):
+                    P_ = d[f"p{j}"]
+                    sgn = "=1" if x in ("Gp", "Vp") else "=-1"
+                    var = f"*(1-{Y})" if x in ("Vp", "Vm") else ""
+                    v = pp[self.ptargets[j]][part][x] if not self.dry else 0
+                    self.s_fx(self.sr, 2 + len(pk) + c, f"SUMPRODUCT({m}*({P_}{sgn})*{A1}*{Y}{var})", v, "num")
+                    self.pool_parts[(s, part, f"{x}{j}")] = a1(self.sr, 2 + len(pk) + c)
                 self.sr += 1
         self.sr += 1
         cols = K.strip_columns(cfg)["pool_strip"]
         heads = ["growth (m - 1)", "expected class", "P(class above cap)", f"median margin {t0:g}",
                  f"P(median) {t0:g}", "mean ntr_y1", "ntr_y1 SD"]
-        fmts = ["pct1", "n1", "prob", "n1", "prob", "usd", "usd"]
+        heads += [f"P({ordinal(q)} percentile at or above {t:g})" for q, t in self.ptargets]
+        heads += ["growth to date"]
+        fmts = ["pct1", "n1", "prob", "n1", "prob", "usd", "usd"] + ["prob"] * len(self.ptargets) + ["t"]
+        marker_txt = (f'"growth to date ("&IF(in_pool_ytd_as_of="",{xs(labels.POOL_YTD_NO_DATE)},in_pool_ytd_as_of)'
+                      f'&") is about here"')
+        mcol = 2 + len(cols) - 1
 
         def gen(s, gi):
             row = self.vals["strips"][s]["pool_strip"]["pool_strip"][gi]
@@ -2032,14 +2256,56 @@ class Book:
             Wm = f"({P('lo', 'W')}+{m}*{P('hi', 'W')})"
             Vn = f"({P('lo', 'Vn')}+{m}*{P('hi', 'Vn')}+{sd}^2*{Wm}^2)"
             CAP = self.LV(s, "class_cap")
-            return [(f"{m}-1", row["growth"]), (M, row["class_mean"]),
-                    (f"1-NORMSDIST(({CAP}+0.5-{M})/SQRT(MAX({V},1E-300)))", row["p_class_over_cap"]),
-                    (f"{Gp}-{Gm}", row["margin"]),
-                    (f"1-NORMSDIST((-0.5-({Gp}-{Gm}))/SQRT(MAX({Vm},1E-300)))", row["p_median"]),
-                    (f"{Wm}-{self.LV(s, 'specialty_usd')}", row["ntr_mean"]), (f"SQRT(MAX({Vn},0))", row["ntr_sd"])]
+            out = [(f"{m}-1", row["growth"]), (M, row["class_mean"]),
+                   (f"1-NORMSDIST(({CAP}+0.5-{M})/SQRT(MAX({V},1E-300)))", row["p_class_over_cap"]),
+                   (f"{Gp}-{Gm}", row["margin"]),
+                   (f"1-NORMSDIST((-0.5-({Gp}-{Gm}))/SQRT(MAX({Vm},1E-300)))", row["p_median"]),
+                   (f"{Wm}-{self.g('middle', s)['K']}", row["ntr_mean"]), (f"SQRT(MAX({Vn},0))", row["ntr_sd"])]
+            for j, key in enumerate(self.ptargets):
+                q, cr = self.inp_list["pct_q"][j], self.inp_list["pct_corr"][j]
+                gp = f"({P('lo', f'Gp{j}')}+{m}*{P('hi', f'Gp{j}')})"
+                gm = f"({P('lo', f'Gm{j}')}+{m}*{P('hi', f'Gm{j}')})"
+                vp = f"({P('lo', f'Vp{j}')}+{m}*{P('hi', f'Vp{j}')})"
+                vm = f"({P('lo', f'Vm{j}')}+{m}*{P('hi', f'Vm{j}')})"
+                vq = (f"({q}^2*{vp}+(1-{q})^2*{vm}+{sd}^2*({q}^2*{gp}^2+(1-{q})^2*{gm}^2-2*in_shock_corr*{q}*(1-{q})"
+                      f"*{gp}*{gm}))")
+                out.append((f"1-NORMSDIST((-{cr}-({q}*{gp}-(1-{q})*{gm}))/SQRT(MAX({vq},1E-300)))",
+                            row["pct"][key]["p"]))
+            out.append((f'IF({self.pool_nearest}="","",IF({self.pool_nearest}={gi + 1},{marker_txt},""))',
+                        row["marker"]))
+            if not self.dry:
+                self.marker_cells.append(("Summary", self.sr, mcol))
+            return out
         r0, r1 = self._strip_table(S, "pool_strip", "pool multiplier m", "num", self.inp_list["pool_grid"], heads,
                                    fmts, gen)
         self.s_name("PS_POOL_STRIP", r0, 2, r1, 2 + len(cols) - 1)
+        # [v0.6.3, BM-6] break-even pool multipliers (expectations, not probabilities)
+        self.sr += 1
+        self.s_note(labels.POOL_BREAKEVEN_LABEL[0].upper() + labels.POOL_BREAKEVEN_LABEL[1:] + ". m_class = (class "
+                    "target - M_lo) / M_hi; m_q = -E[M_q]_lo / E[M_q]_hi (blank when the hi part is zero).")
+        self.s_txt(self.sr, 0, "scenario", "h")
+        self.s_txt(self.sr, 1, "break-even pool multiplier", "h")
+        self.s_txt(self.sr, 2, "expected class meets the target", "h")
+        for j, (q, t) in enumerate(self.ptargets):
+            self.s_txt(self.sr, 3 + j, f"expected margin zero: {ordinal(q)} percentile at {t:g}", "h")
+        if not self.dry:
+            self.ws["Summary"].set_row(self.sr, 36)
+        self.sr += 1
+        r0 = self.sr
+        for s in S:
+            self.s_txt(self.sr, 0, s)
+            if not self.dry:
+                P = lambda part, key: self.pool_parts[(s, part, key)]  # noqa: E731
+                be = self.vals["pool_be"][s]
+                self.s_fx(self.sr, 2, f'IF({P("hi", "M")}<>0,({self.LV(s, "class_target")}-{P("lo", "M")})/'
+                                      f'{P("hi", "M")},"")', be[0], "r3")
+                for j in range(len(self.ptargets)):
+                    q = self.inp_list["pct_q"][j]
+                    elo = f"({q}*{P('lo', f'Gp{j}')}-(1-{q})*{P('lo', f'Gm{j}')})"
+                    ehi = f"({q}*{P('hi', f'Gp{j}')}-(1-{q})*{P('hi', f'Gm{j}')})"
+                    self.s_fx(self.sr, 3 + j, f'IF({ehi}<>0,-{elo}/{ehi},"")', be[1 + j], "r3")
+            self.sr += 1
+        self.s_name("PS_POOL_BREAKEVEN_M", r0, 2, self.sr - 1, 2 + len(self.ptargets))
 
     def sw_class_table(self, S):
         cfg = self.cfg
@@ -2053,11 +2319,14 @@ class Book:
                    + labels.POLICY_UNSCORED_TRIMMED_FIRST + " f = N / M is the factor a uniform cut would apply.")
         cols = K.strip_columns(cfg)["class_table"]
         meas = cfg["score"]["measure"]
-        heads = ["f = N / M", "expected class"]
-        fmts = ["r3", "n1"]
+        heads = ["f = N / M", "expected class", "P(class above cap)"]                 # [v0.6.3, BM-3]
+        fmts = ["r3", "n1", "prob"]
         for m, t in self.targets:
             nm = "GPA" if m == "gpa" else meas
             heads += [f"margin {nm} {t:g}", f"P(median) {nm} {t:g}"]
+            fmts += ["n1", "prob"]
+        for q, t in self.ptargets:                                                    # [v0.6.3, BM-1]
+            heads += [f"margin {ordinal(q)} pct {t:g} (swaps)", f"P({ordinal(q)} pct at or above {t:g})"]
             fmts += ["n1", "prob"]
         heads += ["ntr_y1", labels.DISCOUNT_LABEL, "segment enrolled", "lowest band admitted"]
         fmts += ["usd", "pct1", "n1", "num"]
@@ -2088,14 +2357,16 @@ class Book:
             cap_ = f"{N}>{CAP}"
             wrap = lambda f: f'IF({cap_},"",{f})'  # noqa: E731
             cls = f"SUMPRODUCT({AN},{Y})"
-            T, NR, SP = d["T"], d["NR"], d["SPEC"]
+            T, NR, SP = d["T"], d["NR"], d["K"]
             ntr = f"({cls}*{T}-SUMPRODUCT({AN},{Y},{AW})-{NR}*{cls}-{SP})"
             status = (f'IF({cap_},{xs(labels.CT_ABOVE_CAP)},IF({N}>={Mref},{xs(labels.CT_NOT_APPLICABLE)},'
                       f'IF({Mref}-{N}>{RK}+0.000000001,"N not reachable: shortfall "&TEXT({Mref}-{N}-{RK},"0.0"),'
                       f'{xs(labels.CT_OK)})))')
             row_vals = ct_rows[(s, gi)]
-            out = [(f'IF({Mref}>0,{N}/{Mref},"")', row_vals[0]), (wrap(cls), row_vals[1])]
-            ci = 2
+            Vc = f"(SUMPRODUCT({AN},{Y},1-{Y})+{sd}^2*{cls}^2)"
+            out = [(f'IF({Mref}>0,{N}/{Mref},"")', row_vals[0]), (wrap(cls), row_vals[1]),
+                   (wrap(f"1-NORMSDIST(({CAP}+0.5-{cls})/SQRT(MAX({Vc},1E-300)))"), row_vals[2])]
+            ci = 3
             for ti, key in enumerate(self.targets):
                 G = d[f"g{ti}"]
                 gp = f"SUMPRODUCT(({G}=1)*{AN}*{Y})"
@@ -2103,6 +2374,17 @@ class Book:
                 vm = f"(SUMPRODUCT(({G}<>0)*{AN}*{Y}*(1-{Y}))+{sd}^2*({gp}^2+{gm}^2-2*{rho}*{gp}*{gm}))"
                 out.append((wrap(f"SUMPRODUCT({G},{AN},{Y})"), row_vals[ci]))
                 out.append((wrap(f"1-NORMSDIST((-0.5-({gp}-{gm}))/SQRT(MAX({vm},1E-300)))"), row_vals[ci + 1]))
+                ci += 2
+            for tj in range(len(self.ptargets)):
+                Pq = d[f"p{tj}"]
+                q, cr = self.inp_list["pct_q"][tj], self.inp_list["pct_corr"][tj]
+                gp = f"SUMPRODUCT(({Pq}=1)*{AN}*{Y})"
+                gm = f"SUMPRODUCT(({Pq}=-1)*{AN}*{Y})"
+                vq = (f"({q}^2*SUMPRODUCT(({Pq}=1)*{AN}*{Y}*(1-{Y}))+(1-{q})^2*SUMPRODUCT(({Pq}=-1)*{AN}*{Y}*(1-{Y}))"
+                      f"+{sd}^2*({q}^2*{gp}^2+(1-{q})^2*{gm}^2-2*{rho}*{q}*(1-{q})*{gp}*{gm}))")
+                out.append((wrap(f"{q}*{gp}-(1-{q})*{gm}"), row_vals[ci]))
+                out.append((wrap(f"1-NORMSDIST((-{cr}-({q}*{gp}-(1-{q})*{gm}))/SQRT(MAX({vq},1E-300)))"),
+                            row_vals[ci + 1]))
                 ci += 2
             out.append((wrap(ntr), row_vals[ci]))
             out.append((wrap(f"IF({cls}*{T}>0,(SUMPRODUCT({AN},{Y},{AW})+{NR}*{cls}+{SP})/({cls}*{T}),0)"),
@@ -2196,6 +2478,8 @@ class Book:
         self.sr += 1
         items = [("RESPONSE_LABEL", labels.RESPONSE_LABEL), ("ASSUMPTION_LABEL", labels.ASSUMPTION_LABEL),
                  ("SEGMENT_SHARE_LABEL", labels.SEGMENT_SHARE_LABEL),
+                 ("PCT_APPROX_LABEL", labels.PCT_APPROX_LABEL), ("BAND_NOT_SCORE_LABEL", labels.BAND_NOT_SCORE_LABEL),
+                 ("CONTINUING_LABEL", labels.CONTINUING_LABEL), ("POOL_BREAKEVEN_LABEL", labels.POOL_BREAKEVEN_LABEL),
                  ("Range kind", f"{labels.RANGE_OUTCOME} ({labels.RANGE_OUTCOME_NOTE})"),
                  ("Range kind", f"{labels.RANGE_CASES} ({labels.RANGE_CASES_NOTE})"),
                  ("Probability display", f"while shock_source is illustrative: '{labels.PROB_UNDER}' and "
@@ -2217,6 +2501,8 @@ class Book:
         for name, prefix, _ in K.SKT:
             self._contract_block(S, name, prefix, list(range(len(self.targets))))
         self._contract_block(S, "share_at_or_above_t", "SUM", list(range(len(self.score_ts))))
+        for name, prefix, _ in K.SKQ:                                        # [v0.6.3, BM-1]
+            self._contract_block(S, name, prefix, list(range(len(self.ptargets))))
 
     def _contract_block(self, S, name, prefix, tis):
         rn = K.range_name(name, prefix)
@@ -2233,6 +2519,9 @@ class Book:
                 else:
                     if name == "share_at_or_above_t":
                         lab = f"{rn} [{self.score_ts[ti]:g}]"
+                    elif name in ("margin_q_t", "p_pct_q_t", "p_pct_q_t_rho05"):
+                        q, t = self.ptargets[ti]
+                        lab = f"{rn} [q {q:g}, t {t:g}]"
                     else:
                         m, t = self.targets[ti]
                         lab = f"{rn} [{'GPA ' if m == 'gpa' else ''}{t:g}]"
@@ -2447,10 +2736,23 @@ class Book:
             ex = ", ".join(cfg["trim"]["exempt_cells"])
             row("Trim: trim.exempt_cells equals its value at build", "Inputs",
                 f'IF(in_exempt_cells={xs(ex)},"OK",{rb(ex or "none")})', "OK")
+            if ps == "above_floor":
+                # [v0.6.3, BM-5] under above_floor the Trim order depends on score.floor
+                fl = cfg["score"]["floor"]
+                row("Trim order: score.floor equals its value at build (protect_segment above_floor)", "Inputs",
+                    f'IF(in_score_floor={fl:g},"OK",{rb(f"{fl:g}")})', "OK")
             for s in S:
                 seg = L.active_segment(cfg, run.scen(s)) or ""
                 row("Trim order: active segment equals its value at build", s,
                     f'IF({self.LH("middle", s, "seg")}={xs(seg)},"OK",{rb(seg or "none")})', "OK")
+        # [v0.6.3, BM-1] percentile targets: each t a band bound (live); q fixed at build (labels and layout)
+        for j, (q, t) in enumerate(self.ptargets):
+            tr = self.inp_list["pct_t"][j]
+            row(f"Percentile target {j + 1}: t is a band bound (score.bands)", "Inputs",
+                f'IF(SUMPRODUCT((in_score_bands={tr})*1)>0,"OK","t "&{tr}&" is not a band lower bound")', "OK")
+            qr = self.inp_list["pct_q"][j]
+            row(f"Percentile target {j + 1}: q equals its value at build", "Inputs",
+                f'IF({qr}={q!r},"OK",{rb(f"{q:g}")})', "OK")
         for j, s in enumerate(S):
             st = ref("Summary", self.exact_status_row, 2 + j)
             row("Static exact segment probability is current (Summary segment block)", s,
@@ -2566,7 +2868,7 @@ class Book:
         ws.set_column(0, 0, 34)
         ws.set_column(1, 1, 120)
         r = 0
-        self.txt("README", r, 0, "Scenario workbook (prototype, spec v0.6.2): README", "title")
+        self.txt("README", r, 0, "Scenario workbook (prototype, spec v0.6.3): README", "title")
         r += 2
         sections = [
             ("Purpose", "Scores the scenarios written on Levers with live formulas and shows the results with their "
@@ -2592,7 +2894,11 @@ class Book:
              "ntr_y1: entering class, first year: gross_y1 minus merit, need and specialty. gross_y1: enrolled times "
              "published first-year tuition (fees excluded). discount_entering_y1: aid over gross_y1 (label '"
              + labels.DISCOUNT_LABEL + "'). Median margin at t: enrolled with a score at or above t minus enrolled "
-             "with a score below t. Share at or above t: over expected enrolled with a score. E_S: segment enrolled. "
+             "with a score below t. Share at or above t: over expected enrolled with a score. Percentile q at or "
+             "above t: at most a share q of scored enrollees below t (the median is q = 0.5); its margin q x N_scored "
+             "- G- counts swaps at the same class size (" + labels.PCT_MARGIN_UNIT + "); "
+             + labels.PCT_APPROX_LABEL + " below 20 expected below t; the spread rows are a '"
+             + labels.BAND_NOT_SCORE_LABEL + "'. " + labels.GPA_PCT_NOTE + " E_S: segment enrolled. "
              "Incentive cost, paid-anyway share, aid per additional enrollee (items 19 to 21); evidence share (item "
              "24). Ratios are ratios of expected values, E[X] / E[Y], everywhere."),
             ("Mode", ("Reproduce build: the Reproduce sheet holds loaded yields, admit rates, awards, pool settings and "
@@ -2611,7 +2917,16 @@ class Book:
                                 "differs from its value at build, and Summary marks the exact probability stale when "
                                 "the segment's expected enrollment or goal changes."),
             ("Policy choices", labels.POLICY_UNSCORED_TRIMMED_FIRST + " " + labels.POLICY_UNSCORED_EXCLUDED
-             + " (unscored_in_median = " + cfg["unscored_in_median"] + ")."),
+             + " (unscored_in_median = " + cfg["unscored_in_median"] + "). Segment protection on the shrink path: "
+             + cfg["trim"]["protect_segment"] + " (above_floor protects segment cells from score.floor up to the first "
+             "median threshold; segment cells below the floor and unscored segment cells are trimmed in normal "
+             "order)."),
+            ("Revenue goal and tuition", "ntr_goal_basis " + cfg.get("ntr_goal_basis", "entering_y1") + ": under "
+             "all_jd, ntr_target is the total JD goal and every ntr_target figure reads ntr_target - "
+             "continuing_ntr_usd (" + labels.CONTINUING_LABEL + "). tuition_by_year_usd, when set for a year, takes "
+             "precedence over tuition_increase_by_year; Inputs shows the implied increase. Pool growth to date marks "
+             "the pool-strip row nearest 1 + growth; the break-even pool multipliers are expectations ("
+             + labels.POOL_BREAKEVEN_LABEL + ")."),
             ("Yield", "One Ledger column per case: clip(clip(y0 + b/100 (award - a0)/1000, floor, cap) + shift/100, "
                       "floor, cap). The Response rung grid is display only (R-01). Yield is constant when admit rates "
                       "change (D1); sticker price does not move applications or yield (D10)."),
@@ -2639,6 +2954,7 @@ def write(run, path, sentinel=False):
     layout = {"r0l": bk.r0l, "ltot": bk.ltot, "lblock": bk.lblock, "lstat": bk.lstat, "r0v": bk.r0v,
               "vblock": bk.vblock, "vfield_row": bk.vfield_row, "n": bk.n, "case_sheet": dict(CASE_SHEET),
               "r0h": bk.r0h, "hcol": dict(bk.hcol), "probe_cell": getattr(bk, "probe_cell", None),
+              "marker_cells": list(getattr(bk, "marker_cells", [])),     # [v0.6.3, BM-6] growth-to-date cells
               "ledger_head_rows": {"name": 2, "T": 3, "p": 4, "need_rate": 5, "seg": 6}}
     return {"expected": bk.expected, "dump": bk.dump, "names": bk.names, "vals": bk.vals,
             "build_id": run.meta.get("build_id"), "layout": layout, "run": run}

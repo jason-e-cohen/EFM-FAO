@@ -32,7 +32,11 @@ What is loaded and how (each rule is reported in the run's notes):
     scenario's tuition. Children carry only the cells that differ from the parent (spec section 2).
 - Settings: mode reproduce, integer admits and enrolled, tuition_increase_by_year, unscored_in_median and
   round_apps_after_pool from the config's `reproduce` block (spec sections 2 and 9; DECISIONS Nov 18). The fixture's
-  own counting rule is detected from its count rows and reported; it does not change the setting.
+  own counting rule is detected from its count rows and reported; it does not change the setting. The config's
+  tuition_by_year_usd (live plan-year tuition, BM-2) is dropped: reproduce mode uses the fixture's tuition.
+- Need aid (spec section 0A item B5): the ledger's reproduce mode takes the need rate rounded to whole dollars per
+  enrollee (round(need.total / need.reference_class)) times the class, plus a scenario's need_total departure from
+  need.total as a fixed amount, which is the fixture's own rule; so NTR matches the file exactly.
 """
 import argparse
 import copy
@@ -369,6 +373,9 @@ def reproduce_config(cfg_raw, fx):
     raw["tuition_by_cohort"] = dict(fx["tuition_by_cohort"])
     raw["tuition_base"] = fx["tuition_by_cohort"][base]
     raw["tuition_increase_by_year"] = {plan: float(rp["tuition_increase_pct"])}
+    # the live plan-year tuition in dollars (tuition_by_year_usd, BM-2) would take precedence over the reproduce
+    # increase; reproduce mode takes the fixture's tuition and the reproduce increase only
+    raw.pop("tuition_by_year_usd", None)
     if plan - base != 1:
         raise ConfigError("reproduce mode supports one plan year after base_cycle")
     raw["unscored_in_median"] = rp["unscored_in_median"]

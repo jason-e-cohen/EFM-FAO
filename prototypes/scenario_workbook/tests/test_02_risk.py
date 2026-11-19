@@ -7,7 +7,7 @@ import os
 import numpy as np
 import pytest
 
-from sw import ledger as L, mc, response, risk
+from sw import config, ledger as L, mc, response, risk
 from toy import toy_cells, toy_cfg, toy_override
 
 S_SD = 0.10
@@ -136,3 +136,83 @@ def test_fractional_admits_exact_matches_sim():
     sim = mc.simulate(A, y, S_SD, {"c": np.ones(4)}, DRAWS, seed=3)["c"]
     for k in (8, 10, 12):
         assert abs(float((sim >= k).mean()) - float(pmf[vals >= k].sum())) <= 0.005
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# [v0.6.3, BM-1] Percentile targets: the closed form with the 1/(2n) continuity correction against the exact two-pmf
+# convolution (Review_Phase2_2_Plan.md section 2), at rho 1.0 and 0.5. Tolerance 0.01 where at least 20 students are
+# expected below t, 0.02 otherwise. Cases: synthetic worlds with a few levers, q in {0.10, 0.25, 0.50, 0.75}, every
+# scored band bound as t, kept where the exact probability lies between 0.01 and 0.99.
+
+PCT_QS = (0.10, 0.25, 0.50, 0.75)
+PCT_SCENARIOS = [dict(pool_multiplier=0.8), dict(pool_multiplier=1.4, bonus_usd=6000.0, bonus_scope="residency_out"),
+                 dict(yield_shift_pts=-3.0)]
+
+
+def _pct_cases(cfg, worlds, seeds):
+    for seed in seeds:
+        cells = worlds[seed]
+        base = response.base_yield(cells, cfg)
+        for k, lev in enumerate(PCT_SCENARIOS):
+            sc = L.derive(L.baseline(cells, cfg), f"p{k}", cfg, cells, **lev)
+            yield seed, k, L.evaluate(cells, cfg, sc, base, "middle")
+
+
+def test_percentile_closed_form_vs_exact(syn_cfg, worlds, report_dir):
+    cfg = syn_cfg
+    s = cfg["risk"]["common_shock_sd"]
+    seeds = cfg["generator"]["seeds"][:6]
+    rows = []
+    for seed, k, lc in _pct_cases(cfg, worlds, seeds):
+        A, y = lc.admits, lc.yld
+        for t in sorted(b for b in cfg["score"]["bands"] if b > 0):
+            g = risk.median_signs(lc.cells, cfg, "score", t)
+            for rho in (1.0, 0.5):
+                if rho < 1.0 and seed not in seeds[:3]:
+                    continue                      # rho 0.5 on three worlds (20 x 20 nodes)
+                exs = risk.exact_pct(A, y, g, list(PCT_QS), s, rho)
+                for q, ex in zip(PCT_QS, exs):
+                    if not 0.01 <= ex <= 0.99:
+                        continue
+                    cf = risk.cf_pct(A, y, g, q, s, rho)
+                    tol = 0.01 if cf["g_minus"] >= 20 else 0.02
+                    rows.append({"seed": seed, "scenario": k, "t": t, "q": q, "rho": rho, "closed": cf["p"],
+                                 "exact": ex, "expected_below": cf["g_minus"], "tol": tol,
+                                 "gap": abs(cf["p"] - ex)})
+    worst = {}
+    for r in rows:
+        key = f"q {r['q']:g}, rho {r['rho']:g}"
+        worst[key] = max(worst.get(key, 0.0), r["gap"])
+    _record(report_dir, "test02_percentile", {"cases": len(rows), "worst_gap": worst, "rows": rows})
+    for q in PCT_QS:
+        assert sum(r["q"] == q for r in rows) >= 10, q          # each q is exercised
+    assert sum(r["q"] == 0.10 and r["rho"] == 0.5 for r in rows) >= 3
+    bad = [r for r in rows if r["gap"] > r["tol"]]
+    assert not bad, bad[:5]
+
+
+def test_percentile_simulation_vs_exact(syn_cfg, worlds):
+    """The simulation (integer weights m and -(n - m), so a tie at zero counts exactly) against the exact
+    distribution within 0.005, at rho 1.0 and 0.5, on one world."""
+    cfg = syn_cfg
+    s = cfg["risk"]["common_shock_sd"]
+    seed = cfg["generator"]["seeds"][0]
+    (_, _, lc), = [c for c in _pct_cases(cfg, worlds, [seed]) if c[1] == 0]
+    A, y = lc.admits, lc.yld
+    for q, t in ((0.10, 154), (0.25, 161), (0.75, 167)):
+        g = risk.median_signs(lc.cells, cfg, "score", t)
+        n = config.pct_lattice_n(q)
+        m = int(round(q * n))
+        w = np.where(g > 0, m, np.where(g < 0, -(n - m), 0))
+        for rho in (1.0, 0.5):
+            groups = None if rho >= 1 else (g > 0)
+            sm = mc.simulate(A, y, s, {"m": w}, DRAWS, seed=21, groups=groups, rho=rho)["m"]
+            assert abs(float((sm >= 0).mean()) - risk.exact_pct(A, y, g, q, s, rho)) <= 0.005, (q, t, rho)
+
+
+def test_percentile_exact_at_half_is_the_exact_median(grid):
+    cfg, cells, lc = grid
+    g = np.array([1, 1, -1, -1])
+    for rho in (1.0, 0.5):
+        assert risk.exact_pct(BAL_A, BAL_Y, g, 0.5, S_SD, rho) == pytest.approx(
+            risk.exact_median(BAL_A, BAL_Y, g, S_SD, rho), abs=1e-12)

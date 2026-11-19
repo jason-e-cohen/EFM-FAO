@@ -1,6 +1,7 @@
 """Test 4: closed form against simulation on synthetic worlds. One Baseline-derived scenario on each of the 20 worlds
 (seeds in config/synthetic.yaml), each with a pool multiplier, a bonus and a yield shift drawn from that file's
-ranges. Class, median and NTR probabilities within 0.02; medians at rho 1.0 and 0.5.
+ranges. Class, median and NTR probabilities within 0.02; medians at rho 1.0 and 0.5. [v0.6.3, BM-1] Percentile
+targets (the config's, plus q = 0.75 at 167) within 0.02 at rho 1.0 and 0.5.
 
 Class and NTR are compared at rho 1 only: their closed forms have one common shock (section 5); rho applies to the
 two groups of a median threshold."""
@@ -51,6 +52,18 @@ def test_closed_form_vs_simulation(syn_cfg, worlds, report_dir):
                 groups = None if rho >= 1 else (g > 0)
                 sm = mc.simulate(A, y, s, {"m": g}, draws, seed=seed + 7, groups=groups, rho=rho)["m"]
                 checks.append((f"p_median_{meas}_{t}_rho{rho}", risk.cf_median(A, y, g, s, rho)["p"],
+                               float((sm >= 0).mean())))
+        # [v0.6.3, BM-1] percentile targets: integer weights m and -(n - m), so the event m G+ >= (n - m) G- is exact
+        from sw import config as C
+        for q, t in risk.pct_targets(cfg) + [(0.75, 167)]:
+            g = risk.median_signs(cells, cfg, "score", t)
+            n_ = C.pct_lattice_n(q)
+            m_ = int(round(q * n_))
+            wq = np.where(g > 0, m_, np.where(g < 0, -(n_ - m_), 0))
+            for rho in (1.0, 0.5):
+                groups = None if rho >= 1 else (g > 0)
+                sm = mc.simulate(A, y, s, {"m": wq}, draws, seed=seed + 11, groups=groups, rho=rho)["m"]
+                checks.append((f"p_pct_q{q:g}_{t}_rho{rho}", risk.cf_pct(A, y, g, q, s, rho)["p"],
                                float((sm >= 0).mean())))
         for name, cf, sm in checks:
             gap = abs(cf - sm)
