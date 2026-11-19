@@ -4,6 +4,16 @@
 
 ## 1. Decisions by date
 
+### November 19, 2026 (Jason): Phase 4 build
+
+| Decision | IDs |
+|---|---|
+| Top-quartile merit share: unscored enrollees rank last (below every score band); the position straddling the quartile line counts in proportion; cells sharing a score band and GPA class are taken together | Phase 4 calls 1, 2 |
+| `top_quartile_merit_share` joins the interface contract with its own named range (prefix `DIST`); the other Distribution figures keep their existing Summary ranges (one range per figure, Q-1) | Phase 4 call 3 |
+| Summary PDF: fix the three remaining cosmetics (net-tuition line columns cut short, long column-A labels cut off, scenario headers not repeated on continued pages), since the Summary is the client-facing render | Phase 4 |
+| Mutant N83 needs a test that checks a value, not only a crash; hand-run Excel comparison reports go to a build-specific file that tests never overwrite | Phase 4 |
+| An independent reviewer pass covers Phase 2.2 and Phase 4 before the fix pass; a pre-delivery review and the Windows Excel check precede the first Richmond workbook | Process |
+
 ### November 18, 2026 (Jason): spec v0.6.3
 
 Applied as section 0A of `Prototype_Spec_Scenario_Workbook_v0.6.md`: Brandon's points BM-1 to BM-6 as designed in `Review_Phase2_2_Plan.md` section 3 (for Phase 2.2), the Phase 3 reproduce rules (R3), and the Scenario 4 deliverable scope. Methodology Appendix F gains item 26 (score percentiles). Phase 2.2 runs from the `phase3-accepted` commit; reproduce-mode need-aid rounding per enrollee is added to it.

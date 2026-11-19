@@ -2,8 +2,9 @@
 the Summary named range, the Ledger and a Python dump of the same run.
 
 The Python dump (`sw.contract.dump`) is keyed by the range names; the Ledger side recomputes each figure from the
-recalculated Ledger columns in the test, so the three sources are independent. `step_sizes` waits for the Distribution
-sheet (Phase 4) and is not enumerated. Range names are canonical, with no aliases [v0.6.2, Q-1]; `p_segment_goal_exact`
+recalculated Ledger columns in the test, so the three sources are independent. `step_sizes` (Phase 4) is the
+Distribution sheet's STEP_SIZES range; the Distribution counts, barbell index and top-quartile merit share agree with the
+Summary ranges and with a recomputation from the Ledger columns. Range names are canonical, with no aliases [v0.6.2, Q-1]; `p_segment_goal_exact`
 is Python only and the Summary carries a static copy [v0.6.2, Q-2].
 """
 import numpy as np
@@ -143,8 +144,79 @@ def test_award_matrix_and_strips_agree_with_ledger(main_wb):
                 assert close(row[1], cls[j])
 
 
+def _dist_rows(wb):
+    """Distribution summary block: {(label prefix, case): [values by scenario]}."""
+    ws = wb["Distribution"]
+    out = {}
+    for r in range(1, ws.max_row + 1):
+        a, c = ws.cell(r, 1).value, ws.cell(r, 2).value
+        if isinstance(a, str) and c in ("Low", "Middle", "High") and "[" in a:
+            out[(a.split(" [")[0], c.lower())] = [ws.cell(r, 3 + j).value for j in range(ws.max_column - 2)]
+    return out
+
+
+def _top_quartile(e, aw, score, scored, gpa):
+    """Independent recomputation of the top-quartile merit share: positions (score, GPA) highest first, unscored
+    last; the straddling position counts in proportion."""
+    pos = {}
+    for i in range(len(e)):
+        key = (0, -float(score[i]), "hi lo blank".split().index(gpa[i])) if scored[i] == 1 else \
+            (1, 0.0, "hi lo blank".split().index(gpa[i]))
+        E, M = pos.get(key, (0.0, 0.0))
+        pos[key] = (E + e[i], M + e[i] * aw[i])
+    q, cum, top = e.sum() / 4, 0.0, 0.0
+    for key in sorted(pos):
+        E, M = pos[key]
+        if E > 0:
+            top += M * min(1.0, max(0.0, (q - cum) / E))
+        cum += E
+    m = (e * aw).sum()
+    return top / m if m > 0 else 0.0
+
+
+def test_distribution_agrees_with_summary_and_ledger(main_wb, edge_wb):
+    """[Phase 4] Distribution: full-tuition, no-merit-award, barbell and merit equal the Summary ranges; the top-quartile
+    share equals a recomputation from the recalculated Ledger columns; STEP_SIZES equals adjacent differences of
+    AWARD_MATRIX within residency x segment x GPA class, in ledger.awards order."""
+    for bundle in (main_wb, edge_wb):
+        run, wb = bundle["info"]["run"], bundle["values"]
+        S = [s.name for s in run.scenarios]
+        rows = _dist_rows(wb)
+        pairs = {"Full-tuition enrolled (award at or above tuition)": "SUM_FULL_TUITION_N",
+                 "No-merit-award enrolled (award zero)": "SUM_NO_MERIT_AWARD_N",
+                 "Barbell index ((full-tuition + no-merit-award) / class)": "SUM_BARBELL",
+                 "Merit dollars": "SUM_MERIT"}
+        score = _static(bundle, "middle", "score_lo")
+        scored = _static(bundle, "middle", "scored").astype(float)
+        gpa = _static(bundle, "middle", "gpa_class")
+        for lab, rn in pairs.items():
+            summ = read_range(wb, rn)
+            for ki, k in enumerate(CASES):
+                for j in range(len(S)):
+                    assert close(rows[(lab, k)][j], summ[ki][j]), (lab, k, S[j])
+        for k in CASES:
+            for j, s in enumerate(S):
+                e = _ledger(bundle, k, s, "enrolled").astype(float)
+                aw = _ledger(bundle, k, s, "award").astype(float)
+                got = rows[("Share of merit dollars to the top quartile of enrolled", k)][j]
+                assert abs(got - _top_quartile(e, aw, score, scored, gpa)) < 1e-9, (k, s)
+        am = np.array(read_range(wb, "AWARD_MATRIX"), dtype=float)
+        res, seg = _static(bundle, "middle", "residency"), _static(bundle, "middle", "segment")
+        groups = {}
+        for i in range(len(res)):
+            if scored[i] == 1:
+                groups.setdefault((res[i], seg[i], gpa[i]), []).append(i)
+        exp = []
+        for idx in groups.values():
+            idx = sorted(idx, key=lambda i: -float(score[i]))
+            exp += [am[a] - am[b] for a, b in zip(idx[:-1], idx[1:])]
+        got = np.array(read_range(wb, "STEP_SIZES"), dtype=float)
+        assert got.shape == (len(exp), len(S))
+        assert np.allclose(got, np.array(exp), rtol=0, atol=1e-6)
+
+
 def test_contract_table_is_complete():
-    """Every name of spec section 15 item 11 is enumerated (step_sizes waits for the Distribution sheet)."""
+    """Every name of spec section 15 item 11 is enumerated."""
     names = {n for _, n, _, _ in K.contract_table()} | {n for n, _, _ in K.python_only_table()}
     spec = {"class_mean", "class_lo90", "class_hi90", "p_class_over_cap", "p_class_in_band", "margin_t",
             "p_median_t", "p_median_t_rho05", "share_at_or_above_t", "unscored_count", "gross_y1", "merit", "need",
@@ -154,7 +226,7 @@ def test_contract_table_is_complete():
             "additional_enrollees", "aid_per_additional", "ntr_per_additional", "incentive_valid",
             "tuition_whatif[grid]", "net_tuition_line_fixed", "net_tuition_line_scaled", "yield_strip[grid]",
             "breakeven_shift_class", "breakeven_shift_ntr", "pool_strip[grid]", "class_table[grid]",
-            "evidence_extrapolated_share", "award_matrix", "p_segment_goal_exact"}
+            "evidence_extrapolated_share", "award_matrix", "step_sizes", "p_segment_goal_exact"}
     assert spec <= names, sorted(spec - names)
 
 

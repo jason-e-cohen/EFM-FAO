@@ -423,6 +423,41 @@ def test_award_matrix_and_step_sizes():
                                  "band_lower": 161.0, "step_usd": 25000.0}]
 
 
+def test_top_quartile_merit_share():
+    """[Phase 4] Class 30.6, so the top quartile is 7.65 enrollees. Positions, highest first: 170 hi (c1 4.6 at 53,000 and
+    c5 2.0 at 45,000: 6.6 enrolled, 333,800), 170 lo (c3 3.0 at 30,000: 90,000), 161 hi, 161 lo, unscored blank (c6,
+    last). 170 hi is wholly inside; 1.05 of 170 lo's 3.0 enrolled is inside (fraction 0.35, 31,500). Top quartile
+    365,300 of merit 693,800. c1 (in-state) and c5 (segment) share a position, so the order within it does not
+    matter; with no segment cells the answer is the same."""
+    for mode in ("one", "none"):
+        cfg, cells, base = _setup(segment_mode=mode)
+        lc = L.evaluate(cells, cfg, L.baseline(cells, cfg), base, "middle")
+        q = L.top_quartile_merit(lc)
+        assert [(p["score_lo"], p["gpa_class"]) for p in q["positions"]] == [
+            (170.0, "hi"), (170.0, "lo"), (161.0, "hi"), (161.0, "lo"), (None, "blank")]
+        assert [p["fraction"] for p in q["positions"]] == pytest.approx([1.0, 0.35, 0.0, 0.0, 0.0], abs=1e-12)
+        assert q["top_quartile_enrolled"] == pytest.approx(7.65, abs=1e-12)
+        assert q["top_quartile_merit"] == pytest.approx(365300.0, abs=1e-6)
+        assert q["top_quartile_merit_share"] == pytest.approx(365300.0 / 693800.0, abs=1e-12)
+        assert L.kpis(lc)["top_quartile_merit_share"] == q["top_quartile_merit_share"]
+    # an unscored position sits below every scored one, whatever its award (the award moves c6's yield, so only the
+    # order is asserted); zero merit gives 0
+    s = L.derive(L.baseline(cells, cfg), "u", cfg, cells, award={"c6": 53000.0})
+    q = L.top_quartile_merit(L.evaluate(cells, cfg, s, base, "middle"))
+    assert q["positions"][-1]["score_lo"] is None and q["positions"][-1]["fraction"] == 0.0
+    z = L.derive(L.baseline(cells, cfg), "z", cfg, cells, award={c: 0.0 for c in cells.cell_id},
+                 full_tuition={c: False for c in cells.cell_id})
+    qz = L.top_quartile_merit(L.evaluate(cells, cfg, z, base, "middle"))
+    assert qz["merit"] == 0 and qz["top_quartile_merit_share"] == 0.0
+    # positions with no enrolled take fraction 0: with c2, c3 and c4 at admit rate 0 the class is 4.6 + 2.0 + 1.5 = 8.1;
+    # the quartile 2.025 lies inside 170 hi (6.6), so its fraction is 2.025 / 6.6 and the share 2.025 / 6.6 x 333,800
+    # over 333,800
+    s2 = L.derive(L.baseline(cells, cfg), "s2", cfg, cells, admit_rate={"c2": 0.0, "c4": 0.0, "c3": 0.0})
+    q2 = L.top_quartile_merit(L.evaluate(cells, cfg, s2, base, "middle"))
+    assert [p["fraction"] for p in q2["positions"]] == pytest.approx([2.025 / 6.6, 0, 0, 0, 0], abs=1e-12)
+    assert q2["top_quartile_merit_share"] == pytest.approx(2.025 / 6.6, abs=1e-12)
+
+
 def test_discount_row():
     cfg, cells, base = _setup()
     s = L.derive(L.baseline(cells, cfg), "d", cfg, cells, discount_target=0.5)

@@ -47,7 +47,7 @@ def test_excel_equals_python(main_wb):
               "mismatches": {k: v[:20] for k, v in bad.items()}}
     with open(os.path.join(PHASE2, "test03_report.json"), "w") as f:
         json.dump(report, f, indent=1, default=str)
-    for sheet in ("Ledger_Low", "Ledger_Middle", "Ledger_High", "Summary"):
+    for sheet in ("Ledger_Low", "Ledger_Middle", "Ledger_High", "Summary", "Distribution"):
         assert count[sheet] > 0, f"no formula cells recorded on {sheet}"
     assert not bad, {k: v[:5] for k, v in bad.items()}
 
@@ -59,6 +59,7 @@ def test_edge_workbook_equals_python(edge_wb):
     with open(os.path.join(PHASE2, "test03_edge_report.json"), "w") as f:
         json.dump(report, f, indent=1, default=str)
     assert sum(count.values()) > 10_000
+    assert count["Distribution"] > 0
     assert not bad, {k: v[:5] for k, v in bad.items()}
 
 
@@ -310,6 +311,7 @@ def test_integer_reproduce_workbook_equals_python(repro_syn_wb):
     assert not bad, {k: v[:5] for k, v in bad.items()}
     assert "Reproduce" in wb.sheetnames and "Trim" not in wb.sheetnames
     assert "CT_CLASS_TABLE" not in repro_syn_wb["info"]["names"]
+    assert count["Distribution"] > 0 and "STEP_SIZES" in repro_syn_wb["info"]["names"]
 
 
 def test_integer_branches_reached(repro_syn_wb):
@@ -434,3 +436,31 @@ def test_phase22_coverage(main_wb, edge_wb):
     assert edge_wb["info"]["run"].lcs[base.name]["middle"].tuition == cfg["tuition_by_year_usd"][2027]
     d = edge_wb["info"]["vals"]["sk"][(base.name, "middle")]
     assert d["p_jd_ntr_ge_goal"] is not None and d["jd_ntr"] is not None
+
+
+def test_distribution_branches_reached(main_wb, edge_wb, repro_syn_wb):
+    """[Phase 4] The Distribution formulas compared above take each branch: positions wholly inside, wholly outside and
+    straddling the top quartile; positions with no enrolled (the fraction's zero branch); an unscored position; a
+    scenario with merit of zero (edge "No merit awards"); full-tuition and no-merit-award counts above zero; non-zero
+    step sizes of both signs across the three workbooks; integer enrolled (reproduce build)."""
+    from sw import ledger as L
+    fr, zero_e, unscored, zero_merit, ft, nm, steps = set(), 0, 0, 0, 0, 0, []
+    for bundle in (main_wb, edge_wb, repro_syn_wb):
+        run = bundle["info"]["run"]
+        for s in run.scenarios:
+            for lc in run.lcs[s.name].values():
+                q = L.top_quartile_merit(lc)
+                for p in q["positions"]:
+                    fr.add("in" if p["fraction"] == 1 else "out" if p["fraction"] == 0 else "straddle")
+                    zero_e += p["enrolled"] <= 0
+                    unscored += p["score_lo"] is None and p["enrolled"] > 0
+                zero_merit += q["merit"] == 0
+                k = L.kpis(lc)
+                ft += k["full_tuition_n"] > 0
+                nm += k["no_merit_award_n"] > 0
+            steps += [st["step_usd"] for st in L.awards(run.lcs[s.name]["middle"])["step_sizes"]]
+    assert fr == {"in", "out", "straddle"}
+    assert zero_e and unscored and zero_merit and ft and nm
+    assert min(steps) < 0 < max(steps)
+    nb = edge_wb["info"]["run"].lcs["No merit awards"]["middle"]
+    assert L.money(nb)["merit"] == 0 and L.kpis(nb)["top_quartile_merit_share"] == 0

@@ -19,7 +19,7 @@ def _outputs(cells, cfg, scen, base):
     out.pop("labels")
     k = L.kpis(lc)
     for key in ("apps_total", "admits_total", "admits_out", "full_tuition_n", "no_merit_award_n", "barbell",
-                "unscored_count", "enrolled_gpa_hi", "enrolled_below_floor"):
+                "unscored_count", "enrolled_gpa_hi", "enrolled_below_floor", "top_quartile_merit_share"):
         out[key] = k[key]
     for t, v in k["share_at_or_above_t"].items():
         out[f"share_{t}"] = v

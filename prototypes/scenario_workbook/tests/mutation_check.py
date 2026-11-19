@@ -7,7 +7,7 @@ survivor except those listed in EQUIVALENT, each with the reason it cannot chang
 Two modes:
   Python (default)  the Python mutants (MUTANTS) against every test, with SW_SKIP_EXCEL set (the workbook tests
                     compare Excel with Python, so any Python mutant would fail them for a trivial reason)
-  Excel (--excel)   the workbook-formula mutants (EXCEL_MUTANTS, sw/workbook.py) against tests 3, 6, 8, 9 and 18,
+  Excel (--excel)   the workbook-formula mutants (EXCEL_MUTANTS, sw/workbook.py) against tests 3, 6, 7, 8, 9 and 18,
                     with LibreOffice recalculating every build [v0.6.2, P2-01]
 
     cd prototypes/scenario_workbook
@@ -33,7 +33,9 @@ Mutant sources:
   P2.2 mutants of the Phase 2.2 changes (spec v0.6.3 section 0A: percentile targets, tuition in dollars, the class-
        table P(cap), the revenue goal basis, above_floor, the pool strip's percentile columns, marker and break-evens,
        the reproduce whole-dollar need rule), IDs N47 to N76; Excel E76 to E104
-  XL, XL+, 2.1, P21, P3, P3.1, P2.2 (Excel mode)  see EXCEL_MUTANTS, IDs E01 to E104
+  P4   mutants of the Phase 4 changes (the Distribution sheet: top-quartile merit share, academic positions, step
+       sizes; the section 4 labels in the Summary section notes and on Trim), IDs N77 to N85; Excel E105 to E116
+  XL, XL+, 2.1, P21, P3, P3.1, P2.2, P4 (Excel mode)  see EXCEL_MUTANTS, IDs E01 to E116
 
 --deselect PREFIX (repeatable) leaves tests out of every run, baseline included; not used by default (R3-5: the
 fixture's pass-criterion tests pass since the Nov 18 decisions). Test 6's fixture tests run when YA_FIXTURE_PATH is
@@ -53,7 +55,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SLOW_LAST = ["test_13_segment_incentive.py", "test_05_shape.py", "test_04_cf_vs_sim.py"]
-EXCEL_TESTS = ["test_03_excel_equals_python.py", "test_06_reproduce.py", "test_08_levers.py",
+EXCEL_TESTS = ["test_03_excel_equals_python.py", "test_06_reproduce.py", "test_07_guardrails.py", "test_08_levers.py",
                "test_09_reconciliation.py", "test_18_v06_blocks.py", "test_23_above_floor.py",
                "test_26_marker_excel.py"]
 DESELECT = []          # node-id prefixes passed to pytest --deselect (set from the command line)
@@ -613,6 +615,29 @@ MUTANTS = [
     ("N76", "P2.2", "sw/strip.py", "        ntr = float((e * (T - award)).sum()) - need - lc.ntr_const",
      "        ntr = float((e * (T - award)).sum()) - need - lc.specialty",
      "Tuition what-if leaves out the need departure"),
+    # ---- P4: Phase 4 (Distribution: top-quartile merit share, academic positions) -------------------------------
+    ("N77", "P4", "sw/ledger.py", "    q = cls / 4.0\n", "    q = cls / 3.0\n", "Top quartile is a third of the class"),
+    ("N78", "P4", "sw/ledger.py", "        f = 0.0 if E <= 0 else min(1.0, max(0.0, (q - cum) / E))",
+     "        f = 0.0 if E <= 0 else max(0.0, (q - cum) / E)", "Position fraction not capped at 1"),
+    ("N79", "P4", "sw/ledger.py", "        f = 0.0 if E <= 0 else min(1.0, max(0.0, (q - cum) / E))",
+     "        f = 0.0 if E <= 0 else min(1.0, (q - cum) / E)", "Position fraction not floored at 0"),
+    ("N80", "P4", "sw/ledger.py",
+     "        return (1, 0.0, GPA_POSITION.index(g)) if s is None else (0, -s, GPA_POSITION.index(g))",
+     "        return (-1, 0.0, GPA_POSITION.index(g)) if s is None else (0, -s, GPA_POSITION.index(g))",
+     "Unscored positions ranked first"),
+    ("N81", "P4", "sw/ledger.py",
+     "        return (1, 0.0, GPA_POSITION.index(g)) if s is None else (0, -s, GPA_POSITION.index(g))",
+     "        return (1, 0.0, GPA_POSITION.index(g)) if s is None else (0, -s, -GPA_POSITION.index(g))",
+     "GPA order reversed within a score band"),
+    ("N82", "P4", "sw/ledger.py", "        cum += E\n", "", "Enrolled above a position not accumulated"),
+    ("N83", "P4", "sw/ledger.py",
+     "        keys.setdefault((None if np.isnan(s) else float(s), cells.gpa_class[i]), []).append(i)",
+     "        keys.setdefault((None if np.isnan(s) else float(s), cells.gpa_class[i], cells.residency[i]), [])"
+     ".append(i)", "Positions split by residency (order within a position matters)"),
+    ("N84", "P4", "sw/ledger.py", '            "top_quartile_merit_share": top / merit if merit > 0 else 0.0,',
+     '            "top_quartile_merit_share": top / merit if merit > 0 else 1.0,', "Zero merit gives share 1"),
+    ("N85", "P4", "sw/ledger.py", "        M = float((e[idx] * lc.award[idx]).sum())",
+     "        M = float((lc.admits[idx] * lc.award[idx]).sum())", "Position merit weighted by admits"),
 ]
 
 # Excel-formula mutants [v0.6.2, P2-01] (spec section 11, test 20; run with --excel). Each changes one formula string in
@@ -849,6 +874,29 @@ EXCEL_MUTANTS = [
      "Pool-strip NTR mean leaves out specialty"),
     ("E104", "P2.2", W, """            nrf = f'IF(in_mode="Reproduce",""", """            nrf = f'IF(in_mode="Live",""",
      "Reproduce need rule behind the wrong mode"),
+    # ---- P4: Phase 4 (Distribution sheet; section 4 labels in the Summary section notes and on Trim) -----------
+    ("E105", "P4", W, 'f"SUM({E})/4"', 'f"SUM({E})/3"', "Distribution: top quartile is a third of the class"),
+    ("E106", "P4", W, 'f"IF({Ec}<=0,0,MIN(1,MAX(0,({qref}-{Cc})/{Ec})))"', 'f"IF({Ec}<=0,0,MAX(0,({qref}-{Cc})/{Ec}))"',
+     "Distribution: position fraction not capped at 1"),
+    ("E107", "P4", W, 'f"IF({Ec}<=0,0,MIN(1,MAX(0,({qref}-{Cc})/{Ec})))"', 'f"IF({Ec}<=0,0,MIN(1,({qref}-{Cc})/{Ec}))"',
+     "Distribution: position fraction not floored at 0"),
+    ("E108", "P4", W, 'f"IF({Ec}<=0,0,MIN(1,MAX(0,({qref}-{Cc})/{Ec})))"', 'f"MIN(1,MAX(0,({qref}-{Cc})/{Ec}))"',
+     "Distribution: no guard for a position with no enrolled"),
+    ("E109", "P4", W, 'f"{a1(r - 1, c0 + 2, False)}+{a1(r - 1, c0, False)}"', 'f"{a1(r - 1, c0 + 2, False)}"',
+     "Distribution: enrolled above a position not accumulated"),
+    ("E110", "P4", W, 'cond = (f"({SC}=0)*({GP}={gcell})" if sc is None', 'cond = (f"({GP}={gcell})" if sc is None',
+     "Distribution: unscored position also counts scored cells"),
+    ("E111", "P4", W, 'else f"({SC}=1)*({SL}={bcell})*({GP}={gcell})")', 'else f"({SC}=1)*({SL}={bcell})")',
+     "Distribution: scored position ignores the GPA class"),
+    ("E112", "P4", W, 'f"SUMPRODUCT({cond}*{SP})"', 'f"SUMPRODUCT({cond}*{E})"',
+     "Distribution: position merit is enrolled, not dollars"),
+    ("E113", "P4", W, 'f"IF({m}>0,{tm}/{m},0)"', 'f"IF({m}>0,{tm}/{m},1)"', "Distribution: zero merit gives share 1"),
+    ("E114", "P4", W, "self.r0v + hi_i, cm + j)}-{ref('Levers', self.r0v + lo_i,",
+     "self.r0v + lo_i, cm + j)}-{ref('Levers', self.r0v + hi_i,", "Distribution: step size sign reversed"),
+    ("E115", "P4", W, "        if shock:\n            t += (", "        if False:\n            t += (",
+     "Summary section notes lose SHOCK_LABEL (test 7)"),
+    ("E116", "P4", W, 'Middle case. " + labels.RESPONSE_LABEL + ". "', 'Middle case. "',
+     "Trim title loses RESPONSE_LABEL (test 7)"),
 ]
 
 # Survivors accepted because they cannot change any result on valid input: id -> reason. Empty unless a run shows

@@ -477,7 +477,49 @@ def kpis(lc):
     out["full_tuition_n"] = float(e[lc.award >= lc.tuition - 1e-6].sum())
     out["no_merit_award_n"] = float(e[lc.award <= 1e-9].sum())
     out["barbell"] = (out["full_tuition_n"] + out["no_merit_award_n"]) / cls if cls > 0 else 0.0
+    out["top_quartile_merit_share"] = top_quartile_merit(lc)["top_quartile_merit_share"]
     return out
+
+
+GPA_POSITION = ("hi", "lo", "blank")
+
+
+def position_groups(cells):
+    """Academic positions for the Distribution sheet (spec section 6), highest first: scored cells by score_lo
+    descending, then GPA class (hi, lo, blank); unscored cells last, by GPA class. Cells that share a position (different
+    residency or segment) form one group. Returns a list of (score_lo or None, gpa_class, cell indices)."""
+    keys = {}
+    for i in range(cells.n):
+        s = cells.score_lo[i]
+        keys.setdefault((None if np.isnan(s) else float(s), cells.gpa_class[i]), []).append(i)
+
+    def order(k):
+        s, g = k
+        return (1, 0.0, GPA_POSITION.index(g)) if s is None else (0, -s, GPA_POSITION.index(g))
+    return [(k[0], k[1], keys[k]) for k in sorted(keys, key=order)]
+
+
+def top_quartile_merit(lc):
+    """Share of merit dollars to the top quartile of enrolled by academic position (spec section 6): positions ordered
+    as in position_groups, weighted by enrolled; the top quartile is the first class / 4 enrollees in that order. The
+    position that straddles the boundary contributes the fraction of its enrolled that lies inside, applied to its
+    merit dollars (the cells sharing a position are taken in the same proportion, so the order of residency and
+    segment within a position does not matter). A ratio of expected values; 0 when merit is 0."""
+    e = lc.enrolled
+    cls = float(e.sum())
+    q = cls / 4.0
+    cum, top = 0.0, 0.0
+    rows = []
+    for s, g, idx in position_groups(lc.cells):
+        E = float(e[idx].sum())
+        M = float((e[idx] * lc.award[idx]).sum())
+        f = 0.0 if E <= 0 else min(1.0, max(0.0, (q - cum) / E))
+        rows.append({"score_lo": s, "gpa_class": g, "enrolled": E, "merit": M, "cum_before": cum, "fraction": f})
+        top += f * M
+        cum += E
+    merit = float((e * lc.award).sum())
+    return {"top_quartile_enrolled": q, "top_quartile_merit": top, "merit": merit,
+            "top_quartile_merit_share": top / merit if merit > 0 else 0.0, "positions": rows}
 
 
 def price_of_target(base_lc, lc):

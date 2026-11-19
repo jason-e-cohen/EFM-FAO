@@ -31,6 +31,9 @@ scaled-line example award (Q-5)                     "Example award edges": zero-
 [v0.6.3] tuition in dollars                         tuition_by_year_usd for the plan year (BM-2)
 [v0.6.3] growth to date without a date              pool_ytd_growth set, pool_ytd_as_of blank (BM-6)
 [v0.6.3] percentile targets                         synthetic.yaml's four, one with fewer than 20 expected below t
+[Phase 4] Distribution: merit of zero               "No merit awards": every award 0 and no full-tuition flag (the
+                                                    top-quartile share's zero-merit branch); positions with no
+                                                    enrolled (the fraction's zero branch) occur in every scenario
 """
 import copy
 import os
@@ -116,6 +119,19 @@ SCENARIOS = [
 ]
 
 
+def no_merit_scenario(cells):
+    """[Phase 4] Every award 0 and every full-tuition flag cleared: merit is 0 (Distribution, zero-merit branch)."""
+    ids = list(cells.cell_id)
+    return {"name": "No merit awards", "parent": "Baseline",
+            "description": "Every award 0 and no full-tuition flag: merit dollars are zero",
+            "overrides": {"award_usd": {c: 0 for c in ids}, "full_tuition": {c: 0 for c in ids}}}
+
+
+def scenarios():
+    from sw import config
+    return SCENARIOS + [no_merit_scenario(world(config.validate(config_dict())))]
+
+
 def write(out_dir):
     os.makedirs(out_dir, exist_ok=True)
     cp = os.path.join(out_dir, "edge_config.yaml")
@@ -125,8 +141,8 @@ def write(out_dir):
         yaml.safe_dump(config_dict(), f, sort_keys=False)
     with open(sp, "w") as f:
         f.write("# Edge workbook scenarios (tests/edge.py). Every value is synthetic.\n")
-        yaml.safe_dump({"scenarios": SCENARIOS}, f, sort_keys=False)
+        yaml.safe_dump({"scenarios": scenarios()}, f, sort_keys=False)
     return cp, sp
 
 
-__all__ = ["write", "world", "config_dict", "SCENARIOS", "EXEMPT", "segment_pool_min", "np"]
+__all__ = ["write", "world", "config_dict", "SCENARIOS", "scenarios", "no_merit_scenario", "EXEMPT", "segment_pool_min", "np"]

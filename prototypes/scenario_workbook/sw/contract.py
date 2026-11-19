@@ -12,6 +12,8 @@ workbook and the tests:
   strips (s x p, s x d, s x m, s x N)  rows: for each scenario, the grid values; columns: the fields in STRIP_COLUMNS
   per-scenario lines and break-evens   rows: scenarios; one column
   AWARD_MATRIX     rows: cells (workbook order); columns: scenarios; the resolved award (plan-year dollars)
+  STEP_SIZES       rows: adjacent score-band pairs within residency x segment x GPA class (ledger.awards order);
+                   columns: scenarios; the award at the higher band minus the award at the lower band (Distribution)
 
 Names are canonical: one range per figure, no aliases [v0.6.2, Q-1]; a short form in the spec's Source column (for
 example SUM_PCAP) is read as the prefix only. `p_segment_goal` in the workbook is the normal form (spec section 3);
@@ -260,6 +262,8 @@ def dump(run, vals=None):
     for which, prefix, _ in STRIPS:
         out[range_name(which, prefix)] = [[_num(x) for x in r[2]] for r in strip_rows(run, vals, which)]
     out["AWARD_MATRIX"] = [[_num(run.lcs[s]["middle"].award[i]) for s in names] for i in range(run.cells.n)]
+    steps = {s: L.awards(run.lcs[s]["middle"])["step_sizes"] for s in names}
+    out["STEP_SIZES"] = [[_num(steps[s][i]["step_usd"]) for s in names] for i in range(len(steps[names[0]]))]
     out["p_segment_goal_exact"] = [[_num(vals["sk"][(s, k)]["p_segment_goal_exact"]) for s in names] for k in CASES]
     return out
 
@@ -274,6 +278,7 @@ def contract_table():
     rows += [(range_name(n, p), n, "s", src) for n, p, src in PER_SCENARIO]
     rows += [(range_name(n, p), f"{n}[grid]", "s x grid", src) for n, p, src in STRIPS]
     rows += [("AWARD_MATRIX", "award_matrix", "s x cell", "ledger.awards")]
+    rows += [("STEP_SIZES", "step_sizes", "s x step", "ledger.awards")]
     return rows
 
 

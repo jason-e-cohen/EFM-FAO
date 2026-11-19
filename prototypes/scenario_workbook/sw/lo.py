@@ -85,6 +85,7 @@ def _section_copy(src_ws, wb_out, shock_illustrative):
     'under 5%' and 'over 95%' while the shock is illustrative (the workbook does this with conditional formats, which
     a values-only copy cannot carry)."""
     from copy import copy
+    from openpyxl.styles import Alignment
     from . import labels
     rows = list(range(1, src_ws.max_row + 1))
     starts = [r for r in rows if (src_ws.cell(r, 1).fill is not None and src_ws.cell(r, 1).fill.fgColor is not None
@@ -102,13 +103,19 @@ def _section_copy(src_ws, wb_out, shock_illustrative):
                 if sc.value is None and not sc.has_style:
                     continue
                 v = sc.value
+                clamped = False
                 if (shock_illustrative and isinstance(v, (int, float)) and not isinstance(v, bool)
                         and sc.number_format == "0%"):
+                    clamped = v < 0.05 or v > 0.95
                     v = labels.PROB_UNDER if v < 0.05 else labels.PROB_OVER if v > 0.95 else v
                 dc = ws.cell(r - r0 + 1, c, v)
                 if sc.has_style:
                     dc.font, dc.fill, dc.border = copy(sc.font), copy(sc.fill), copy(sc.border)
                     dc.alignment, dc.number_format = copy(sc.alignment), sc.number_format
+                if clamped:
+                    # the clamp text replaces a number: keep it right-aligned with the other percentages (Phase 4
+                    # render review)
+                    dc.alignment = Alignment(horizontal="right", vertical=dc.alignment.vertical)
                 if sc.value not in (None, ""):
                     maxc = max(maxc, c)
             if src_ws.row_dimensions[r].height:

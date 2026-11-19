@@ -1,11 +1,12 @@
 """XlsxWriter generator for the scenario workbook (spec sections 6 to 9, 15 item 11).
 
-Sheets: README, Inputs, History, Response, Levers, Ledger_Low, Ledger_Middle, Ledger_High, Summary, Trim, Checks,
-RunLog. A reproduce build (cfg mode "reproduce", from sw/reproduce.py) adds the Reproduce sheet (loaded yields, admit
+Sheets: README, Inputs, History, Response, Levers, Ledger_Low, Ledger_Middle, Ledger_High, Summary, Trim,
+Distribution, Checks, RunLog. A reproduce build (cfg mode "reproduce", from sw/reproduce.py) adds the Reproduce sheet (loaded yields, admit
 rates, awards, pool settings and tuition) and leaves out Trim, which is live mode only (spec section 6). The Inputs
 mode switch (Live, Reproduce) selects, in a reproduce build, the loaded yields and tuition or the response yields and
 the tuition formula; a live build has no loaded values and Checks flags the switch if it is set to Reproduce. The
-Distribution sheet is Phase 4 and is not built here.
+Distribution sheet (Phase 4; both builds) shows the full-tuition and no-merit-award counts, the barbell index, the
+top-quartile merit share with its academic-position table, and the step sizes (named range STEP_SIZES).
 
 Every computed cell is a live formula written with its cached value from the Python reference functions (spec
 section 6), and the builder records that value as the expected result for test 3. With sentinel=True every cached value
@@ -39,11 +40,11 @@ CASE_TITLE = {"low": "Low", "middle": "Middle", "high": "High"}
 SEG_NONE = "(none)"
 BIG = "1E+99"
 SHEETS = ["README", "Inputs", "History", "Response", "Levers", "Ledger_Low", "Ledger_Middle", "Ledger_High",
-          "Summary", "Trim", "Checks", "RunLog"]
+          "Summary", "Trim", "Distribution", "Checks", "RunLog"]
 PROBE_A, PROBE_B = 0.35, 0.14        # 0.35 / 0.14 = 2.4999999999999996 in IEEE double (R3-3 rounding probe)
 PROBE_EXPR = "0.35/0.14"
 REPRO_SHEETS = ["README", "Inputs", "History", "Response", "Levers", "Ledger_Low", "Ledger_Middle", "Ledger_High",
-                "Summary", "Checks", "Reproduce", "RunLog"]
+                "Summary", "Distribution", "Checks", "Reproduce", "RunLog"]
 MODE_LABEL = {"live": "Live", "reproduce": "Reproduce"}
 LEVER_FIELDS = [  # (field, label, kind): kind num, int01, text, opt (optional number)
     ("description", "description", "text"), ("plan_year", "plan_year (label)", "num"),
@@ -333,6 +334,7 @@ class Book:
             self.w_trim()
         self.w_summary(dry=True)
         self.w_summary(dry=False)
+        self.w_distribution()
         self.w_checks()
         self.w_runlog()
         self.w_readme()
@@ -1311,7 +1313,8 @@ class Book:
         ws = self.ws["Trim"]
         n = self.n
         Ns = cfg["class"]["what_if"]
-        self.txt("Trim", 0, 0, "Trim: shrink path (live mode), Middle case. " + labels.POLICY_UNSCORED_TRIMMED_FIRST,
+        self.txt("Trim", 0, 0, "Trim: shrink path (live mode), Middle case. " + labels.RESPONSE_LABEL + ". "
+                 + labels.POLICY_UNSCORED_TRIMMED_FIRST,
                  "title")
         self.txt("Trim", 1, 0, "Left: cells in trim order (fixed at build from the first median threshold, "
                                "trim.protect_segment and, under above_floor, score.floor); rm_k = A y max(0, r - floor_rate) / r; removed_share_k(N) = "
@@ -1699,6 +1702,16 @@ class Book:
         if r == self.sr:
             self.sr += 1
 
+    def lab_note(self, shock=True):
+        """Section note with the section 4 labels that apply to every figure in the section [Phase 4, test 7]:
+        RESPONSE_LABEL, and SHOCK_LABEL for sections with probabilities or ranges (shown while shock_source is
+        illustrative; the Summary header row carries the live form)."""
+        t = labels.RESPONSE_LABEL + "."
+        if shock:
+            t += (" Probabilities and ranges: " + labels.shock_label(self.cfg["risk"]["common_shock_sd"])
+                  + " (while shock_source is illustrative).")
+        return t
+
     def s_sec(self, title, note=None):
         self.sr += 1
         self.s_txt(self.sr, 0, title, "sec")
@@ -1741,7 +1754,7 @@ class Book:
         self.sr = 3
 
     def sw_selected(self, S):
-        self.s_sec("Selected case (Inputs case selector)")
+        self.s_sec("Selected case (Inputs case selector)", self.lab_note())
         self.s_scen_head(S, "figure", "case")
         sel = 'IF(in_case_selector="Low",1,IF(in_case_selector="High",3,2))'
         for lab, nm, fmt, ti in [("Expected class", "class_mean", "n1", None), ("ntr_y1", "ntr_y1", "usd", None),
@@ -1778,12 +1791,17 @@ class Book:
 
     def sw_main(self, S):
         cfg = self.cfg
-        self.s_sec("Main results (Middle case)", labels.RESPONSE_LABEL + ". Probabilities and ranges: "
-                   + labels.shock_label(cfg["risk"]["common_shock_sd"]) + " (while shock_source is illustrative).")
+        self.s_sec("Main results (Middle case)", self.lab_note())
         self.s_scen_head(S, "figure", "unit")
         lv = lambda f: (lambda s: (self.LV(s, f), _clean(getattr(self.run.scen(s), f))))  # noqa: E731
+        # parent names wrap within the scenario column (Phase 4 render review: a long name was cut off by the next
+        # column); the row is tall enough for the longest name
         self._row(S, "parent", "", lambda s: (f'"{self.run.parents[s].name}"' if self.run.parents[s] else '"(none)"',
-                                              self.run.parents[s].name if self.run.parents[s] else "(none)"), "t")
+                                              self.run.parents[s].name if self.run.parents[s] else "(none)"), "tw")
+        if not self.dry:
+            longest = max([len(p.name) for p in self.run.parents.values() if p] + [6])
+            self.ws["Summary"].set_row(self.sr - 1, 12 * max(1, math.ceil(longest / 15)))
+            self.txt("Summary", self.sr - 1, 0, "parent", "tw")
         self._row(S, "Tuition (plan year)", "USD", lambda s: (self.LH("middle", s, "T"),
                                                               self.run.lcs[s]["middle"].tuition), "usd")
         self._row(S, "Tuition increase", "%", lv("tuition_increase_pct"), "pp")
@@ -1902,7 +1920,7 @@ class Book:
             self._row(S, f"Spread: {ordinal(q)} percentile band ({labels.BAND_NOT_SCORE_LABEL})", "", gen_t, "t")
 
     def sw_lowhigh(self, S):
-        self.s_sec(f"{labels.RANGE_CASES} ({labels.RANGE_CASES_NOTE})")
+        self.s_sec(f"{labels.RANGE_CASES} ({labels.RANGE_CASES_NOTE})", self.lab_note())
         self.s_scen_head(S, "figure", "case")
         meas = self.cfg["score"]["measure"]
         rows = [("Expected class", "class_mean", "n1", None), ("ntr_y1", "ntr_y1", "usd", None)]
@@ -1924,7 +1942,7 @@ class Book:
         seg_lab = ""
         if cfg["segments"] and cfg["segments"][0]["share_source"] == "assumed":
             seg_lab = labels.SEGMENT_SHARE_LABEL + ". "
-        self.s_sec("Segment block (Middle case)", seg_lab + labels.RESPONSE_LABEL + ". Excel shows the normal form of "
+        self.s_sec("Segment block (Middle case)", seg_lab + self.lab_note() + " Excel shows the normal form of "
                    "P(segment enrolled at or above goal); the exact value (convolution, from the build) is static.")
         self.s_scen_head(S, "figure", "unit")
         self._row(S, "Active segment", "", lambda s: (self.LH("middle", s, "seg"),
@@ -2032,7 +2050,8 @@ class Book:
 
     def sw_tuition(self, S):
         cfg = self.cfg
-        self.s_sec("Tuition what-if (Middle case; class and mix held fixed)", labels.STICKER_LABEL
+        self.s_sec("Tuition what-if (Middle case; class and mix held fixed)", self.lab_note(shock=False) + " "
+                   + labels.STICKER_LABEL
                    + " Awards are recomputed at T(p) under the scenario's award rule.")
         grid = self.inp_list["tuition_grid"]
         cols = K.strip_columns(cfg)["tuition_whatif"]
@@ -2100,9 +2119,8 @@ class Book:
     def sw_yield(self, S):
         cfg = self.cfg
         self.s_sec("Yield what-if strip (Middle case; shift on top of the scenario's own shift)",
-                   labels.ASSUMPTION_LABEL + ". The strip ignores the yield floor and cap; see the clip count. "
-                   + (labels.shock_label(cfg["risk"]["common_shock_sd"])
-                      if cfg["risk"]["shock_source"] == "illustrative" else ""))
+                   self.lab_note() + " " + labels.ASSUMPTION_LABEL + ". The strip ignores the yield floor and cap; "
+                   "see the clip count.")
         cols = K.strip_columns(cfg)["yield_strip"]
         meas = cfg["score"]["measure"]
         heads = ["expected class", "P(class above cap)", "P(class within band)", "mean ntr_y1",
@@ -2173,6 +2191,7 @@ class Book:
         t0 = cfg["score"]["median_thresholds"][0]
         meas = cfg["score"]["measure"]
         self.s_sec(f"Pool strip (Middle case): {labels.POOL_STRIP_LABEL}",
+                   self.lab_note() + " "
                    f"Every lever applied except the pool multiplier, which m replaces (the segment lift stays). Median "
                    f"at {meas} {t0:g}; P(holds) for each percentile target. Growth to date (Inputs pool_ytd_growth: "
                    f"complete applications at or above score.pool_threshold against the same week of the prior cycle; "
@@ -2315,6 +2334,7 @@ class Book:
                        "does not settle integer admits in the workbook. Build in live mode for the class-size table.")
             return
         self.s_sec("Class-size table (shrink path; Middle case)",
+                   self.lab_note() + " "
                    "The shrink path writes admit rates (Trim sheet); yield is constant when admit rates change (D1). "
                    + labels.POLICY_UNSCORED_TRIMMED_FIRST + " f = N / M is the factor a uniform cut would apply.")
         cols = K.strip_columns(cfg)["class_table"]
@@ -2493,8 +2513,11 @@ class Book:
 
     def sw_contract(self, S):
         self.s_sec("Interface contract outputs (spec section 15 item 11), every case",
+                   self.lab_note() + " "
                    "Named ranges: prefix plus the contract name in upper case; rows are cases (and thresholds), "
-                   "columns are scenarios. The policy document and any later dashboard read these ranges.")
+                   "columns are scenarios. The policy document and any later dashboard read these ranges. The "
+                   f"_LO90 and _HI90 rows are the {labels.RANGE_OUTCOME} ({labels.RANGE_OUTCOME_NOTE}); the Low "
+                   f"and High rows are the {labels.RANGE_CASES} ({labels.RANGE_CASES_NOTE}).")
         self.s_scen_head(S, "contract name (range)", "case")
         for name, prefix, _ in K.SK:
             self._contract_block(S, name, prefix, None)
@@ -2534,6 +2557,167 @@ class Book:
                         self.s_fx(self.sr, 2 + j, self.fm(name, k, s, ti), self.pv(name, k, s, ti), fmt)
                 self.sr += 1
         self.s_name(rn, r0, 2, self.sr - 1, 2 + len(S) - 1)
+
+    # ------------------------------------------------------------------------------------------------------------
+    # Distribution (spec section 6; Phase 4)
+
+    DIST_ROWS = [  # (key, label, unit, format)
+        ("full_tuition_n", "Full-tuition enrolled (award at or above tuition)", "students", "n1"),
+        ("no_merit_award_n", "No-merit-award enrolled (award zero)", "students", "n1"),
+        ("barbell", "Barbell index ((full-tuition + no-merit-award) / class)", "ratio", "r3"),
+        ("merit", "Merit dollars", "USD", "usd"),
+        ("top_quartile_merit", "Merit dollars to the top quartile of enrolled", "USD", "usd"),
+        ("top_quartile_merit_share", "Share of merit dollars to the top quartile of enrolled", "ratio", "pct1"),
+    ]
+
+    def w_distribution(self):
+        """Full-tuition and no-merit-award counts, the barbell index and the top-quartile merit share per scenario and
+        case; the academic-position table behind the top quartile; step sizes per scenario. Plain tables: no
+        threshold, color or message (D2; spec section 15 item 6)."""
+        sh = "Distribution"
+        ws = self.ws[sh]
+        run, cells, S = self.run, self.cells, self.S
+        nS = len(S)
+        ws.set_column(0, 0, 58)
+        ws.set_column(1, 1, 12)
+        ws.set_column(2, 3, 10)
+        ws.set_column(4, 4 + 4 * nS * len(CASES), 13)
+        self.txt(sh, 0, 0, "Distribution: awards across the enrolled class (plain tables; no threshold, flag or "
+                           "message)", "title")
+        self.txt(sh, 1, 0, labels.RESPONSE_LABEL + " (every figure below except the step sizes depends on the "
+                           "placeholder response through expected enrollment). Ratios are ratios of expected values.",
+                 "note")
+        self.txt(sh, 2, 0, "Top quartile: the first class / 4 enrollees when academic positions are ordered by "
+                           "score_lo (highest first), then GPA class (hi, lo, blank), unscored last, weighted by "
+                           "enrolled. The position that straddles the boundary counts the fraction of its enrolled "
+                           "inside it, applied to its merit dollars; cells sharing a position are taken in the same "
+                           "proportion.", "note")
+        groups = L.position_groups(cells)
+        tq = {(s.name, k): L.top_quartile_merit(run.lcs[s.name][k]) for s in S for k in CASES}
+
+        # position table (rows below the summary block); laid out first so the summary rows can reference it
+        r_sum = 4
+        n_sum = len(self.DIST_ROWS) * len(CASES)
+        r_pos = r_sum + 2 + n_sum + 2          # section title row
+        hp = r_pos + 4                          # column-head row (scenario and case rows above it)
+        d0 = hp + 1                             # first position row
+        ng = len(groups)
+        pos_cols = {}
+        c = 4
+        for k in CASES:
+            for s in S:
+                pos_cols[(k, s.name)] = c
+                c += 4
+        top_merit_ref = {}
+        self.txt(sh, r_pos, 0, "Top quartile by academic position", "sec")
+        self.txt(sh, r_pos + 1, 0, "Per scenario and case: enrolled and merit dollars at each position, enrolled at "
+                                   "higher positions, and the share of the position inside the top quartile "
+                                   "(MIN(1, MAX(0, (class / 4 - enrolled above) / enrolled))).", "note")
+        for cc, h in enumerate(["position (highest first)", "score_lo (lower bound)", "gpa_class", "cells"]):
+            self.txt(sh, hp, cc, h, "h")
+        for g, (sc, gp, idx) in enumerate(groups):
+            r = d0 + g
+            self.val(sh, r, 0, g + 1, "int")
+            self.val(sh, r, 1, "unscored" if sc is None else sc, "datat" if sc is None else "int")
+            self.val(sh, r, 2, gp, "datat")
+            self.val(sh, r, 3, len(idx), "int")
+        for k in CASES:
+            for s in S:
+                c0 = pos_cols[(k, s.name)]
+                d = self.g(k, s.name)
+                E, SP, SC, SL, GP = d["enrolled"], d["spend"], d["scored"], d["score_lo"], d["gpa_class"]
+                q = tq[(s.name, k)]
+                self.txt(sh, hp - 2, c0, f"{s.name}", "hl")
+                self.txt(sh, hp - 1, c0, f"{CASE_TITLE[k]} case; class / 4:", "t")
+                self.fx(sh, hp - 1, c0 + 2, f"SUM({E})/4", q["top_quartile_enrolled"], "n1")
+                qref = a1(hp - 1, c0 + 2)
+                for cc, h in enumerate(["enrolled", "merit $", "enrolled above", "share in top quartile"]):
+                    self.txt(sh, hp, c0 + cc, h, "h")
+                for g, (sc, gp, idx) in enumerate(groups):
+                    r = d0 + g
+                    row = q["positions"][g]
+                    bcell, gcell = a1(r, 1, False), a1(r, 2, False)
+                    cond = (f"({SC}=0)*({GP}={gcell})" if sc is None
+                            else f"({SC}=1)*({SL}={bcell})*({GP}={gcell})")
+                    Ec, Mc, Cc, Fc = (a1(r, c0 + j, False) for j in range(4))
+                    self.fx(sh, r, c0, f"SUMPRODUCT({cond}*{E})", row["enrolled"], "n1")
+                    self.fx(sh, r, c0 + 1, f"SUMPRODUCT({cond}*{SP})", row["merit"], "usd")
+                    self.fx(sh, r, c0 + 2, "0" if g == 0 else f"{a1(r - 1, c0 + 2, False)}+{a1(r - 1, c0, False)}",
+                            row["cum_before"], "n1")
+                    self.fx(sh, r, c0 + 3, f"IF({Ec}<=0,0,MIN(1,MAX(0,({qref}-{Cc})/{Ec})))", row["fraction"], "r4")
+                fcol = rng(sh, d0, c0 + 3, d0 + ng - 1, c0 + 3)
+                mcol = rng(sh, d0, c0 + 1, d0 + ng - 1, c0 + 1)
+                top_merit_ref[(k, s.name)] = f"SUMPRODUCT({fcol},{mcol})"
+
+        # summary block: figure x case rows, scenario columns
+        self.txt(sh, r_sum, 0, "Counts and shares by scenario", "sec")
+        self.txt(sh, r_sum + 1, 0, "figure", "h")
+        self.txt(sh, r_sum + 1, 1, "case", "h")
+        for j, s in enumerate(S):
+            self.txt(sh, r_sum + 1, 2 + j, s.name, "h")
+        ws.set_row(r_sum + 1, 36)
+        r = r_sum + 2
+        self.dist_rows = {}
+        for key, lab, unit, fmt in self.DIST_ROWS:
+            r0 = r
+            for k in CASES:
+                self.txt(sh, r, 0, f"{lab} [{unit}]")
+                self.txt(sh, r, 1, CASE_TITLE[k])
+                for j, s in enumerate(S):
+                    q = tq[(s.name, k)]
+                    if key == "top_quartile_merit":
+                        f, v = top_merit_ref[(k, s.name)], q["top_quartile_merit"]
+                    elif key == "top_quartile_merit_share":
+                        m, tm = a1(r0 - 2 * len(CASES) + CASES.index(k), 2 + j), a1(r0 - len(CASES) + CASES.index(k),
+                                                                                    2 + j)
+                        f, v = f"IF({m}>0,{tm}/{m},0)", q["top_quartile_merit_share"]
+                    elif key == "merit":
+                        f, v = self.fm("merit", k, s.name), q["merit"]
+                    else:
+                        f, v = self.fm(key, k, s.name), self.pv(key, k, s.name)
+                    self.fx(sh, r, 2 + j, f, v, fmt)
+                r += 1
+            self.dist_rows[key] = r0
+
+        # step sizes (Middle-case resolved award; awards do not depend on the case)
+        r_st = d0 + ng + 2
+        steps = L.awards(run.lcs[S[0].name]["middle"])["step_sizes"]
+        self.txt(sh, r_st, 0, "Step sizes", "sec")
+        self.txt(sh, r_st + 1, 0, "Award at a score band minus the award at the next lower band present, within each "
+                                  "residency x segment x GPA class; resolved award in plan-year dollars (after the "
+                                  "full-tuition flag and the incentive; AWARD_MATRIX on Levers). Named range "
+                                  "STEP_SIZES.", "note")
+        hs = r_st + 2
+        for cc, h in enumerate(["residency, segment, GPA class", "band (upper)", "band (lower)"]):
+            self.txt(sh, hs, cc, h, "h")
+        for j, s in enumerate(S):
+            self.txt(sh, hs, 4 + j, s.name, "h")
+        ws.set_row(hs, 36)
+        ws.freeze_panes(r_sum + 2, 2)
+        if not steps:
+            self.txt(sh, hs + 1, 0, "no group has two scored cells", "note")
+            return
+        cid = list(cells.cell_id)
+        groups_by = {}
+        for i in range(cells.n):
+            if not np.isnan(cells.score_lo[i]):
+                groups_by.setdefault((cells.residency[i], cells.segment[i], cells.gpa_class[i]), []).append(i)
+        pairs = []
+        for key, idx in groups_by.items():
+            idx = sorted(idx, key=lambda i: -cells.score_lo[i])
+            pairs += [(key, a, b) for a, b in zip(idx[:-1], idx[1:])]
+        assert len(pairs) == len(steps)
+        cm = self.vmatrix
+        for p_i, ((res, seg, gp), hi_i, lo_i) in enumerate(pairs):
+            r = hs + 1 + p_i
+            self.txt(sh, r, 0, f"{res}, {seg or SEG_NONE}, {gp}  ({cid[hi_i]} - {cid[lo_i]})")
+            self.val(sh, r, 1, float(cells.score_lo[hi_i]), "int")
+            self.val(sh, r, 2, float(cells.score_lo[lo_i]), "int")
+            for j, s in enumerate(S):
+                lc = run.lcs[s.name]["middle"]
+                self.fx(sh, r, 4 + j, f"{ref('Levers', self.r0v + hi_i, cm + j)}-{ref('Levers', self.r0v + lo_i, cm + j)}",
+                        float(lc.award[hi_i] - lc.award[lo_i]), "usd")
+        self.name("STEP_SIZES", sh, hs + 1, 4, hs + len(pairs), 4 + nS - 1)
 
     # ------------------------------------------------------------------------------------------------------------
     # Checks
@@ -2908,8 +3092,10 @@ class Book:
                       "mode only)." if self.repro else
                       "Live build: the Ledgers use the response yields and the tuition formula. Reproduce mode needs a "
                       "reproduce build (python -m sw.reproduce), which adds the Reproduce sheet.")),
-            ("Static and live", "Live: everything on History (rates), Response, Levers, the Ledgers, Summary, Trim and "
-                                "Checks recalculates from Inputs and Levers. Static: cell counts (History data), the "
+            ("Static and live", "Live: everything on History (rates), Response, Levers, the Ledgers, Summary, Trim, "
+                                "Distribution and Checks recalculates from Inputs and Levers. Static: cell counts "
+                                "(History data), the academic positions and step-size pairs on Distribution (from the "
+                                "cell data), the "
                                 "trim order (fixed at build from the first median threshold, protect_segment, the "
                                 "exempt cells and each scenario's active segment), the number of grid values, the exact "
                                 "segment probability (labelled 'static, from the build'), RunLog. Inputs marked "
@@ -2930,12 +3116,17 @@ class Book:
             ("Yield", "One Ledger column per case: clip(clip(y0 + b/100 (award - a0)/1000, floor, cap) + shift/100, "
                       "floor, cap). The Response rung grid is display only (R-01). Yield is constant when admit rates "
                       "change (D1); sticker price does not move applications or yield (D10)."),
-            ("Not built here", "The Distribution sheet with step sizes and the barbell detail (Phase 4); anything "
-                               "deferred in DECISIONS.md."),
+            ("Distribution", "Full-tuition and no-merit-award counts, the barbell index, the share of merit dollars "
+                             "to the top quartile of enrolled by academic position (score_lo, then GPA class; unscored "
+                             "last; weighted by enrolled; the position that straddles the boundary counts in "
+                             "proportion), and step sizes (award difference between adjacent score bands within each "
+                             "residency x segment x GPA class, per scenario). Plain tables: no threshold, color or "
+                             "message."),
+            ("Not built here", "Anything deferred in DECISIONS.md."),
             ("Interface contract", "Named ranges (spec section 15 item 11; canonical names, no aliases): " + ", ".join(
-                rn for rn, _, _, _ in K.contract_table()) + ". AWARD_MATRIX is on Levers (resolved award). "
-                "p_segment_goal_exact is Python only (the Summary shows a static copy). step_sizes waits for the "
-                "Distribution sheet."),
+                rn for rn, _, _, _ in K.contract_table()) + ". AWARD_MATRIX is on Levers (resolved award); "
+                "STEP_SIZES is on Distribution. p_segment_goal_exact is Python only (the Summary shows a static "
+                "copy)."),
             ("Handling", "Small cells are shown (small_cell_policy: " + cfg["client"]["small_cell_policy"]
              + "). Files go only to the client's named roles through the secure channel (methodology section 9). "
                "Client-facing use needs Jason's review first."),
