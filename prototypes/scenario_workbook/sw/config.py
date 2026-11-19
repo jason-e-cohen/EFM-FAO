@@ -4,8 +4,8 @@ Every client value comes from config/<client>.yaml (spec rule 7). A required val
 error. The defaults below are product rules stated in the spec, not client values.
 """
 import copy
-import math
 
+import numpy as np
 import yaml
 
 from . import CASES
@@ -41,7 +41,15 @@ DEFAULTS = {
     "budget_basis": "total_aid",                  # [v0.6.2, Q-8e] total aid (merit + need + specialty) or merit
     "merit_actual_by_cohort": None,               # [v0.6.2, Q-8f] optional; feeds the history reconciliation
     "pool_ytd_growth": None,
+    "mode": "live",                               # live or reproduce (spec section 9); reproduce builds come from
+                                                  # sw/reproduce.py, which sets it
+    "reproduce": None,                            # reproduce-mode settings (spec section 9; DECISIONS Nov 18)
+    "aba_509_by_cohort": None,                    # optional public ABA 509 figures per history cohort (R3-4)
 }
+
+REPRODUCE_KEYS = {"tuition_increase_pct", "unscored_in_median", "round_apps_after_pool"}
+ABA_509_KEYS = ("first_year_class", "without_score", "without_gpa", "score_p25", "score_p50", "score_p75",
+                "gpa_p25", "gpa_p50", "gpa_p75")
 
 SHOCK_SOURCES = ("illustrative", "public", "client")
 SCORE_GROUPS = ("upper", "lower")
@@ -56,9 +64,25 @@ def _get(d, dotted):
     return cur, True
 
 
+def excel_round0(x):
+    """Round to a whole number as Excel's and LibreOffice's ROUND(x, 0) do: x taken at 15 significant digits, then half
+    away from zero. A value one binary step below a half rounds up (LibreOffice ROUND(2.4999999999999996, 0) = 3, where
+    floor(x + 0.5) gives 2); found while exercising the integer-admit branches (Phase 3)."""
+    a = np.asarray(x, float)
+    x15 = np.vectorize(lambda v: float(f"{v:.15g}") if np.isfinite(v) else v, otypes=[float])(a)
+    return np.sign(x15) * np.floor(np.abs(x15) + 0.5)
+
+
+def round_apps_after_pool(cfg):
+    """True when the ledger rounds applications to whole numbers after the pool multiplier: reproduce mode with
+    reproduce.round_apps_after_pool set (DECISIONS Nov 18; the fixture's arithmetic). Live mode never rounds them
+    (spec section 3)."""
+    return cfg.get("mode") == "reproduce" and bool((cfg.get("reproduce") or {}).get("round_apps_after_pool", False))
+
+
 def round_to(x, unit):
-    """Round half up to a multiple of unit (matches Excel ROUND for positive values)."""
-    return unit * math.floor(x / unit + 0.5)
+    """Round half up to a multiple of unit, as Excel ROUND(x / unit, 0) x unit does."""
+    return unit * float(excel_round0(x / unit))
 
 
 def load(path):
@@ -122,6 +146,26 @@ def validate(raw):
         raise ConfigError("gpa.median_threshold must equal gpa.hi_at_or_above (one GPA boundary in the cell schema)")
     if cfg["unscored_in_median"] not in ("excluded", "below"):
         raise ConfigError("unscored_in_median must be 'excluded' or 'below'")
+    if cfg["mode"] not in ("live", "reproduce"):
+        raise ConfigError("mode must be 'live' or 'reproduce'")
+    rp = cfg["reproduce"]
+    if rp is not None:
+        if not isinstance(rp, dict) or set(rp) - REPRODUCE_KEYS:
+            raise ConfigError(f"reproduce: allowed keys are {sorted(REPRODUCE_KEYS)}")
+        if rp.get("unscored_in_median") not in (None, "excluded", "below"):
+            raise ConfigError("reproduce.unscored_in_median must be 'excluded' or 'below'")
+        if not isinstance(rp.get("round_apps_after_pool", False), bool):
+            raise ConfigError("reproduce.round_apps_after_pool must be true or false")
+    a5 = cfg["aba_509_by_cohort"]
+    if a5 is not None:
+        out = {}
+        for y, row in a5.items():
+            if int(y) not in cyc["history"]:
+                raise ConfigError(f"aba_509_by_cohort: {y} is not a history cohort")
+            if not isinstance(row, dict) or set(row) - set(ABA_509_KEYS):
+                raise ConfigError(f"aba_509_by_cohort {y}: allowed keys are {list(ABA_509_KEYS)}")
+            out[int(y)] = {k: (None if v is None else float(v)) for k, v in row.items()}
+        cfg["aba_509_by_cohort"] = out
 
     # class
     cl = cfg["class"]

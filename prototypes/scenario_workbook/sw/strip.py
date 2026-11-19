@@ -49,9 +49,10 @@ def tuition(lc, grid=None, example_award=None):
         "net_tuition_line_fixed": diff,
         "net_tuition_line_scaled": x,
         "example_award": example_award,
-        "net_tuition_line_fixed_text": labels.NET_TUITION_FIXED.format(diff=f"${diff:,.0f}"),
+        "net_tuition_line_fixed_text": labels.NET_TUITION_FIXED.format(diff=f"${labels.xl(diff):,.0f}"),
         "net_tuition_line_scaled_text": labels.NET_TUITION_SCALED.format(
-            p=f"{100 * lc.p:.1f}%", x=f"${x:,.0f}", award=f"${example_award:,.0f}"),
+            p=f"{labels.xl(100 * lc.p, 1):.1f}%", x=f"${labels.xl(x):,.0f}",
+            award=f"${labels.xl(example_award):,.0f}"),
         "labels": [labels.STICKER_LABEL],
     }
 

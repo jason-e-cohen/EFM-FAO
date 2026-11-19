@@ -1,6 +1,6 @@
 # Scenario-workbook prototype
 
-Spec: `../../Prototype_Spec_Scenario_Workbook_v0.6.md` (v0.6.2). Status: Phase 1, the Phase 1.1 fix pass, Phase 2 (workbook generator and narratives; tests 3, 8, 9, 10 and 18) and the Phase 2.1 fix pass (`Review_Phase2_Build.md` P2-01 to P2-07; spec decisions Q-1 to Q-8f). Reproduce mode (Phase 3) and the Distribution sheet (Phase 4) are not built. Desktop Excel parity is measured with `tests/compare_excel_saved.py` (below).
+Spec: `../../Prototype_Spec_Scenario_Workbook_v0.6.md` (v0.6.2). Status: Phase 1, the Phase 1.1 fix pass, Phase 2 (workbook generator and narratives; tests 3, 8, 9, 10 and 18) the Phase 2.1 fix pass (`Review_Phase2_Build.md` P2-01 to P2-07; spec decisions Q-1 to Q-8f) and Phase 3 (reproduce mode: `sw/reproduce.py`, the Reproduce sheet, the Live/Reproduce mode switch, test 6, and the integer-count Excel branches in test 3), completed with the Nov 18 decisions (`Review_Phase3_Build.md`, `DECISIONS.md`): the `excluded` counting rule, applications rounded after the pool multiplier in reproduce mode, unknown applications recovered or counted as not reproducible, the desktop Excel check for reproduce builds (R3-3) and the History 509 reconciliation block (R3-4). The Distribution sheet (Phase 4) is not built. Desktop Excel parity is measured with `tests/compare_excel_saved.py` (below).
 
 The evaluator scores scenarios the client writes and recommends nothing. Every figure that depends on the placeholder response slopes carries "Response based on client-input".
 
@@ -12,7 +12,14 @@ From this folder, with the project environment:
 ../../.venv/bin/python -m pytest tests -q
 ```
 
-About 100 seconds; test 4 and the LibreOffice recalculations take most of it. Reports land in `output/phase1/` and `output/phase2/` (git-ignored). Tests that need the Yellow Arrows fixture read `YA_FIXTURE_PATH` and skip without it; no Phase 1 or Phase 2 test needs it. The workbook tests (3, 8, 9, 10, 18) need LibreOffice and skip, with the reason, without it.
+About 130 seconds; test 4 and the LibreOffice recalculations take most of it. Reports land in `output/phase1/`, `output/phase2/` and `output/phase3/` (git-ignored). Test 6's fixture tests read the Yellow Arrows fixture from `YA_FIXTURE_PATH` (an absolute path) and skip without it; every other test, including test 6's synthetic part, runs without it. The workbook tests (3, 6's workbook test, 8, 9, 10, 18) need LibreOffice and skip, with the reason, without it.
+
+```bash
+export YA_FIXTURE_PATH="/absolute/path/to/the fixture.xlsx"
+../../.venv/bin/python -m pytest tests -q
+```
+
+With the fixture, `test_06_reproduce.py::test_pass_criterion` runs one test per scenario and spec section 9 criterion; a failure there is a reported mismatch with its likeliest cause in the message (detail in `output/phase3/reproduce_report.json`).
 
 Build a workbook (synthetic data only until the live Richmond build; Richmond tuition stays null in `config/richmond.yaml`):
 
@@ -20,7 +27,16 @@ Build a workbook (synthetic data only until the live Richmond build; Richmond tu
 ../../.venv/bin/python -m sw.build --config config/synthetic.yaml --data synthetic --seed 101 --scenarios config/scenarios_synthetic.yaml --out output/ --pdf
 ```
 
-It writes `output/<client>/<plan_cycle>/<build_id>/workbook.xlsx` and, with `--pdf`, `workbook_Summary.pdf`; with `--sentinel`, `workbook_sentinel.xlsx`, whose every cached value is -999 (the copy for the desktop Excel check). The build id is a hash of the config, cell data, scenario file, `requirements.lock` and the generator code (`sw/*.py`, P21-03); two builds share it only if they are the same apart from RunLog's timestamp. RunLog lists the code hash, uncommitted files and whether the cached values are sentinels.
+Build the reproduce-mode workbook from the fixture (Phase 3; output only under `output/`, which is git-ignored, because it holds fixture values):
+
+```bash
+../../.venv/bin/python -m sw.reproduce --out output/
+../../.venv/bin/python -m sw.reproduce --out output/ --synthetic 101 --sentinel
+```
+
+The second line builds the synthetic reproduce workbook (no fixture; the one test 3 checks) as a sentinel copy for the desktop Excel check. The first writes `output/richmond_law/<plan_cycle>/<build_id>/workbook_reproduce.xlsx` and `output/phase3/reproduce_report.json` (settings, the fixture's detected counting rule, loader notes, lineage and pool sources, the cells not reproducible from the file with reasons, every criterion with the ledger's and the file's figure, cell-level differences with causes, and diagnostics), and prints the pass and fail counts per scenario, Scenario 4 first. `--sentinel` and `--pdf` work as for `sw.build`.
+
+The live build writes `output/<client>/<plan_cycle>/<build_id>/workbook.xlsx` and, with `--pdf`, `workbook_Summary.pdf`; with `--sentinel`, `workbook_sentinel.xlsx`, whose every cached value is -999 (the copy for the desktop Excel check). The build id is a hash of the config, cell data, scenario file, `requirements.lock` and the generator code (`sw/*.py`, P21-03); two builds share it only if they are the same apart from RunLog's timestamp. RunLog lists the code hash, uncommitted files and whether the cached values are sentinels.
 
 Mutation check (test 20; on demand, not collected by pytest):
 
@@ -29,7 +45,9 @@ Mutation check (test 20; on demand, not collected by pytest):
 ../../.venv/bin/python tests/mutation_check.py --excel --jobs 6
 ```
 
-It applies each mutant in `tests/mutation_check.py` to a scratch copy of the prototype (everything except `output/`) and runs the suite there. Python mode (default) runs every test with `SW_SKIP_EXCEL=1`: the workbook tests compare Excel with Python and would fail for any Python mutant, so they are left out. Excel mode (`--excel`) mutates formula strings in `sw/workbook.py` and runs tests 3, 8, 9 and 18 with LibreOffice. The unmutated suite runs first in a copy made the same way and must pass; every mutant run must collect the same number of tests (else "count mismatch"); the report warns when one test accounts for more than half of the catches. Exit status is non-zero if any mutant survives that is not listed in `EQUIVALENT` with its reason. Reports: `output/mutation/report.json` and `report_excel.json`.
+Set `YA_FIXTURE_PATH` (absolute path) so test 6's fixture tests run in every mutant copy. No test is deselected (R3-5).
+
+It applies each mutant in `tests/mutation_check.py` to a scratch copy of the prototype (everything except `output/`) and runs the suite there. Python mode (default) runs every test with `SW_SKIP_EXCEL=1`: the workbook tests compare Excel with Python and would fail for any Python mutant, so they are left out. Excel mode (`--excel`) mutates formula strings in `sw/workbook.py` and runs tests 3, 6, 8, 9 and 18 with LibreOffice. `--deselect PREFIX` (repeatable) leaves tests out of every run, baseline included. The unmutated suite runs first in a copy made the same way and must pass; every mutant run must collect the same number of tests (else "count mismatch"); the report warns when one test accounts for more than half of the catches. Exit status is non-zero if any mutant survives that is not listed in `EQUIVALENT` with its reason. Reports: `output/mutation/report.json` and `report_excel.json`.
 
 Desktop Excel parity (Phase 2 acceptance; by hand). Build the sentinel copy (`--sentinel` above), open it in Excel, let it recalculate, Save As a copy, then:
 
@@ -37,7 +55,7 @@ Desktop Excel parity (Phase 2 acceptance; by hand). Build the sentinel copy (`--
 ../../.venv/bin/python tests/compare_excel_saved.py path/to/saved_copy.xlsx
 ```
 
-It refuses any file that is not a recalculated sentinel build of the current build id (P21-01): a normal build, a different build id, or a file whose every formula cell still holds -999. Otherwise it compares every formula cell with Python at test 3's tolerances, fails any cell still holding -999, compares each formula's text with the rebuild's (numeric literals by value), lists input cells edited since the build and prints the differences (report: `output/phase2/excel_compare_report.json`). Test 3 checks that it passes a recalculated sentinel copy and fails the unopened sentinel build, a LibreOffice resave without recalculation, that resave with a Ledger formula replaced by `=0`, the normal build, and a recalculated copy with one formula typed over.
+It refuses any file that is not a recalculated sentinel build of the current build id (P21-01): a normal build, a different build id, or a file whose every formula cell still holds -999. Otherwise it compares every formula cell with Python at test 3's tolerances, fails any cell still holding -999, compares each formula's text with the rebuild's (numeric literals by value), lists input cells edited since the build and prints the differences (report: `output/phase2/excel_compare_report.json`). Reproduce builds (R3-3): build the sentinel copy with `sw.reproduce --sentinel` (fixture) or `--synthetic 101 --sentinel`; the script rebuilds from the fixture (`YA_FIXTURE_PATH` or `--fixture`) or the seed, also lists edited inputs on the Reproduce sheet, and reports the rounding probe on Checks, `ROUND(0.35/0.14, 0)`, whose argument is one binary step below 2.5 (Python and LibreOffice give 3; if Excel differs, follow Excel). Report: `output/phase3/excel_compare_report.json`. Test 3 checks that it passes a recalculated sentinel copy and fails the unopened sentinel build, a LibreOffice resave without recalculation, that resave with a Ledger formula replaced by `=0`, the normal build, and a recalculated copy with one formula typed over.
 
 LibreOffice: `config/tools.yaml` holds `soffice_path`; env var `SOFFICE_PATH` overrides it. Every call uses a fresh profile whose `registrymodifications.xcu` sets `OOXMLRecalcMode` to 0, so LibreOffice recalculates every formula on load.
 
@@ -60,21 +78,23 @@ LibreOffice: `config/tools.yaml` holds `soffice_path`; env var `SOFFICE_PATH` ov
 | `sw/narrative.py` | The two narratives per scenario, in a Python form and an Excel form built from the same template parts |
 | `sw/contract.py` | Interface contract (spec section 15 item 11): the Python dump keyed by the Summary range names, and the range layouts |
 | `sw/lo.py` | LibreOffice: forced-recalculation profile, recalculation, Summary PDF render |
+| `sw/reproduce.py` | Reproduce mode (spec section 9): fixture loader (layout checked on load), counting-rule detection, scenarios from loaded values, the reproduce build (also used for the synthetic integer workbook of test 3), the section 9 comparison with causes, CLI |
 
-## Workbook (Phase 2)
+## Workbook (Phases 2 and 3)
 
 | Sheet | Content |
 |---|---|
 | README | Purpose, how to use, color key, labels and range kinds, metric names, what is static and what is live, policy choices, contract range names |
-| Inputs | Config values as named inputs (`in_<key>`; lists as one named row). Notes say which inputs are live and which need a rebuild. `budget_basis` and `merit_actual_by_cohort` (Q-8e, Q-8f). Case selector. No mode switch (Phase 3) |
+| Inputs | Config values as named inputs (`in_<key>`; lists as one named row). Notes say which inputs are live and which need a rebuild. `budget_basis` and `merit_actual_by_cohort` (Q-8e, Q-8f). Case selector. Mode switch (Live, Reproduce): in a reproduce build it selects the loaded yields and tuition or the response; a live build has no loaded values and Checks flags Reproduce |
 | History | Cell x cohort panels (applications, admits, admit rate, award $, award % of tuition, yield, enrolled); totals by residency, segment and overall; tuition row |
 | Response | Base yield by partial pooling as live formulas from History and Inputs; observed award range; rung grid for display only (R-01) |
 | Levers | Header fields (including `bonus_pool_usd`, Q-8d) and per-cell `admit_rate`, `award_usd`, `full_tuition` per scenario. A child inherits each lever from its parent by formula (italic blue) until overwritten; grey fill marks cells that differ from the parent; change counts. An award typed on a full-tuition cell is struck through, marked in the note column and counted separately, not as a change (P2-03). A blank `segment` means the only configured segment (P2-07). `AWARD_MATRIX`: the resolved award (Q-3) |
 | Ledger_Low/Middle/High | Per cell and scenario: section 3 of the spec, yield as one formula column (R-01). Ledger_Middle adds the award at T(p) for the tuition what-if and admits at pool multiplier 1 for the pool strip |
 | Summary | Selected case; main block (Middle); Low and High; segment block; incentive block; tuition what-if with the two net-tuition lines; yield strip and break-evens; pool strip and its lo/hi parts; class-size table; narratives; labels; the interface-contract ranges for every case |
-| Trim | Shrink path per scenario: the walk in trim order (fixed at build), then rates, admits and a lowest-band helper per N in Ledger order |
+| Trim | Live builds only: shrink path per scenario: the walk in trim order (fixed at build), then rates, admits and a lowest-band helper per N in Ledger order. A reproduce build has no Trim sheet and its Summary class-size table says so (spec section 6: the Trim sheet does not settle integer admits) |
+| Reproduce | Reproduce builds only: per scenario the loaded pool multiplier, tuition, specialty, need_total and source notes; per cell the loaded admit rate, award and yield (blue inputs). With the mode at Reproduce the Ledgers' yield (all cases; no response, shift, floor or cap) and tuition read this sheet. Checks compares Levers' admit rates, resolved awards and pool multiplier with it, and the tuition formula with the loaded tuition |
 | Checks | Section 7 integrity checks: budget against total aid or merit (Q-8e), history reconciliation (Q-8f), the empty-segment scope error (P2-07), "rebuild needed" for the trim-order inputs and the stale exact segment probability (P2-06), and the full-tuition award conflicts (P1.1-1), with each conflicting cell listed |
-| RunLog | Build id, git commit, hashes, timestamp, response source, shock source |
+| RunLog | Build id, git commit, hashes, timestamp, response source, shock source, mode |
 
 Named ranges: every contract figure is the Summary range `<prefix>_<NAME>` (rows are cases, thresholds or grid values; columns are scenarios or a strip's fields; see `sw/contract.py`). Names are canonical, with no aliases (Q-1). `p_segment_goal` in the workbook is the normal form; `p_segment_goal_exact` is in the Python output only, and the Summary shows a static copy with a status row that turns stale when the segment's expected enrollment or goal changes (Q-2, P2-06).
 
@@ -86,11 +106,12 @@ Number formats (P2-05): counts `#,##0`, dollars `$#,##0`, scores and flags `0`, 
 |---|---|---|
 | 1 | `test_01_ledger.py` | Each section 3 identity on a six-cell toy grid against hand-computed answers, including the caps on `award_base` and on the incentive |
 | 2 | `test_02_risk.py` | Closed forms within 0.01 of the exact convolution, and simulation (200,000 draws) within 0.005, on a toy grid with expected class about 31 (class-band probability asserted only at expected class 50 or more, on the doubled grid) and on a balanced median grid where rho 0.5 matters |
-| 3 | `test_03_excel_equals_python.py` | Excel equals Python: every formula cell on every sheet after a forced LibreOffice recalculation (integers exact, floats 1e-6 relative), for the main workbook and the edge workbook (`tests/edge.py`, P2-01; a global shift with an in-state override, P21-02), with a check that the edge inputs still reach each branch; the desktop Excel check's guards (P21-01); the build id covers `sw/*.py` (P21-03); the -999 sentinel guard; the profile setting; formula vocabulary; two builds differ only in RunLog |
+| 3 | `test_03_excel_equals_python.py` | Excel equals Python: every formula cell on every sheet after a forced LibreOffice recalculation (integers exact, floats 1e-6 relative), for the main workbook and the edge workbook (`tests/edge.py`, P2-01; a global shift with an in-state override, P21-02), with a check that the edge inputs still reach each branch; the desktop Excel check's guards (P21-01); the build id covers `sw/*.py` (P21-03); the -999 sentinel guard; the profile setting; formula vocabulary (live and reproduce builds); two builds differ only in RunLog. Phase 3: a synthetic reproduce-mode workbook with integer admits and enrolled, built as a sentinel copy, equals Python on every formula cell, which reaches the integer branches deferred from Phase 2 (admits, admits at pool multiplier 1, enrolled) and the mode switch's Reproduce branch; `test_integer_branches_reached` keeps rounding visible, including applications rounded after the pool multiplier; setting the mode to Live in a copy makes every Ledger follow the response and the tuition formula, with applications not rounded; the History 509 block's formulas on synthetic 509 figures (agreeing, differing, not given) |
+| 6 | `test_06_reproduce.py` | Synthetic part (always): the ledger takes loaded yields and tuition in reproduce mode only, and refuses a reproduce run without them; integer counts belong to reproduce builds; a scenario file cannot set loaded values; applications rounded after the pool multiplier in reproduce mode only; the loader's label, narrative, pool, lineage, need and counting-rule rules; recovery of unknown applications only when one value fits; the comparison logic, its causes and the exclusion of non-reproducible cells. Fixture part (`YA_FIXTURE_PATH`): layout and loader; the counting rule detected and equal to the setting; unknown applications blank on History, each dependent cell recovered or counted; loaded values reach the Ledgers; the tuition formula reproduces the fixture's tuition; the fixture's enrolled follow the ledger's rounding; its summary rows agree with its panels; every cell difference has an identified cause; the reproduce workbook equals Python after recalculation; `test_pass_criterion` per scenario and criterion (spec section 9), Scenario 4 first |
 | 4 | `test_04_cf_vs_sim.py` | Closed-form class, median (rho 1.0 and 0.5) and NTR probabilities within 0.02 of simulation on 20 synthetic worlds |
 | 5 | `test_05_shape.py` | Calibration check of the stopgap generator: asserted shape rows hold in at least 90% of 20 seeds; other rows, including confounding, reported (R-06) |
 | 8 | `test_08_levers.py` | Lever semantics in the recalculated workbook: a zero-bonus child and a shift-0 child equal the parent; need rate unchanged by the class target; a shift equals the yield-strip row; the class break-even hits the target; residency and segment overrides replace; the tuition what-if at a scenario's own increase equals its ntr_y1 |
-| 9 | `test_09_reconciliation.py` | Every interface-contract range equals the Python dump and agrees with the Ledger columns; canonical names only; `p_segment_goal_exact` in the dump and its static copy; award matrix; strips at the scenario's own settings |
+| 9 | `test_09_reconciliation.py` | Every interface-contract range equals the Python dump and agrees with the Ledger columns; canonical names only; `p_segment_goal_exact` in the dump and its static copy; award matrix; strips at the scenario's own settings; the 509 reconciliation's counts and quartile ranges (R3-4) |
 | 10 | `test_10_render.py` | Summary rendered to `output/phase2/Summary_render.pdf` (one page group per section) for review; not asserted |
 | 11 | `test_11_segment_invariance.py` | Splitting out-of-state cells into segment and non-segment cells changes no total or probability; pooled base-yield values |
 | 12 | `test_12_incentive_scope.py` | Incentive scope rules |
@@ -102,7 +123,7 @@ Number formats (P2-05): counts `#,##0`, dollars `$#,##0`, scores and flags `0`, 
 | 18 | `test_18_v06_blocks.py` | Segment block, incentive block, class-size table, pool strip and the net-tuition lines against fresh Python calls; narratives equal `sw.narrative`; the full-tuition conflict listing; ignored award entries counted separately (P2-03); no unfilled template text (P2-04); number formats (P2-05); on an edited copy, "rebuild needed", the stale exact probability and the scope error (P2-06, P2-07); segment normal-versus-exact gap reported in `output/phase2/test18_report.json` |
 | 19 | `test_19_output_coverage.py` | Every interface-contract figure against a hand-computed value or an exact ledger identity at a point where its formula can fail: 90% ranges, segment variance and flag, rho 0.5 median, evidence label, incentive block, tuition what-if at every grid value, net-tuition lines and the Q-5 example-award rule, yield strip, pool strip at rho 0.5, overrides, clipping, trimmed rates, integer settling, pooling edges, award changes and ignored entries, history reconciliation, budget basis, `bonus_pool_usd` |
 | 20 | `mutation_check.py` | Each Python mutant (Review Appendix A survivors and caught list, Phase 1.1 and 2.1 changes) is caught by the Python suite; each Excel-formula mutant (`--excel`) by tests 3, 8, 9 and 18 |
-| (support) | `test_00_config_labels.py` | Rule 7 on `richmond.yaml`; exact label text |
+| (support) | `test_00_config_labels.py` | Rule 7 on `richmond.yaml`; exact label text; Python texts and the ledger's rounding match Excel's (half away from zero after 15 significant digits; Phase 3) |
 
 ## Metric names (methodology Appendix F)
 
@@ -111,6 +132,19 @@ Number formats (P2-05): counts `#,##0`, dollars `$#,##0`, scores and flags `0`, 
 ## Policy choices stated here
 
 - The shrink path trims unscored applicants first. This is a policy choice with access implications.
-- Unscored enrollees are excluded from both sides of the median margins and reported as a count (`unscored_in_median: excluded`, pending the 509 instructions, O41).
+- Unscored enrollees are excluded from both sides of the median margins and reported as a count (`unscored_in_median: excluded`, the ABA 509 basis; reproduce mode uses the same rule, DECISIONS Nov 18).
 - Range kinds are never combined: "90% outcome range" (enrollment noise and year-level variation, Middle case) and "Low and High price-response cases" (placeholder slopes now).
 - While `shock_source` is `illustrative`, probabilities show as "under 5%" or "over 95%" beyond those bounds, beside "Year-to-year variation assumed (s = ...), not yet calibrated".
+
+## Reproduce mode (Phase 3, spec section 9)
+
+`python -m sw.reproduce` reads the fixture at run time (read only) from `YA_FIXTURE_PATH` and never writes a fixture value outside `output/`. The loader's rules are in the module docstring of `sw/reproduce.py`; in short:
+
+- Cells come from the panel row labels (score part to `score_lo`, "<N" to the lowest configured band, another test or none to unscored; GPA part to hi, lo or blank). Several fixture GPA groups map to `lo`, so some cells share residency, score band and GPA class; cell ids keep them apart. Segments are blank (the file has residency only).
+- Applications are admits / admit rate, rounded to whole applications. Where the admit rate is 0 or blank the applications are unknown: History shows them blank and the Ledgers read 0. Unknown base-cycle applications in a cell that some scenario admits students to are recovered from the scenario columns only when exactly one whole number fits every scenario's admits; otherwise the cell is "not reproducible from the file", left out of the pass criteria on both sides and counted (Reproduce sheet and report).
+- Tuition by cohort and per scenario is award $ / award %. It lives in memory and in `output/`; `config/richmond.yaml` keeps tuition null (OP-8, OD-09).
+- Lineage and the pool multiplier come from each scenario's description; specialty from its specialty row; need_total from config `need.total`, less any departure of the need row from the file's own need rule.
+- Settings: `config/richmond.yaml` `reproduce:` block (`tuition_increase_pct` 6.0, `unscored_in_median` excluded, `round_apps_after_pool` true; DECISIONS Nov 18); integer admits and enrolled; mode reproduce. With `round_apps_after_pool`, applications are rounded to whole numbers after the pool multiplier, in reproduce mode only (Inputs `in_round_apps_after_pool`, read while the mode is Reproduce); live mode never rounds them (spec section 3). The loader detects the file's own counting rule from its count rows and reports it beside the setting.
+- History carries a report-only ABA 509 reconciliation block (R3-4) per cohort: first-year class and the counts without a score or GPA (formulas), and whether each published LSAT and UGPA quartile lies in the range the band shares allow (computed at build). Figures come from the optional `aba_509_by_cohort` config key (public data; null for Richmond until entered). Checks reports one row per cohort; nothing is asserted.
+
+Remaining differences, reported in `output/phase3/reproduce_report.json` (no figures here): only the non-reproducible cells (excluded from the criteria). NTR passes within the $100 tolerance; the gap comes from the file's need rule (whole-dollar need rate times class), which the ledger does not apply.

@@ -132,3 +132,46 @@ def close(a, b, rel=1e-6, abs_=1e-9):
     if isinstance(b, int) and not isinstance(b, bool):
         return float(a) == float(b)
     return math.isclose(float(a), float(b), rel_tol=rel, abs_tol=abs_)
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Phase 3: reproduce mode (tests 3 and 6)
+
+PHASE3 = os.path.join(ROOT, "output", "phase3")
+
+
+def repro_synthetic(seed=101):
+    """A synthetic reproduce-mode run's inputs (sw.reproduce.synthetic_inputs): the scenarios of
+    config/scenarios_synthetic.yaml on world `seed`, with loaded yields (each scenario's Middle live yield rounded to 3
+    decimals) and loaded tuition, integer admits and enrolled, applications rounded after the pool multiplier, and
+    synthetic 509 figures. Returns (cfg_live, cfg, cells, scenarios, loaded)."""
+    from sw import reproduce
+    return reproduce.synthetic_inputs(seed)
+
+
+@pytest.fixture(scope="session")
+def repro_syn_wb(lo_profile):
+    """Test 3 (integer branches): the synthetic reproduce-mode workbook, built as a sentinel copy (every cached value
+    -999) and recalculated, so every formula cell must be recalculated to match Python."""
+    import shutil
+    import openpyxl
+    from sw import lo, reproduce
+    out = os.path.join(PHASE3, "repro_synthetic")
+    shutil.rmtree(out, ignore_errors=True)
+    cfg_live = repro_synthetic()[0]
+    path, info = reproduce.build_synthetic(out, 101, sentinel=True)
+    rc = lo.recalc(path, os.path.join(out, "recalculated"), profile=lo_profile)
+    return {"path": path, "recalc_path": rc, "info": info, "cfg_live": cfg_live,
+            "values": openpyxl.load_workbook(rc, data_only=True),
+            "formulas": openpyxl.load_workbook(rc, data_only=False)}
+
+
+@pytest.fixture(scope="session")
+def ya_path():
+    """Path of the validation fixture from YA_FIXTURE_PATH; tests that need it skip without it (spec rule 3)."""
+    p = os.environ.get("YA_FIXTURE_PATH")
+    if not p:
+        pytest.skip("YA_FIXTURE_PATH not set: reproduce-mode fixture tests skipped")
+    if not os.path.exists(p):
+        pytest.skip(f"YA_FIXTURE_PATH does not point at a file: {p}")
+    return p

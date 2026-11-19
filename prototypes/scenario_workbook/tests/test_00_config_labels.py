@@ -41,3 +41,24 @@ def test_no_guardrail_language():
     text = " ".join(str(v) for k, v in vars(labels).items() if k.isupper()).lower()
     for word in ("exceptional", "anomalous", "out of bounds", "beyond a limit"):
         assert word not in text
+
+
+def test_xl_rounding_matches_excel_text():
+    """labels.xl rounds as Excel's TEXT shows numbers (half away from zero after 15 significant digits); Python's own
+    formatting rounds an exact tie half to even (Phase 3 finding: a $x.50 net-tuition example)."""
+    from sw import labels
+    assert f"{1424.5:,.0f}" == "1,424" and f"{labels.xl(1424.5):,.0f}" == "1,425"
+    assert labels.xl(-2.5) == -3 and labels.xl(0.125, 2) == 0.13 and labels.xl(130.25, 1) == 130.3
+    assert labels.xl(2.4999999999999996) == 3          # 15 significant digits first, as Excel shows it
+    assert labels.xl(1.44) == 1 and labels.xl(0.0) == 0
+
+
+def test_ledger_rounding_matches_excel_round():
+    """ledger.xround and config.round_to round as Excel and LibreOffice ROUND do: 15 significant digits, then half up
+    (LibreOffice ROUND(2.4999999999999996, 0) = 3, checked in Phase 3)."""
+    import numpy as np
+    from sw import ledger as L
+    from sw.config import round_to
+    assert L.xround(2.4999999999999996) == 3 and L.xround(2.5) == 3 and L.xround(1.44) == 1
+    assert np.array_equal(L.xround(np.array([0.5, 1.4999999999999998, 2.0, 0.0])), [1, 2, 2, 0])
+    assert round_to(1024.0, 50) == 1000 and round_to(1025.0, 50) == 1050 and round_to(1074.99, 50) == 1050

@@ -12,7 +12,8 @@ import numpy as np
 from . import CASES
 from . import labels
 from . import response
-from .config import ConfigError, check_class_target, plan_increase_pct, scenario_tuition, segment_def
+from .config import (ConfigError, check_class_target, excel_round0, plan_increase_pct, round_apps_after_pool,
+                     scenario_tuition, segment_def)
 
 # Levers that must equal the parent's for the incentive decomposition to be valid (section 3, incentive block).
 VALIDITY_FIELDS = (
@@ -25,8 +26,8 @@ SEGMENT_APPROX_BELOW = 30          # segment "approximate" flag below this expec
 
 
 def xround(x):
-    """Round half up (Excel ROUND for non-negative values)."""
-    return np.floor(np.asarray(x, float) + 0.5)
+    """Round half up as Excel ROUND(x, 0) does (config.excel_round0: 15 significant digits first)."""
+    return excel_round0(x)
 
 
 @dataclass
@@ -57,6 +58,10 @@ class Scenario:
     yield_shift_pts_segment: float | None = None
     discount_target: float | None = None
     bonus_pool_usd: float | None = None   # informational: "bonus implied by a dollar pool" [v0.6.2, Q-8d]
+    # Reproduce mode (spec section 9): loaded values that replace the response yield (every case) and the tuition
+    # formula while cfg["mode"] is "reproduce". Set only by sw/reproduce.py; a scenario file cannot set them.
+    yield_loaded: np.ndarray | None = None
+    tuition_loaded_usd: float | None = None
     notices: list = field(default_factory=list)
 
 
@@ -205,6 +210,83 @@ def history_reconciliation(cells, cfg):
     return out
 
 
+ABA509_COUNTS = (("first_year_class", "first-year class"), ("without_score", "without a score"),
+                 ("without_gpa", "without a GPA"))
+ABA509_QUANTILES = ((0.25, "p25", "25th"), (0.50, "p50", "50th"), (0.75, "p75", "75th"))
+
+
+def _band_range(lows, counts, q):
+    """Bands (lower bounds ascending, enrolled counts) that can hold the q-th percentile of these enrollees: band k
+    when the count below it is at most q x N and the count up to its top is at least q x N. Returns (lo index, hi
+    index) of the bands, or None when no one is counted."""
+    n = float(sum(counts))
+    if n <= 0:
+        return None
+    qn = q * n
+    below, ks = 0.0, []
+    for k, c in enumerate(counts):
+        if c > 0 and below <= qn + 1e-9 and below + c >= qn - 1e-9:
+            ks.append(k)
+        below += c
+    return (min(ks), max(ks)) if ks else None
+
+
+def _range_text(lows, k0, k1, measure_fmt):
+    lo = lows[k0]
+    hi = lows[k1 + 1] if k1 + 1 < len(lows) else None
+    if k0 == 0 and lo <= 0:
+        return f"below {measure_fmt(hi)}" if hi is not None else "any"
+    return f"{measure_fmt(lo)}+" if hi is None else f"{measure_fmt(lo)} to below {measure_fmt(hi)}"
+
+
+def aba509_reconciliation(cells, cfg):
+    """History 509 reconciliation (R3-4; report only, never asserted): per history cohort, the cell data against the
+    client's public ABA 509 figures (`aba_509_by_cohort`, optional). Counts: first-year class (all enrolled), enrolled
+    without a score (unscored cells) and without a GPA (blank-GPA cells); each "agrees" or "differs". Quartiles: the
+    range of values the band shares allow for the 25th, 50th and 75th percentile of enrollees with a score (with a
+    GPA), the ABA 509 basis (unscored excluded); a published figure inside that range is "consistent". Returns a list
+    of dicts (cohort, rows, summary), each row (key, label, cells, aba, verdict)."""
+    a5 = cfg.get("aba_509_by_cohort") or {}
+    sb = sorted(float(b) for b in cfg["score"]["bands"])
+    h = float(cfg["gpa"]["hi_at_or_above"])
+    out = []
+    for j, y in enumerate(cells.cohorts):
+        e = cells.enrolled[:, j]
+        fig = a5.get(int(y)) or {}
+        grid = {"first_year_class": float(e.sum()), "without_score": float(e[~cells.scored].sum()),
+                "without_gpa": float(e[cells.gpa_class == "blank"].sum())}
+        rows = []
+        for key, lab in ABA509_COUNTS:
+            v = fig.get(key)
+            verdict = labels.ABA509_NOT_GIVEN if v is None else (
+                labels.ABA509_AGREES if abs(grid[key] - v) < 1e-6 else labels.ABA509_DIFFERS)
+            rows.append({"key": key, "label": lab, "cells": grid[key], "aba": v, "verdict": verdict})
+        sc = cells.score_lo
+        score_counts = [float(e[cells.scored & (sc == b)].sum()) for b in sb]
+        gpa_counts = [float(e[cells.gpa_class == "lo"].sum()), float(e[cells.gpa_class == "hi"].sum())]
+        for meas, lows, counts, fmt, name in (
+                ("score", sb, score_counts, lambda x: f"{x:g}", cfg["score"]["measure"]),
+                ("gpa", [0.0, h], gpa_counts, lambda x: f"{x:.2f}", cfg["gpa"]["measure"])):
+            for q, key, qlab in ABA509_QUANTILES:
+                v = fig.get(f"{meas}_{key}")
+                kk = _band_range(lows, counts, q)
+                txt = "" if kk is None else _range_text(lows, kk[0], kk[1], fmt)
+                if v is None or kk is None:
+                    verdict = labels.ABA509_NOT_GIVEN
+                else:
+                    top = lows[kk[1] + 1] if kk[1] + 1 < len(lows) else float("inf")
+                    ok = (lows[kk[0]] <= v < top) or (kk[0] == 0 and v < top)
+                    verdict = labels.ABA509_CONSISTENT if ok else labels.ABA509_INCONSISTENT
+                rows.append({"key": f"{meas}_{key}", "label": f"{name} {qlab} percentile", "cells": txt, "aba": v,
+                             "verdict": verdict})
+        given = [r for r in rows if r["verdict"] != labels.ABA509_NOT_GIVEN]
+        bad = [r for r in given if r["verdict"] in (labels.ABA509_DIFFERS, labels.ABA509_INCONSISTENT)]
+        summary = (labels.ABA509_NOT_RUN.format(y=int(y)) if not given else labels.ABA509_ALL_AGREE if not bad else
+                   labels.ABA509_SOME_DIFFER.format(k=len(bad), n=len(given)))
+        out.append({"cohort": int(y), "rows": rows, "summary": summary})
+    return out
+
+
 def with_rates(scen, rates, name=None):
     """Copy of a scenario with a full admit-rate column (used by the shrink path)."""
     s = copy.copy(scen)
@@ -262,18 +344,31 @@ def resolve_awards(scen, tuition, p, eligible):
     return base, award
 
 
+def reproducing(cfg, scen):
+    """True when the ledger takes the scenario's loaded yields and tuition (reproduce mode, spec section 9)."""
+    if cfg.get("mode", "live") != "reproduce":
+        return False
+    if scen.yield_loaded is None or scen.tuition_loaded_usd is None:
+        raise ConfigError(f"{scen.name}: reproduce mode needs loaded yields and tuition for every scenario")
+    return True
+
+
 def evaluate(cells, cfg, scen, base, case):
     """One scenario, one case. Section 3, steps 1 to 6."""
     if case not in CASES:
         raise ValueError(case)
     j = cells.col(cfg["cycle"]["base_cycle"])
     p = scen.tuition_increase_pct / 100.0
-    tuition = scenario_tuition(cfg, scen.tuition_increase_pct)
+    rep = reproducing(cfg, scen)
+    tuition = float(scen.tuition_loaded_usd) if rep else scenario_tuition(cfg, scen.tuition_increase_pct)
     upper = response.score_group_upper(cells, cfg)
     in_seg = segment_mask(cells, cfg, scen)
     # 2. applications
     pool = np.where(upper, scen.pool_multiplier, 1.0)
     apps = cells.apps[:, j] * pool * (1.0 + (scen.segment_pool_lift_pct / 100.0) * in_seg)
+    if rep and round_apps_after_pool(cfg):
+        # reproduce mode only: whole applications after the pool multiplier, as the fixture computes them
+        apps = xround(apps)
     # 3. admits
     admits = apps * scen.admit_rate
     if cfg["integer_admits"]:
@@ -284,7 +379,11 @@ def evaluate(cells, cfg, scen, base, case):
     incentive = award - award_base
     # 5. yield
     shift = _shift(cells, scen, in_seg)
-    yld = np.clip(response.yield_at(base, award, case) + shift / 100.0, base.floor, base.cap)
+    if rep:
+        # Reproduce mode: the loaded yield, as entered; the response, the shift, the floor and the cap do not apply
+        yld = np.asarray(scen.yield_loaded, float).copy()
+    else:
+        yld = np.clip(response.yield_at(base, award, case) + shift / 100.0, base.floor, base.cap)
     # 6. enrolled
     mu = admits * yld
     enrolled = xround(mu) if cfg["integer_enrolled"] else mu.copy()

@@ -1,8 +1,11 @@
-"""XlsxWriter generator for the scenario workbook (spec sections 6 to 8, 15 item 11). Live mode only.
+"""XlsxWriter generator for the scenario workbook (spec sections 6 to 9, 15 item 11).
 
 Sheets: README, Inputs, History, Response, Levers, Ledger_Low, Ledger_Middle, Ledger_High, Summary, Trim, Checks,
-RunLog. Reproduce mode (the Reproduce sheet and mode switch) is Phase 3 and the Distribution sheet is Phase 4; neither
-is built here.
+RunLog. A reproduce build (cfg mode "reproduce", from sw/reproduce.py) adds the Reproduce sheet (loaded yields, admit
+rates, awards, pool settings and tuition) and leaves out Trim, which is live mode only (spec section 6). The Inputs
+mode switch (Live, Reproduce) selects, in a reproduce build, the loaded yields and tuition or the response yields and
+the tuition formula; a live build has no loaded values and Checks flags the switch if it is set to Reproduce. The
+Distribution sheet is Phase 4 and is not built here.
 
 Every computed cell is a live formula written with its cached value from the Python reference functions (spec
 section 6), and the builder records that value as the expected result for test 3. With sentinel=True every cached value
@@ -28,7 +31,7 @@ from . import narrative as NAR
 from . import response
 from . import risk
 from . import trim
-from .config import plan_increase_pct, round_to, scenario_tuition
+from .config import excel_round0, plan_increase_pct, round_apps_after_pool, round_to, scenario_tuition
 
 CASE_SHEET = {"low": "Ledger_Low", "middle": "Ledger_Middle", "high": "Ledger_High"}
 CASE_TITLE = {"low": "Low", "middle": "Middle", "high": "High"}
@@ -36,6 +39,11 @@ SEG_NONE = "(none)"
 BIG = "1E+99"
 SHEETS = ["README", "Inputs", "History", "Response", "Levers", "Ledger_Low", "Ledger_Middle", "Ledger_High",
           "Summary", "Trim", "Checks", "RunLog"]
+PROBE_A, PROBE_B = 0.35, 0.14        # 0.35 / 0.14 = 2.4999999999999996 in IEEE double (R3-3 rounding probe)
+PROBE_EXPR = "0.35/0.14"
+REPRO_SHEETS = ["README", "Inputs", "History", "Response", "Levers", "Ledger_Low", "Ledger_Middle", "Ledger_High",
+                "Summary", "Checks", "Reproduce", "RunLog"]
+MODE_LABEL = {"live": "Live", "reproduce": "Reproduce"}
 LEVER_FIELDS = [  # (field, label, kind): kind num, int01, text, opt (optional number)
     ("description", "description", "text"), ("plan_year", "plan_year (label)", "num"),
     ("tuition_increase_pct", "tuition_increase_pct", "num"),
@@ -110,7 +118,9 @@ class Book:
         created = _dt.datetime(2020, 1, 1) + _dt.timedelta(seconds=int(bid, 16) % (10 * 365 * 86400))
         self.wb.set_properties({"title": "Scenario workbook", "subject": "Scenario evaluator (recommends nothing)",
                                 "comments": f"build {bid}", "created": created})
-        self.ws = {name: self.wb.add_worksheet(name) for name in SHEETS}
+        self.repro = run.cfg["mode"] == "reproduce"
+        self.sheets = REPRO_SHEETS if self.repro else SHEETS
+        self.ws = {name: self.wb.add_worksheet(name) for name in self.sheets}
         self._formats()
         self.cohorts = list(self.cells.cohorts)
         self.jbase = self.cells.col(self.cfg["cycle"]["base_cycle"])
@@ -242,6 +252,11 @@ class Book:
             top += n + 8
         self.tc_share0 = 10
         self.tc_lc0 = 10 + nN + 1
+        # Reproduce (reproduce builds only): header rows per scenario, then per cell admit_rate, award_usd, yield
+        self.prow = {"name": 3, "parent": 4, "pool_multiplier": 5, "tuition": 6, "specialty_usd": 7, "need_total": 8}
+        self.pcolhead = 11
+        self.r0p = 12
+        self.pblock = {s.name: 6 + 4 * j for j, s in enumerate(S)}
 
     # convenience references --------------------------------------------------------------------------------------
     def HR(self, panel, j):  # History column range over cells for cohort j
@@ -289,9 +304,12 @@ class Book:
         self.w_history()
         self.w_response()
         self.w_levers()
+        if self.repro:
+            self.w_reproduce()
         for k in CASES:
             self.w_ledger(k)
-        self.w_trim()
+        if not self.repro:
+            self.w_trim()
         self.w_summary(dry=True)
         self.w_summary(dry=False)
         self.w_checks()
@@ -338,8 +356,8 @@ class Book:
         ws.set_column(self.inote, self.inote, 70)
         self.txt("Inputs", 0, 0, "Inputs", "title")
         self.txt("Inputs", 1, 0, "Blue cells are inputs. 'live' inputs drive formulas; 'build-time' inputs are shown "
-                                 "for reference and need a rebuild to apply. Live mode (Reproduce mode is Phase 3 and is "
-                                 "not built).", "note")
+                                 "for reference and need a rebuild to apply. Mode: " + MODE_LABEL[cfg["mode"]]
+                 + (" (reproduce build; see the Reproduce sheet)." if self.repro else " (live build)."), "note")
         self.ir = 3
 
         def sec(t):
@@ -380,6 +398,19 @@ class Book:
         one("vertical", "client.vertical", cfg["client"]["vertical"], "in_text", "build-time")
         one("small_cell_policy", "client.small_cell_policy", cfg["client"]["small_cell_policy"], "in_text",
             "build-time; methodology section 9")
+        sec("Mode")
+        mode_note = ("live: Reproduce takes the loaded yields and tuition on the Reproduce sheet; Live takes the "
+                     "response yields and the tuition formula" if self.repro else
+                     "live build: there are no loaded values, so the Ledger always uses the response yields and the "
+                     "tuition formula (Checks flags Reproduce)")
+        one("mode", "mode (Live or Reproduce)", MODE_LABEL[cfg["mode"]], "in_text", mode_note)
+        self.ws["Inputs"].data_validation(self.ir - 1, 1, self.ir - 1, 1,
+                                          {"validate": "list", "source": ["Live", "Reproduce"]})
+        if self.repro:
+            one("round_apps_after_pool", "reproduce.round_apps_after_pool (1 = whole applications after the pool "
+                "multiplier)", int(round_apps_after_pool(cfg)), "in_int",
+                "live; read only while the mode is Reproduce (the fixture's arithmetic; live mode never rounds "
+                "applications, spec section 3)")
         sec("Cycle and tuition")
         one("base_cycle", "cycle.base_cycle", cfg["cycle"]["base_cycle"], "in_int", "build-time")
         one("plan_cycle", "cycle.plan_cycle", cfg["cycle"]["plan_cycle"], "in_int", "build-time")
@@ -425,8 +456,8 @@ class Book:
         one("need_reference_class", "need.reference_class", cfg["need"]["reference_class"], "in_num")
         nr = float(cfg["need"]["total"]) / float(cfg["need"]["reference_class"])
         one("need_rate", "need rate per enrollee", nr, "usd", "formula", formula="in_need_total/in_need_reference_class")
-        need_lbl = labels.NEED_LABEL.format(total=f"${cfg['need']['total']:,.0f}",
-                                            ref=f"{cfg['need']['reference_class']:g}", rate=f"${nr:,.0f}")
+        need_lbl = labels.NEED_LABEL.format(total=f"${labels.xl(cfg['need']['total']):,.0f}",
+                                            ref=f"{cfg['need']['reference_class']:g}", rate=f"${labels.xl(nr):,.0f}")
         r = self.ir
         self.ir += 1
         self.txt("Inputs", r, 0, "label")
@@ -468,9 +499,9 @@ class Book:
         one("marginal_admit_yield_slope", "marginal_admit_yield_slope", cfg["marginal_admit_yield_slope"], "in_num",
             "read and ignored: marginal-admit yield is not modeled")
         one("integer_admits", "integer_admits (1 = round)", int(cfg["integer_admits"]), "in_int",
-            "live mode uses 0 (spec section 2)")
+            "live; reproduce mode uses 1, live mode 0 (spec section 2)")
         one("integer_enrolled", "integer_enrolled (1 = round)", int(cfg["integer_enrolled"]), "in_int",
-            "live mode uses 0 (spec section 2)")
+            "live; reproduce mode uses 1, live mode 0 (spec section 2)")
         sec("Segments (one active per scenario; Levers row 'segment')")
         segs = cfg["segments"]
         hdr = self.ir
@@ -548,12 +579,15 @@ class Book:
                 self.txt("History", self.r0h - 1, self.hcol[p] + j, str(coh), "h")
         self._cell_static("History", self.r0h)
         T = [cfg["tuition_by_cohort"][y] for y in self.cohorts]
+        unknown = cells.meta.get("apps_unknown")
         for i in range(self.n):
             r = self.r0h + i
             for j in range(nc):
                 apps, adm = cells.apps[i, j], cells.admits[i, j]
                 aw, en = cells.award[i, j], cells.enrolled[i, j]
-                self.val("History", r, self.hcol["apps"] + j, apps, "n0")
+                # unknown applications (not in the file) are blank, not 0; formulas read a blank as 0
+                self.val("History", r, self.hcol["apps"] + j,
+                         "" if unknown is not None and unknown[i, j] else apps, "n0")
                 self.val("History", r, self.hcol["admits"] + j, adm, "n0")
                 self.val("History", r, self.hcol["award"] + j, aw, "usd")
                 self.val("History", r, self.hcol["enrolled"] + j, en, "n0")
@@ -611,7 +645,55 @@ class Book:
             self.fx("History", r, self.hcol["award"] + j, tbc[j], T[j], "usd")
         self.txt("History", r + 1, 0, "Award $ in totals rows: admit-weighted mean. Segment '(none)': outside every "
                                       "segment.", "note")
+        rec = cells.meta.get("apps_recovered")
+        n_unk = 0 if unknown is None else int(unknown.sum())
+        n_rec = 0 if rec is None else int(rec.sum())
+        if n_unk or n_rec:
+            self.txt("History", r + 2, 0, f"Applications: {n_unk} cell-cohorts blank (not in the file; admit rate 0 or "
+                                          f"blank there), read as 0 by the Ledgers; {n_rec} recovered from the scenario "
+                                          f"columns (one value fits every scenario; DECISIONS Nov 18).", "note")
+        self._history_509(r + 4)
         ws.freeze_panes(self.r0h, 1)
+
+    def _history_509(self, r):
+        """ABA 509 reconciliation block (R3-4): report only, never asserted. Count rows are formulas over History;
+        percentile rows are computed at build from the band shares."""
+        cells = self.cells
+        rec = self.vals["aba509_reconciliation"]
+        self.txt("History", r, 0, "ABA 509 reconciliation (report only; not asserted; R3-4)", "hl")
+        self.txt("History", r + 1, 0, "Counts are formulas over the cell data. Percentile rows give the range the "
+                                      "band shares allow for enrollees with a score (with a GPA), the ABA 509 basis; "
+                                      "computed at build. 509 figures: aba_509_by_cohort in config (public).", "note")
+        c0 = self.hcol["apps"]
+        for j, y in enumerate(self.cohorts):
+            for kk, h in enumerate(("cells", "509", "verdict")):
+                self.txt("History", r + 2, c0 + 3 * j + kk, f"{y} {h}", "h")
+        SC = rng("History", self.r0h, 4, self.r0h + self.n - 1, 4)
+        GP = rng("History", self.r0h, 5, self.r0h + self.n - 1, 5)
+        self.h509 = {}
+        for t, row0 in enumerate(rec[0]["rows"]):
+            rr = r + 3 + t
+            self.txt("History", rr, 0, row0["label"])
+            for j, y in enumerate(self.cohorts):
+                x = rec[j]["rows"][t]
+                cc, ca, cv = c0 + 3 * j, c0 + 3 * j + 1, c0 + 3 * j + 2
+                self.val("History", rr, ca, "" if x["aba"] is None else x["aba"], "in_num")
+                if x["key"] in ("first_year_class", "without_score", "without_gpa"):
+                    E = self.HR("enrolled", j)
+                    f = {"first_year_class": f"SUM({E})", "without_score": f"SUMPRODUCT(({SC}=0)*{E})",
+                         "without_gpa": f'SUMPRODUCT(({GP}="blank")*{E})'}[x["key"]]
+                    self.fx("History", rr, cc, f, x["cells"], "n0")
+                    C, A = a1(rr, cc, False), a1(rr, ca, False)
+                    self.fx("History", rr, cv, f'IF({A}="",{xs(labels.ABA509_NOT_GIVEN)},IF(({C}-{A})^2<1E-12,'
+                                               f'{xs(labels.ABA509_AGREES)},{xs(labels.ABA509_DIFFERS)}))',
+                            x["verdict"], "t")
+                else:
+                    self.val("History", rr, cc, x["cells"], "t")
+                    self.val("History", rr, cv, x["verdict"], "t")
+        nrow = len(rec[0]["rows"])
+        for j, y in enumerate(self.cohorts):
+            cv = c0 + 3 * j + 2
+            self.h509[y] = rng("History", r + 3, cv, r + 2 + nrow, cv)
 
     # ------------------------------------------------------------------------------------------------------------
     # Response
@@ -892,6 +974,62 @@ class Book:
         ws.freeze_panes(self.r0v, 1)
 
     # ------------------------------------------------------------------------------------------------------------
+    # Reproduce (reproduce builds only; spec section 9)
+
+    def w_reproduce(self):
+        run, cells = self.run, self.cells
+        ws = self.ws["Reproduce"]
+        self.txt("Reproduce", 0, 0, "Reproduce: loaded values (reproduce build)", "title")
+        self.txt("Reproduce", 1, 0, "Loaded from " + run.meta.get("data_source", "the fixture") + ". While the Inputs "
+                 "mode is Reproduce, the Ledgers take each scenario's yield (all three cases) and tuition from here, as "
+                 "entered: the response, the yield shift, the floor and the cap do not apply. Admit rates, awards and "
+                 "the pool multiplier are scenario inputs on Levers; Checks compares Levers with the loaded values "
+                 "below.", "note")
+        ws.set_column(0, 0, 24)
+        ws.set_column(1, 5, 9)
+        heads = {"name": "Scenario", "parent": "parent (loaded lineage)", "pool_multiplier": "pool multiplier",
+                 "tuition": "tuition (loaded, plan year)", "specialty_usd": "specialty_usd",
+                 "need_total": "need_total"}
+        for key, h in heads.items():
+            self.txt("Reproduce", self.prow[key], 0, h, "hl")
+        self.txt("Reproduce", self.prow["need_total"] + 1, 0, "source notes", "hl")
+        nonrep = cells.meta.get("not_reproducible", [])
+        rec = cells.meta.get("apps_recovered")
+        self.txt("Reproduce", self.prow["need_total"] + 2, 0,
+                 f"Cells not reproducible from the file: {len(nonrep)}"
+                 + (" (" + "; ".join(d["cell"] for d in nonrep) + ")" if nonrep else "")
+                 + "; excluded from the pass criteria, reasons in the reproduce report. Applications recovered from "
+                 f"the scenario columns: {0 if rec is None else int(rec.sum())}.", "note")
+        self._static_heads("Reproduce", self.pcolhead)
+        self._cell_static("Reproduce", self.r0p)
+        for s in self.S:
+            c0 = self.pblock[s.name]
+            ld = run.loaded[s.name]
+            ws.set_column(c0, c0 + 2, 11)
+            ws.set_column(c0 + 3, c0 + 3, 2)
+            self.txt("Reproduce", self.prow["name"], c0, s.name, "hl")
+            p = run.parents[s.name]
+            self.txt("Reproduce", self.prow["parent"], c0, p.name if p else "(none)")
+            self.val("Reproduce", self.prow["pool_multiplier"], c0, ld["pool_multiplier"], "in_num")
+            self.val("Reproduce", self.prow["tuition"], c0, ld["tuition"], "in_usd")
+            self.val("Reproduce", self.prow["specialty_usd"], c0, ld["specialty_usd"], "in_usd")
+            self.val("Reproduce", self.prow["need_total"], c0, ld["need_total"], "in_usd")
+            self.txt("Reproduce", self.prow["need_total"] + 1, c0, "; ".join(ld.get("sources", [])), "note")
+            for kk, h in enumerate(["admit_rate", "award_usd", "yield"]):
+                self.txt("Reproduce", self.pcolhead, c0 + kk, h, "h")
+            for i in range(self.n):
+                r = self.r0p + i
+                self.val("Reproduce", r, c0, float(ld["admit_rate"][i]), "in_r4")
+                self.val("Reproduce", r, c0 + 1, float(ld["award_usd"][i]), "in_usd")
+                self.val("Reproduce", r, c0 + 2, float(ld["yield"][i]), "in_r4")
+        ws.freeze_panes(self.r0p, 1)
+
+    def PR(self, s, key):
+        """Reproduce column range over cells: admit_rate, award_usd or yield."""
+        c = self.pblock[s] + {"rate": 0, "award": 1, "yield": 2}[key]
+        return rng("Reproduce", self.r0p, c, self.r0p + self.n - 1, c)
+
+    # ------------------------------------------------------------------------------------------------------------
     # Ledger
 
     def w_ledger(self, k):
@@ -903,7 +1041,8 @@ class Book:
                               f"in_slope_{k}). " + labels.RESPONSE_LABEL, "title")
         self.txt(sheet, 1, 0, "Per cell and scenario: section 3 of the spec. Yield is the response formula in one "
                               "column (R-01): clip(clip(y0 + b/100 (award - a0)/1000, floor, cap) + shift/100, floor, "
-                              "cap).", "note")
+                              "cap)." + (" Mode Reproduce: yield and tuition are the loaded values on the Reproduce "
+                                         "sheet (no response, shift, floor or cap)." if self.repro else ""), "note")
         st = self.lstat
         heads = {"upper": "upper group (1/0)", "floor": "yield floor", "cap": "yield cap", "a0": "a0", "y0": f"y0 {k}",
                  "award_lo": "award low (observed)", "award_hi": "award high (observed)",
@@ -944,6 +1083,13 @@ class Book:
             self._ledger_block(k, s)
         ws.freeze_panes(self.r0l, 1)
 
+    def _apps_round(self, f):
+        """Applications formula; in reproduce builds, whole applications while the mode is Reproduce and
+        in_round_apps_after_pool is 1 (DECISIONS Nov 18)."""
+        if not self.repro:
+            return f
+        return f'IF((in_mode="Reproduce")*(in_round_apps_after_pool=1)=1,ROUND({f},0),{f})'
+
     def _ledger_block(self, k, s):
         sheet = CASE_SHEET[k]
         run, cells, cfg = self.run, self.cells, self.cfg
@@ -956,8 +1102,11 @@ class Book:
         self.fx(sheet, 2, c0 + 1, ref("Levers", self.vrow_name, self.vblock[s.name]), s.name, "t")
         self.txt(sheet, 3, c0, "tuition")
         LVf = lambda f: self.LV(s.name, f)  # noqa: E731
-        self.fx(sheet, 3, c0 + 1, f"ROUND(in_tuition_base*(1+{LVf('tuition_increase_pct')}/100)/in_tuition_rounding_usd,"
-                                  f"0)*in_tuition_rounding_usd", lc.tuition, "usd")
+        tf = (f"ROUND(in_tuition_base*(1+{LVf('tuition_increase_pct')}/100)/in_tuition_rounding_usd,0)"
+              f"*in_tuition_rounding_usd")
+        if self.repro:
+            tf = f'IF(in_mode="Reproduce",{ref("Reproduce", self.prow["tuition"], self.pblock[s.name])},{tf})'
+        self.fx(sheet, 3, c0 + 1, tf, lc.tuition, "usd")
         self.txt(sheet, 4, c0, "increase %")
         self.fx(sheet, 4, c0 + 1, LVf("tuition_increase_pct"), s.tuition_increase_pct, "pp")
         self.txt(sheet, 5, c0, "need rate")
@@ -1003,8 +1152,9 @@ class Book:
                     f'*IF({LVf("bonus_min_score")}="",1,IF({S_("scored")}=1,IF({S_("score_lo")}>='
                     f'{LVf("bonus_min_score")},1,0),0))')
             self.fx(sheet, r, col["elig"], elig, int(lc.eligible[i]), "int")
-            self.fx(sheet, r, col["apps"], f'{S_("apps_base")}*IF({S_("upper")}=1,{LVf("pool_multiplier")},1)*'
-                                           f'(1+{LVf("segment_pool_lift_pct")}/100*{B("in_seg")})', lc.apps[i], "n1")
+            af = (f'{S_("apps_base")}*IF({S_("upper")}=1,{LVf("pool_multiplier")},1)*'
+                  f'(1+{LVf("segment_pool_lift_pct")}/100*{B("in_seg")})')
+            self.fx(sheet, r, col["apps"], self._apps_round(af), lc.apps[i], "n1")
             self.fx(sheet, r, col["rate"], rate_c, lc.rate[i], "r4")
             self.fx(sheet, r, col["admits"], f'IF(in_integer_admits=1,ROUND({B("apps")}*{B("rate")},0),'
                                              f'{B("apps")}*{B("rate")})', lc.admits[i], "n1")
@@ -1019,6 +1169,8 @@ class Book:
             self.fx(sheet, r, col["shift"], sh, lc.shift[i], "pp")
             yf = (f'MIN({S_("cap")},MAX({S_("floor")},MIN({S_("cap")},MAX({S_("floor")},{S_("y0")}+in_slope_{k}/100*'
                   f'({B("award")}-{S_("a0")})/1000))+{B("shift")}/100))')
+            if self.repro:
+                yf = (f'IF(in_mode="Reproduce",{ref("Reproduce", self.r0p + i, self.pblock[s.name] + 2)},{yf})')
             self.fx(sheet, r, col["yield"], yf, lc.yld[i], "r4")
             evf = (f'IF({S_("award_lo")}="",{xs(labels.EVIDENCE_EXTRAPOLATED)},IF(({B("award")}>={S_("award_lo")}-'
                    f'in_evidence_tolerance_usd)*({B("award")}<={S_("award_hi")}+in_evidence_tolerance_usd)=1,'
@@ -1037,10 +1189,9 @@ class Book:
                     lev = f'IF({LVf("award_scale_with_tuition")}=1,{aw_c}*(1+{gp}/100),{aw_c})'
                     self.fx(sheet, r, cc, f'MIN(IF({ft_c}=1,{Tp},MIN({lev},{Tp}))+{bonus_usd}*{B("elig")},{Tp})',
                             tw_vals[gi][i], "usd")
+                a1f = self._apps_round(f'{S_("apps_base")}*(1+{LVf("segment_pool_lift_pct")}/100*{B("in_seg")})')
                 self.fx(sheet, r, col["admits_pool1"],
-                        f'IF(in_integer_admits=1,ROUND({S_("apps_base")}*(1+{LVf("segment_pool_lift_pct")}/100*'
-                        f'{B("in_seg")})*{B("rate")},0),{S_("apps_base")}*(1+{LVf("segment_pool_lift_pct")}/100*'
-                        f'{B("in_seg")})*{B("rate")})', lc1.admits[i], "n1")
+                        f'IF(in_integer_admits=1,ROUND({a1f}*{B("rate")},0),{a1f}*{B("rate")})', lc1.admits[i], "n1")
         tot = {"apps": lc.apps.sum(), "admits": lc.admits.sum(), "mu": lc.mu.sum(), "enrolled": lc.enrolled.sum(),
                "spend": (lc.enrolled * lc.award).sum()}
         for key, v in tot.items():
@@ -1442,7 +1593,9 @@ class Book:
         bid = self.run.meta.get("build_id", "")
         self.s_txt(0, 0, "Summary: scenario evaluator (scores the scenarios written in Levers; recommends nothing)",
                    "title")
-        self.s_note(f"Build {bid}; data: {self.run.meta.get('data_source', '')}. Main block: Middle "
+        mode_txt = (" Mode: Reproduce (yields and tuition from the Reproduce sheet while the Inputs mode is Reproduce)."
+                    if self.repro else "")
+        self.s_note(f"Build {bid}; data: {self.run.meta.get('data_source', '')}.{mode_txt} Main block: Middle "
                     f"price-response case. {labels.RANGE_OUTCOME}: {labels.RANGE_OUTCOME_NOTE}. "
                     f"{labels.RANGE_CASES}: {labels.RANGE_CASES_NOTE}. The two kinds are never combined.", r=1)
         r = 2
@@ -1890,6 +2043,11 @@ class Book:
 
     def sw_class_table(self, S):
         cfg = self.cfg
+        if self.repro:
+            self.s_sec("Class-size table (shrink path; Middle case)",
+                       "Live mode only (spec section 6): a reproduce build has no Trim sheet, because the shrink path "
+                       "does not settle integer admits in the workbook. Build in live mode for the class-size table.")
+            return
         self.s_sec("Class-size table (shrink path; Middle case)",
                    "The shrink path writes admit rates (Trim sheet); yield is constant when admit rates change (D1). "
                    + labels.POLICY_UNSCORED_TRIMMED_FIRST + " f = N / M is the factor a uniform cut would apply.")
@@ -2111,6 +2269,22 @@ class Book:
             self.fx("Checks", self.cr, 2, f, v, "tw")
             self.cr += 1
 
+        # Mode switch (spec section 9)
+        if self.repro:
+            row("Mode: the Ledgers take the loaded yields and tuition (Reproduce) or the response (Live)", "Inputs",
+                f'IF(in_mode="Reproduce",{xs(labels.MODE_REPRO_OK)},IF(in_mode="Live",{xs(labels.MODE_REPRO_LIVE)},'
+                f'{xs(labels.MODE_UNKNOWN)}))', labels.MODE_REPRO_OK)
+        else:
+            row("Mode: a live build has no loaded values", "Inputs",
+                f'IF(in_mode="Live","OK",{xs(labels.MODE_LIVE_BUILD)})', "OK")
+        if self.repro:
+            self._checks_reproduce(row)
+            # R3-3: a ROUND whose argument is one binary step below 2.5 (0.35 / 0.14 = 2.4999999999999996). Python
+            # (config.excel_round0) and LibreOffice give 3; the desktop Excel comparison reports what Excel gives
+            self.probe_cell = ("Checks", self.cr, 2)
+            row(f"Rounding probe (R3-3): ROUND({PROBE_EXPR}, 0); the argument is one binary step below 2.5. Python and "
+                "LibreOffice give 3; tests/compare_excel_saved.py reports what desktop Excel gives", "Checks",
+                f"ROUND({PROBE_EXPR},0)", float(excel_round0(PROBE_A / PROBE_B)))
         # History totals
         nc = len(self.cohorts)
         terms_res, terms_seg = [], []
@@ -2137,18 +2311,25 @@ class Book:
             row("Ledger: totals row equals the sum of in-state and out-of-state cell rows (enrolled)", CASE_SHEET[k],
                 f'IF({"+".join(terms)}<=0.000001,"OK","totals do not add up")', "OK")
         for k in CASES:
-            for lab, cond, msg in [
+            # Python counts the same cells (with integer admits, rounded admits can exceed fractional applications)
+            for lab, cond, msg, pyc in [
                     ("admits at most applications", lambda s: f"({self.LR(k, s, 'admits')}>{self.LR(k, s, 'apps')}+"
-                                                              f"0.000000001)", "cells with admits above applications"),
+                                                              f"0.000000001)", "cells with admits above applications",
+                     lambda lc: lc.admits > lc.apps + 1e-9),
                     ("enrolled at most admits", lambda s: f"({self.LR(k, s, 'enrolled')}>{self.LR(k, s, 'admits')}+"
-                                                          f"0.000000001)", "cells with enrolled above admits"),
+                                                          f"0.000000001)", "cells with enrolled above admits",
+                     lambda lc: lc.enrolled > lc.admits + 1e-9),
                     ("award at least zero and at most tuition after the incentive",
                      lambda s: f"(({self.LR(k, s, 'award')}<0)+({self.LR(k, s, 'award')}>{self.LH(k, s, 'T')}+"
-                               f"0.000001)>0)", "cells with an award outside [0, tuition]"),
+                               f"0.000001)>0)", "cells with an award outside [0, tuition]",
+                     lambda lc: (lc.award < 0) | (lc.award > lc.tuition + 1e-6)),
                     ("yield between 0 and 1", lambda s: f"(({self.LR(k, s, 'yield')}<0)+({self.LR(k, s, 'yield')}>1)"
-                                                        f">0)", "cells with a yield outside [0, 1]")]:
+                                                        f">0)", "cells with a yield outside [0, 1]",
+                     lambda lc: (lc.yld < 0) | (lc.yld > 1))]:
                 cnt = "+".join(f"SUMPRODUCT({cond(s)}*1)" for s in S)
-                row(f"Ledger: {lab}", CASE_SHEET[k], f'IF({cnt}=0,"OK",({cnt})&" {msg}")', "OK")
+                nbad = int(sum(int(pyc(run.lcs[s][k]).sum()) for s in S))
+                row(f"Ledger: {lab}", CASE_SHEET[k], f'IF({cnt}=0,"OK",({cnt})&" {msg}")',
+                    "OK" if nbad == 0 else f"{nbad} {msg}")
         # tuition steps
         tb = self.inp_list["tuition_by_cohort"]
         for j in range(1, nc):
@@ -2166,7 +2347,7 @@ class Book:
             sc = run.scen(s)
             M = self.vals["sk"][(s, "middle")]["class_mean"]
             band = cfg["class"]["band"]
-            v = (f"class {M:,.1f}; cap {sc.class_cap:g} ({'above cap' if M > sc.class_cap else 'at or below cap'}); "
+            v = (f"class {labels.xl(M, 1):,.1f}; cap {sc.class_cap:g} ({'above cap' if M > sc.class_cap else 'at or below cap'}); "
                  f"target band {sc.class_target - band:g} to {sc.class_target + band:g} "
                  f"({'within band' if abs(M - sc.class_target) <= band else 'outside band'})")
             Mr = self.sref("class_mean", "middle", s)
@@ -2197,7 +2378,8 @@ class Book:
             kind = "merit" if cfg["budget_basis"] == "merit" else "aid"
             x = sk[kind]
             v = "not set (budget_total blank)" if b is None else (
-                f"OK: {kind} ${x:,.0f} within budget" if x <= b else f"{kind} ${x:,.0f} above budget")
+                f"OK: {kind} ${labels.xl(x):,.0f} within budget" if x <= b
+                else f"{kind} ${labels.xl(x):,.0f} above budget")
             ar = self.sref("aid", "middle", s)
             mr = self.sref("merit", "middle", s)
             xr = f'IF(in_budget_basis="merit",{mr},{ar})'
@@ -2211,12 +2393,24 @@ class Book:
             imp = f"SUMPRODUCT({self.HR('enrolled', j)},{self.HR('award', j)})"
             y = h["cohort"]
             v = (f"not run: merit_actual_by_cohort not given for {y}" if h["actual"] is None else
-                 f"grid-implied ${h['implied']:,.0f} against reported ${h['actual']:,.0f}: gap {100 * h['gap']:.1f}%")
+                 f"grid-implied ${labels.xl(h['implied']):,.0f} against reported ${labels.xl(h['actual']):,.0f}: "
+                 f"gap {labels.xl(100 * h['gap'], 1):.1f}%")
             row(f"History reconciliation {y}: grid-implied merit (enrolled x award over cells) against reported "
                 "merit (merit_actual_by_cohort; percent gap)", "History",
                 f'IF({act}="","not run: merit_actual_by_cohort not given for {y}","grid-implied $"&TEXT({imp},'
                 f'"#,##0")&" against reported $"&TEXT({act},"#,##0")&": gap "&TEXT(({imp}-{act})/{act}*100,"0.0")&"%")',
                 v)
+        for h in self.vals["aba509_reconciliation"]:
+            y = h["cohort"]
+            V = self.h509[y]
+            nrow = len(h["rows"])
+            given = f'({nrow}-SUMPRODUCT(({V}={xs(labels.ABA509_NOT_GIVEN)})*1))'
+            bad = (f'SUMPRODUCT((({V}={xs(labels.ABA509_DIFFERS)})+({V}={xs(labels.ABA509_INCONSISTENT)}))*1)')
+            msg = NAR.template_formula(labels.ABA509_SOME_DIFFER, {"k": bad, "n": given})
+            row(f"History 509 reconciliation {y}: cell data against the public ABA 509 (class, without a score or GPA, "
+                "quartiles; reported, not asserted)", "History",
+                f'IF({given}=0,{xs(labels.ABA509_NOT_RUN.format(y=y))},IF({bad}=0,{xs(labels.ABA509_ALL_AGREE)},'
+                f'{msg}))', h["summary"])
         for k in CASES:
             terms = [f"({self.sref('class_mean', k, s)}-{self.LT(k, s, 'mu')})^2" for s in S]
             row("Summary expected class equals the Ledger total", CASE_SHEET[k],
@@ -2243,19 +2437,20 @@ class Book:
                     f'IF({self.LV(s, "segment")}="",{xs(labels.SEGMENT_UNNAMED)},"OK")', "OK")
         # build-time inputs and the static exact probability [v0.6.2, P2-06]
         rb = lambda b: xs(labels.REBUILD_NEEDED.format(build=b))  # noqa: E731
-        t0 = cfg["score"]["median_thresholds"][0]
-        row("Trim order: first median threshold equals its value at build", "Inputs",
-            f'IF({self.inp_list["median_thresholds"][0]}={t0:g},"OK",{rb(f"{t0:g}")})', "OK")
-        ps = cfg["trim"]["protect_segment"]
-        row("Trim order: trim.protect_segment equals its value at build", "Inputs",
-            f'IF(in_protect_segment={xs(ps)},"OK",{rb(ps)})', "OK")
-        ex = ", ".join(cfg["trim"]["exempt_cells"])
-        row("Trim: trim.exempt_cells equals its value at build", "Inputs",
-            f'IF(in_exempt_cells={xs(ex)},"OK",{rb(ex or "none")})', "OK")
-        for s in S:
-            seg = L.active_segment(cfg, run.scen(s)) or ""
-            row("Trim order: active segment equals its value at build", s,
-                f'IF({self.LH("middle", s, "seg")}={xs(seg)},"OK",{rb(seg or "none")})', "OK")
+        if not self.repro:            # the Trim sheet is live mode only
+            t0 = cfg["score"]["median_thresholds"][0]
+            row("Trim order: first median threshold equals its value at build", "Inputs",
+                f'IF({self.inp_list["median_thresholds"][0]}={t0:g},"OK",{rb(f"{t0:g}")})', "OK")
+            ps = cfg["trim"]["protect_segment"]
+            row("Trim order: trim.protect_segment equals its value at build", "Inputs",
+                f'IF(in_protect_segment={xs(ps)},"OK",{rb(ps)})', "OK")
+            ex = ", ".join(cfg["trim"]["exempt_cells"])
+            row("Trim: trim.exempt_cells equals its value at build", "Inputs",
+                f'IF(in_exempt_cells={xs(ex)},"OK",{rb(ex or "none")})', "OK")
+            for s in S:
+                seg = L.active_segment(cfg, run.scen(s)) or ""
+                row("Trim order: active segment equals its value at build", s,
+                    f'IF({self.LH("middle", s, "seg")}={xs(seg)},"OK",{rb(seg or "none")})', "OK")
         for j, s in enumerate(S):
             st = ref("Summary", self.exact_status_row, 2 + j)
             row("Static exact segment probability is current (Summary segment block)", s,
@@ -2305,6 +2500,40 @@ class Book:
             self.cr += 1
         self.ws["Checks"].freeze_panes(3, 0)
 
+    def _checks_reproduce(self, row):
+        """Reproduce builds: Levers against the loaded values, and the tuition formula against the loaded tuition."""
+        run, cfg = self.run, self.cfg
+        for s in self.S:
+            sc = run.scen(s.name)
+            ld = run.loaded[s.name]
+            lc = run.lcs[s.name]["middle"]
+            n_rate = int(((sc.admit_rate - ld["admit_rate"]) ** 2 > 1e-18).sum())
+            n_award = int(((lc.award - ld["award_usd"]) ** 2 > 0.25).sum())
+            pool_diff = int(sc.pool_multiplier != ld["pool_multiplier"])
+            v = "OK" if n_rate + n_award + pool_diff == 0 else labels.REPRO_LEVERS_DIFFER.format(
+                rates=n_rate, awards=n_award, pool="differs" if pool_diff else "matches")
+            fr = f"SUMPRODUCT((({self.LVR(s.name, 'rate')}-{self.PR(s.name, 'rate')})^2>1E-18)*1)"
+            fa = f"SUMPRODUCT((({self.LR('middle', s.name, 'award')}-{self.PR(s.name, 'award')})^2>0.25)*1)"
+            pref = ref("Reproduce", self.prow["pool_multiplier"], self.pblock[s.name])
+            fp = f"IF({self.LV(s.name, 'pool_multiplier')}<>{pref},1,0)"
+            msg = NAR.template_formula(labels.REPRO_LEVERS_DIFFER, {
+                "rates": fr, "awards": fa, "pool": f'IF({fp}=1,"differs","matches")'})
+            row("Reproduce: Levers admit rates, resolved awards (Middle) and pool multiplier equal the loaded values",
+                s.name, f'IF({fr}+{fa}+{fp}=0,"OK",{msg})', v)
+        for s in self.S:
+            sc = run.scen(s.name)
+            ld = run.loaded[s.name]
+            Tf = scenario_tuition(cfg, sc.tuition_increase_pct)
+            v = "OK" if Tf == ld["tuition"] else labels.REPRO_TUITION_DIFFERS.format(
+                formula=f"${labels.xl(Tf):,.0f}", loaded=f"${labels.xl(ld['tuition']):,.0f}")
+            tf = (f"ROUND(in_tuition_base*(1+{self.LV(s.name, 'tuition_increase_pct')}/100)/in_tuition_rounding_usd,0)"
+                  f"*in_tuition_rounding_usd")
+            tl = ref("Reproduce", self.prow["tuition"], self.pblock[s.name])
+            msg = NAR.template_formula(labels.REPRO_TUITION_DIFFERS, {"formula": f'"$"&TEXT({tf},"#,##0")',
+                                                                      "loaded": f'"$"&TEXT({tl},"#,##0")'})
+            row("Reproduce: the tuition formula at the scenario's increase equals the loaded tuition", s.name,
+                f'IF({tf}={tl},"OK",{msg})', v)
+
     # ------------------------------------------------------------------------------------------------------------
     def w_runlog(self):
         m = self.run.meta
@@ -2323,7 +2552,9 @@ class Book:
                 ("timestamp", _dt.datetime.now().astimezone().isoformat(timespec="seconds")),
                 ("response source", self.run.base.source_label + " (placeholder slopes; sw/response.py)"),
                 ("shock source", f"{self.cfg['risk']['shock_source']} (s = {self.cfg['risk']['common_shock_sd']:g})"),
-                ("mode", "Live (reproduce mode is Phase 3; not built)"),
+                ("mode", MODE_LABEL[self.cfg["mode"]] + (" (reproduce build: loaded values on the Reproduce sheet; "
+                                                          + m.get("reproduce_source", "") + ")" if self.repro
+                                                          else " (live build)")),
                 ("python", platform.python_version()), ("xlsxwriter", xlsxwriter.__version__)]
         for i, (a, b) in enumerate(rows):
             self.txt("RunLog", 2 + i, 0, a, "hl")
@@ -2364,6 +2595,13 @@ class Book:
              "with a score below t. Share at or above t: over expected enrolled with a score. E_S: segment enrolled. "
              "Incentive cost, paid-anyway share, aid per additional enrollee (items 19 to 21); evidence share (item "
              "24). Ratios are ratios of expected values, E[X] / E[Y], everywhere."),
+            ("Mode", ("Reproduce build: the Reproduce sheet holds loaded yields, admit rates, awards, pool settings and "
+                      "tuition. With the Inputs mode at Reproduce the Ledgers take the loaded yields (all three cases, no "
+                      "response, shift, floor or cap) and the loaded tuition; at Live they take the response yields and "
+                      "the tuition formula. Integer admits and enrolled. No Trim sheet and no class-size table (live "
+                      "mode only)." if self.repro else
+                      "Live build: the Ledgers use the response yields and the tuition formula. Reproduce mode needs a "
+                      "reproduce build (python -m sw.reproduce), which adds the Reproduce sheet.")),
             ("Static and live", "Live: everything on History (rates), Response, Levers, the Ledgers, Summary, Trim and "
                                 "Checks recalculates from Inputs and Levers. Static: cell counts (History data), the "
                                 "trim order (fixed at build from the first median threshold, protect_segment, the "
@@ -2377,8 +2615,8 @@ class Book:
             ("Yield", "One Ledger column per case: clip(clip(y0 + b/100 (award - a0)/1000, floor, cap) + shift/100, "
                       "floor, cap). The Response rung grid is display only (R-01). Yield is constant when admit rates "
                       "change (D1); sticker price does not move applications or yield (D10)."),
-            ("Not built here", "Reproduce mode and the Reproduce sheet (Phase 3); the Distribution sheet with step "
-                               "sizes and the barbell detail (Phase 4); anything deferred in DECISIONS.md."),
+            ("Not built here", "The Distribution sheet with step sizes and the barbell detail (Phase 4); anything "
+                               "deferred in DECISIONS.md."),
             ("Interface contract", "Named ranges (spec section 15 item 11; canonical names, no aliases): " + ", ".join(
                 rn for rn, _, _, _ in K.contract_table()) + ". AWARD_MATRIX is on Levers (resolved award). "
                 "p_segment_goal_exact is Python only (the Summary shows a static copy). step_sizes waits for the "
@@ -2400,6 +2638,7 @@ def write(run, path, sentinel=False):
     bk.write()
     layout = {"r0l": bk.r0l, "ltot": bk.ltot, "lblock": bk.lblock, "lstat": bk.lstat, "r0v": bk.r0v,
               "vblock": bk.vblock, "vfield_row": bk.vfield_row, "n": bk.n, "case_sheet": dict(CASE_SHEET),
+              "r0h": bk.r0h, "hcol": dict(bk.hcol), "probe_cell": getattr(bk, "probe_cell", None),
               "ledger_head_rows": {"name": 2, "T": 3, "p": 4, "need_rate": 5, "seg": 6}}
     return {"expected": bk.expected, "dump": bk.dump, "names": bk.names, "vals": bk.vals,
             "build_id": run.meta.get("build_id"), "layout": layout, "run": run}

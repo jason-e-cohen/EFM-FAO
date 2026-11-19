@@ -30,21 +30,21 @@ def _py(v, fmt, ctx):
     if fmt == "g":
         return f"{v:g}"
     if fmt == "d1":
-        return f"{v:,.1f}"
+        return f"{labels.xl(v, 1):,.1f}"
     if fmt == "usd":
-        return f"${v:,.0f}"
+        return f"${labels.xl(v):,.0f}"
     if fmt == "musd":
-        return f"${v / 1e6:,.2f}M"
+        return f"${labels.xl(v / 1e6, 2):,.2f}M"
     if fmt == "pct0":
-        return f"{100 * v:.0f}%"
+        return f"{labels.xl(100 * v):.0f}%"
     if fmt == "pct1":
-        return f"{100 * v:.1f}%"
+        return f"{labels.xl(100 * v, 1):.1f}%"
     if fmt == "pp1":
-        return f"{v:.1f}"
+        return f"{labels.xl(v, 1):.1f}"
     if fmt == "prob":
         return labels.fmt_prob(v, ctx["shock_source"])
     if fmt == "seg_d1":
-        return v if isinstance(v, str) else f"{v:,.1f}"
+        return v if isinstance(v, str) else f"{labels.xl(v, 1):,.1f}"
     if fmt == "ignored":
         k = int(v)
         return "" if k == 0 else " " + (labels.AWARDS_IGNORED_ONE if k == 1 else labels.AWARDS_IGNORED_MANY.format(k=k))

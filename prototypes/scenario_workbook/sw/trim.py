@@ -61,7 +61,7 @@ def trim_rates(lc, N):
     shortfall = 0.0
     if need > R_K + 1e-9:
         shortfall = need - R_K
-        status = labels.CT_SHORTFALL.format(shortfall=f"{shortfall:.1f}")
+        status = labels.CT_SHORTFALL.format(shortfall=f"{labels.xl(shortfall, 1):.1f}")
     if cfg["integer_admits"] and need > 0:
         rates = _settle_integer(lc, rates, share, order, N, f)
     return {"rates": rates, "removed_share": share, "rm": rm, "order": order, "R": R_o, "M": M,

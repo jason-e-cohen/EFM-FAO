@@ -156,3 +156,38 @@ def test_contract_table_is_complete():
             "breakeven_shift_class", "breakeven_shift_ntr", "pool_strip[grid]", "class_table[grid]",
             "evidence_extrapolated_share", "award_matrix", "p_segment_goal_exact"}
     assert spec <= names, sorted(spec - names)
+
+
+def test_aba509_reconciliation_counts_and_quartiles(worlds, syn_cfg):
+    """R3-4 (report only): counts agree or differ exactly; a published quartile is consistent when it lies in the
+    band range the shares allow (enrollees with a score or a GPA, the ABA 509 basis); no figures: not run."""
+    import numpy as np
+    from sw import labels
+    from sw import ledger as L
+    from sw.config import validate
+    cells = worlds[syn_cfg["generator"]["seeds"][0]]
+    assert L._band_range([0, 152, 154], [10, 10, 10], 0.5) == (1, 1)
+    assert L._band_range([0, 152], [10, 10], 0.5) == (0, 1)        # on a band boundary: either band
+    assert L._band_range([0, 152], [0, 0], 0.5) is None
+    e = cells.enrolled[:, 0]
+    y = cells.cohorts[0]
+    rec0 = L.aba509_reconciliation(cells, syn_cfg)[0]
+    assert rec0["summary"] == labels.ABA509_NOT_RUN.format(y=y)
+    assert all(r["cells"] for r in rec0["rows"])
+    sb = sorted(float(b) for b in syn_cfg["score"]["bands"])
+    counts = [float(e[cells.scored & (cells.score_lo == b)].sum()) for b in sb]
+    lo = sb[L._band_range(sb, counts, 0.5)[0]]                       # inside the median's band range
+    k0, k1 = L._band_range(sb, counts, 0.75)
+    far = sb[k1 + 1] + 0.5 if k1 + 1 < len(sb) else sb[k0] - 0.5     # outside the 75th percentile's range
+    assert k1 + 1 < len(sb) or k0 > 0
+    raw = {k: v for k, v in syn_cfg.items() if not k.startswith("_")}
+    cfg = validate(raw | {"aba_509_by_cohort": {y: {"first_year_class": float(e.sum()),
+                                                     "without_score": float(e[~cells.scored].sum()) + 1,
+                                                     "score_p50": lo, "score_p75": far}}})
+    rows = {r["key"]: r for r in L.aba509_reconciliation(cells, cfg)[0]["rows"]}
+    assert rows["first_year_class"]["verdict"] == labels.ABA509_AGREES
+    assert rows["without_score"]["verdict"] == labels.ABA509_DIFFERS
+    assert rows["without_gpa"]["verdict"] == labels.ABA509_NOT_GIVEN
+    assert rows["score_p50"]["verdict"] == labels.ABA509_CONSISTENT
+    assert rows["score_p75"]["verdict"] == labels.ABA509_INCONSISTENT
+    assert L.aba509_reconciliation(cells, cfg)[0]["summary"] == labels.ABA509_SOME_DIFFER.format(k=2, n=4)

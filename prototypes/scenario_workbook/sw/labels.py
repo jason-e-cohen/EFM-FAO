@@ -88,6 +88,18 @@ def shock_label(s):
     return SHOCK_LABEL.format(s=f"{s:g}")
 
 
+def xl(v, nd=0):
+    """v rounded to nd decimals the way Excel's TEXT and ROUND show it: 15 significant digits, then half away from
+    zero. Python's own formatting rounds an exact binary tie (for example 1424.5) half to even, so every Python text
+    that a TEXT() formula also renders goes through this first."""
+    from decimal import ROUND_HALF_UP, Decimal
+    v = float(v)
+    if v != v or v in (float("inf"), float("-inf")):
+        return v
+    d = Decimal(format(v, ".15g")).quantize(Decimal(1).scaleb(-nd), rounding=ROUND_HALF_UP)
+    return float(d)
+
+
 def fmt_prob(p, shock_source):
     """Probability as display text. While the shock is illustrative, values beyond 5% and 95% are clamped in text."""
     if shock_source == "illustrative":
@@ -95,4 +107,22 @@ def fmt_prob(p, shock_source):
             return PROB_UNDER
         if p > 0.95:
             return PROB_OVER
-    return f"{100 * p:.0f}%"
+    return f"{xl(100 * p):.0f}%"
+
+# Reproduce mode (spec section 9)
+MODE_REPRO_OK = "OK (Reproduce: the Ledgers take the loaded yields and tuition)"
+MODE_REPRO_LIVE = "Live: the Ledgers take the response yields and the tuition formula; the loaded values are not read"
+MODE_UNKNOWN = "mode must be Live or Reproduce"
+MODE_LIVE_BUILD = "this is a live build with no loaded values; the Ledgers ignore the switch (set it back to Live)"
+REPRO_LEVERS_DIFFER = "{rates} admit rates and {awards} awards differ from the loaded values; pool multiplier {pool}"
+REPRO_TUITION_DIFFERS = "tuition formula gives {formula}; loaded tuition {loaded}"
+
+# ABA 509 reconciliation on History (R3-4; report only, never asserted)
+ABA509_NOT_GIVEN = "not given"
+ABA509_AGREES = "agrees"
+ABA509_DIFFERS = "differs"
+ABA509_CONSISTENT = "consistent"
+ABA509_INCONSISTENT = "inconsistent"
+ABA509_NOT_RUN = "not run: no ABA 509 figures for {y} (aba_509_by_cohort)"
+ABA509_ALL_AGREE = "report only: the cell data agree with every given 509 figure"
+ABA509_SOME_DIFFER = "report only: {k} of {n} given 509 figures disagree with the cell data (see History)"

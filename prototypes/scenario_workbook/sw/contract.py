@@ -109,7 +109,8 @@ def compute(run):
     targets = risk.median_targets(cfg)
     out = {"sk": {}, "strips": {}, "lines": {}, "parts": {}, "ct_rates": {}, "seg_exact": {}, "conflicts": {},
            "targets": targets, "score_ts": L.score_thresholds(cfg),
-           "history_reconciliation": L.history_reconciliation(cells, cfg)}
+           "history_reconciliation": L.history_reconciliation(cells, cfg),
+           "aba509_reconciliation": L.aba509_reconciliation(cells, cfg)}
     for s in run.scenarios:
         p = run.parents[s.name]
         for k in CASES:

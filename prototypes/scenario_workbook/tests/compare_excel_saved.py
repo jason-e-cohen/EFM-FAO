@@ -20,6 +20,16 @@ formula and matches; 1 otherwise; 2 when the file is refused.
 
 For a non-synthetic build (data from a CSV), pass --data with the CSV path. --config and --scenarios override the
 paths on RunLog.
+
+Reproduce builds (R3-3; RunLog 'mode' Reproduce) are compared the same way. Build the sentinel copy with
+
+    ../../.venv/bin/python -m sw.reproduce --out output/ --sentinel                     (fixture; reads YA_FIXTURE_PATH)
+    ../../.venv/bin/python -m sw.reproduce --out output/ --synthetic 101 --sentinel    (synthetic, no fixture)
+
+The script rebuilds from the fixture (YA_FIXTURE_PATH or --fixture) or the synthetic seed, checks the build id, also
+lists edited inputs on the Reproduce sheet, and reports the rounding probe on Checks: ROUND(0.35/0.14, 0), whose
+argument is one binary step below 2.5 (Python and LibreOffice give 3; if Excel differs, follow Excel). Results go to
+output/phase3/excel_compare_report.json.
 """
 import argparse
 import collections
@@ -74,6 +84,7 @@ def main(argv=None):
     ap.add_argument("--config", help="config path (default: RunLog 'config', relative to the prototype)")
     ap.add_argument("--scenarios", help="scenario file (default: RunLog 'scenarios')")
     ap.add_argument("--data", help="cells CSV for a non-synthetic build (default: the synthetic seed on RunLog)")
+    ap.add_argument("--fixture", help="validation fixture for a reproduce build (default: YA_FIXTURE_PATH)")
     ap.add_argument("--show", type=int, default=15, help="mismatches to print per sheet")
     args = ap.parse_args(argv)
 
@@ -86,18 +97,26 @@ def main(argv=None):
     if "Excel" not in app:
         print("note: the file was not last saved by Microsoft Excel; the comparison still runs on its stored values")
 
+    reproduce = str(log.get("mode", "")).startswith("Reproduce")
     cfg_path = args.config or os.path.join(ROOT, log.get("config", ""))
     scen_path = args.scenarios or os.path.join(ROOT, log.get("scenarios", ""))
-    src = log.get("data source", "")
-    m = re.search(r"seed (\d+)", src or "")
-    if args.data:
+    src = log.get("data source", "") or ""
+    m = re.search(r"seed (\d+)", src)
+    fixture = None
+    if reproduce and "validation fixture" in src:
+        fixture = args.fixture or os.environ.get("YA_FIXTURE_PATH")
+        if not fixture or not os.path.exists(fixture):
+            print("a reproduce build from the fixture: pass --fixture or set YA_FIXTURE_PATH")
+            return 2
+        data, seed = None, None
+    elif args.data:
         data, seed = args.data, 101
     elif src.startswith("synthetic") and m:
         data, seed = "synthetic", int(m.group(1))
     else:
         print(f"cannot tell the data source from RunLog ({src!r}); pass --data")
         return 2
-    for p in (cfg_path, scen_path):
+    for p in ((cfg_path,) if reproduce else (cfg_path, scen_path)):
         if not os.path.exists(p):
             print(f"missing input: {p} (pass --config or --scenarios)")
             return 2
@@ -113,7 +132,15 @@ def main(argv=None):
         return 2
 
     with tempfile.TemporaryDirectory(prefix="sw_excel_compare_") as tmp:
-        path, info = build.build(cfg_path, data, scen_path, tmp, seed=seed, sentinel=True)
+        if reproduce:
+            from sw import reproduce as R
+            if fixture:
+                res = R.run_fixture(fixture, tmp, cfg_path, sentinel=True)
+                path, info = res["path"], res["info"]
+            else:
+                path, info = R.build_synthetic(tmp, seed, sentinel=True)
+        else:
+            path, info = build.build(cfg_path, data, scen_path, tmp, seed=seed, sentinel=True)
         if info["build_id"] != log.get("build id"):
             print(f"refused: build id differs: saved copy {log.get('build id')!r}, rebuilt {info['build_id']!r}. The "
                   "inputs or the generator code (sw/*.py) changed since that build; rebuild and save again.")
@@ -122,7 +149,7 @@ def main(argv=None):
 
         # inputs edited in the saved copy (constants on Inputs and Levers that differ from the build)
         edited = []
-        for sheet in ("Inputs", "Levers"):
+        for sheet in ("Inputs", "Levers") + (("Reproduce",) if reproduce else ()):
             wb_, ws_ = built[sheet], forms[sheet]
             for row in wb_.iter_rows():
                 for c in row:
@@ -141,6 +168,7 @@ def main(argv=None):
                     if c.value is not None and wb_[c.coordinate].value is None:
                         edited.append((sheet, c.coordinate, None, c.value))
         expected = info["expected"]
+        probe = info["layout"].get("probe_cell")
         built_f = {(s, r, c): _text(built[s].cell(r + 1, c + 1).value) for (s, r, c) in expected}
 
     count = collections.Counter()
@@ -184,13 +212,23 @@ def main(argv=None):
         print(f"\n{sheet}: first {min(args.show, len(rows))} of {len(rows)} value mismatches (cell, Python, Excel)")
         for b in rows[:args.show]:
             print(f"  {b['cell']:<10} {b['python']!r:<40} {b['excel']!r}")
-    out = os.path.join(ROOT, "output", "phase2")
+    probe_rep = None
+    if probe:
+        ps, pr, pc = probe
+        probe_rep = {"cell": f"{ps}!{vals[ps].cell(pr + 1, pc + 1).coordinate}", "expression": "ROUND(0.35/0.14,0)",
+                     "python": expected[probe], "saved_copy": vals[ps].cell(pr + 1, pc + 1).value}
+        print(f"\nrounding probe {probe_rep['cell']} {probe_rep['expression']} (argument 2.4999999999999996): "
+              f"Python {probe_rep['python']!r}, saved copy {probe_rep['saved_copy']!r}"
+              + ("" if close(probe_rep["saved_copy"], probe_rep["python"]) else
+                 " -- differs: follow Excel (Review_Phase3_Build.md, ledger rounding)"))
+    out = os.path.join(ROOT, "output", "phase3" if reproduce else "phase2")
     os.makedirs(out, exist_ok=True)
     rep = os.path.join(out, "excel_compare_report.json")
     with open(rep, "w") as f:
         json.dump({"saved": os.path.abspath(args.saved), "application": app, "build_id": info["build_id"],
                    "cells_compared": dict(count), "still_sentinel": dict(sentinel_left), "mismatches": dict(bad),
-                   "formula_differences": dict(fdiff), "edited_inputs": edited}, f, indent=1, default=str)
+                   "formula_differences": dict(fdiff), "edited_inputs": edited, "mode": log.get("mode"),
+                   "rounding_probe": probe_rep}, f, indent=1, default=str)
     ok = not n_bad and not n_fd and not n_left
     verdict = ("OK: every formula cell was recalculated, has the built formula and matches Python" if ok else
                f"FAILED: {n_bad:,} value mismatches, {n_left:,} cells still -999, {n_fd:,} formula differences")

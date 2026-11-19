@@ -34,7 +34,7 @@ gpa:
   classes: [hi, lo, blank]
   median_threshold: 3.83
 
-unscored_in_median: excluded       # pending the 509 instructions (O41); reproduce mode uses below
+unscored_in_median: excluded       # the ABA 509 basis (Review_Phase3_Build.md; O41); reproduce mode uses the same
 
 class:
   cap: 140                         # hard this cycle
@@ -65,6 +65,21 @@ risk:
 pooling_k: 20
 integer_admits: false
 integer_enrolled: false
+
+# Reproduce mode (spec sections 2 and 9; python -m sw.reproduce). Tuition by cohort and each scenario's tuition are
+# loaded from the validation fixture at run time and never written here (spec rule 3). sw.reproduce sets integer
+# admits and enrolled and reports the fixture's own counting rule beside the setting below.
+reproduce:
+  tuition_increase_pct: 6.0        # reproduce mode (D4); a Check compares the formula with the loaded tuition
+  unscored_in_median: excluded     # the fixture's count rows use this rule (DECISIONS Nov 18; confirmed on load)
+  round_apps_after_pool: true      # whole applications after the pool multiplier, reproduce mode only (DECISIONS Nov 18)
+
+# Public ABA 509 figures per history cohort for the History sheet's 509 reconciliation (report only; R3-4). Optional
+# keys: first_year_class, without_score, without_gpa, score_p25/p50/p75, gpa_p25/p50/p75. Entered Nov 18 from
+# the ABA compilations (public); add 2026 when the 2026 report is published.
+aba_509_by_cohort:                 # public ABA 509 compilations (report year = fall entering class); 2026 not yet published
+  2024: {first_year_class: 133, without_score: 0, without_gpa: 0, score_p25: 158, score_p50: 164, score_p75: 165, gpa_p25: 3.50, gpa_p50: 3.75, gpa_p75: 3.83}
+  2025: {first_year_class: 146, without_score: 2, without_gpa: 1, score_p25: 159, score_p50: 164, score_p75: 167, gpa_p25: 3.66, gpa_p50: 3.81, gpa_p75: 3.92}
 evidence_tolerance_usd: 2500
 
 segments:

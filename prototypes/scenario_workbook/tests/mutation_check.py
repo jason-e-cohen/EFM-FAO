@@ -7,7 +7,7 @@ survivor except those listed in EQUIVALENT, each with the reason it cannot chang
 Two modes:
   Python (default)  the Python mutants (MUTANTS) against every test, with SW_SKIP_EXCEL set (the workbook tests
                     compare Excel with Python, so any Python mutant would fail them for a trivial reason)
-  Excel (--excel)   the workbook-formula mutants (EXCEL_MUTANTS, sw/workbook.py) against tests 3, 8, 9 and 18,
+  Excel (--excel)   the workbook-formula mutants (EXCEL_MUTANTS, sw/workbook.py) against tests 3, 6, 8, 9 and 18,
                     with LibreOffice recalculating every build [v0.6.2, P2-01]
 
     cd prototypes/scenario_workbook
@@ -26,7 +26,15 @@ Mutant sources:
   1.1  mutants of the Phase 1.1 changes and of the choices recorded in spec v0.6.1 (R-05, R-07, R-08, OP-1, OP-3,
        OP-5), IDs N01 to N17
   2.1  mutants of the Phase 2.1 Python changes (spec v0.6.2), IDs N18 to N22; P21-03, N23
-  XL, XL+, 2.1, P21 (Excel mode)  see EXCEL_MUTANTS, IDs E01 to E62
+  P3   mutants of the Phase 3 changes (reproduce mode, the loader, integer counts, Excel-style rounding), IDs N24
+       to N39
+  P3.1 mutants of the Phase 3 completion (application rounding, unknown applications, exclusion, 509 block), IDs
+       N40 to N46
+  XL, XL+, 2.1, P21, P3, P3.1 (Excel mode)  see EXCEL_MUTANTS, IDs E01 to E75
+
+--deselect PREFIX (repeatable) leaves tests out of every run, baseline included; not used by default (R3-5: the
+fixture's pass-criterion tests pass since the Nov 18 decisions). Test 6's fixture tests run when YA_FIXTURE_PATH is
+set (absolute path).
 Exit status: 0 when every survivor is in EQUIVALENT, every mutant applied and every run collected the baseline's test
 count; 1 otherwise. Report JSON: output/mutation/report.json (Python) or report_excel.json (Excel).
 """
@@ -42,8 +50,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SLOW_LAST = ["test_13_segment_incentive.py", "test_05_shape.py", "test_04_cf_vs_sim.py"]
-EXCEL_TESTS = ["test_03_excel_equals_python.py", "test_08_levers.py", "test_09_reconciliation.py",
-               "test_18_v06_blocks.py"]
+EXCEL_TESTS = ["test_03_excel_equals_python.py", "test_06_reproduce.py", "test_08_levers.py",
+               "test_09_reconciliation.py", "test_18_v06_blocks.py"]
+DESELECT = []          # node-id prefixes passed to pytest --deselect (set from the command line)
 
 # (id, source, file, old, new, description). `old` must occur exactly once in the file.
 MUTANTS = [
@@ -323,7 +332,7 @@ MUTANTS = [
      "    if False:",
      "Class target above the cap accepted"),
     ("X45", "A+", "sw/config.py",
-     "    return unit * math.floor(x / unit + 0.5)",
+     "    return unit * float(excel_round0(x / unit))",
      "    return x",
      "Tuition not rounded"),
 
@@ -425,6 +434,100 @@ MUTANTS = [
      '    build_id = _sha("|".join([cfg_h, data_h, scen_h, lock_h, code_h]).encode())[:12]',
      '    build_id = _sha("|".join([cfg_h, data_h, scen_h, lock_h]).encode())[:12]',
      "P21-03 reverted: build id ignores the generator code"),
+    # ---- P3: Phase 3 (reproduce mode, integer counts, Excel-style rounding) -----------------------------------
+    ("N24", "P3", "sw/ledger.py",
+     "        yld = np.asarray(scen.yield_loaded, float).copy()",
+     "        yld = np.clip(response.yield_at(base, award, case) + shift / 100.0, base.floor, base.cap)",
+     "Reproduce mode ignores the loaded yields"),
+    ("N25", "P3", "sw/ledger.py",
+     "    tuition = float(scen.tuition_loaded_usd) if rep else scenario_tuition(cfg, scen.tuition_increase_pct)",
+     "    tuition = scenario_tuition(cfg, scen.tuition_increase_pct)",
+     "Reproduce mode ignores the loaded tuition"),
+    ("N26", "P3", "sw/ledger.py",
+     '        raise ConfigError(f"{scen.name}: reproduce mode needs loaded yields and tuition for every scenario")',
+     "        return False",
+     "Reproduce mode silently falls back to the response when loaded values are missing"),
+    ("N27", "P3", "sw/build.py",
+     '    if cfg["mode"] == "live" and (cfg["integer_admits"] or cfg["integer_enrolled"]):',
+     '    if cfg["mode"] == "live" and cfg["integer_admits"]:',
+     "Live build accepts integer enrolled"),
+    ("N28", "P3", "sw/reproduce.py",
+     "                    apps = float(round(apps))",
+     "                    apps = apps",
+     "Loader keeps float noise in implied applications"),
+    ("N29", "P3", "sw/reproduce.py",
+     "        lo = min(bands)",
+     '        lo = float(re.sub(r"\\D", "", sp))',
+     "'<N' score labels load at N instead of the lowest band"),
+    ("N30", "P3", "sw/reproduce.py",
+     '            g = "hi" if float(m.group(1)) >= hi_t - 1e-9 else "lo"',
+     '            g = "hi" if float(m.group(1)) > hi_t else "lo"',
+     "GPA label at the boundary loads as lo"),
+    ("N31", "P3", "sw/reproduce.py",
+     '                ev.append(("excluded", t))',
+     '                ev.append(("below", t))',
+     "Counting-rule detection mislabels 'excluded'"),
+    ("N32", "P3", "sw/reproduce.py",
+     "    return total - round(cut), ",
+     "    return total + round(cut), ",
+     "need_total adds the need cut instead of subtracting it"),
+    ("N33", "P3", "sw/reproduce.py",
+     "            return 1.0 + float(pct) / 100.0",
+     "            return 1.0 + float(pct)",
+     "Pool multiplier from the description not converted from percent"),
+    ("N34", "P3", "sw/reproduce.py",
+     "                    parent = cand[0]",
+     "                    parent = names[k - 1]",
+     "Lineage ignores the parent named in the description"),
+    ("N35", "P3", "sw/reproduce.py",
+     '            ok = abs(ov - fv) <= 100.0 if key == "ntr" else abs(ov - fv) < 1e-6',
+     '            ok = abs(ov - fv) <= 1000.0 if key == "ntr" else abs(ov - fv) < 1e-6',
+     "NTR pass tolerance widened from $100"),
+    ("N36", "P3", "sw/reproduce.py",
+     "                    if abs(alt_v - fv) < 1e-6:",
+     "                    if False:",
+     "Margin mismatch not attributed to the counting rule"),
+    ("N37", "P3", "sw/reproduce.py",
+     '            elif other[i] == sd["admits"][i]:',
+     "            elif False:",
+     "Admits difference not attributed to the other application-rounding rule"),
+    ("N38", "P3", "sw/config.py",
+     '    x15 = np.vectorize(lambda v: float(f"{v:.15g}") if np.isfinite(v) else v, otypes=[float])(a)',
+     "    x15 = a",
+     "Ledger rounding without the 15-significant-digit step (floor(x + 0.5))"),
+    ("N39", "P3", "sw/labels.py",
+     "    d = Decimal(format(v, \".15g\")).quantize(Decimal(1).scaleb(-nd), rounding=ROUND_HALF_UP)",
+     "    d = Decimal(format(v, \".15g\")).quantize(Decimal(1).scaleb(-nd), rounding=\"ROUND_HALF_EVEN\")",
+     "Text rounding half to even (Python's own) instead of Excel's half away from zero"),
+    # ---- P3.1: Phase 3 completion (DECISIONS Nov 18; R3-3, R3-4) --------------------------------------------
+    ("N40", "P3.1", "sw/ledger.py",
+     "        apps = xround(apps)",
+     "        apps = apps",
+     "Reproduce mode does not round applications after the pool multiplier"),
+    ("N41", "P3.1", "sw/config.py",
+     '    return cfg.get("mode") == "reproduce" and bool((cfg.get("reproduce") or {}).get("round_apps_after_pool", False))',
+     '    return bool((cfg.get("reproduce") or {}).get("round_apps_after_pool", False))',
+     "Live mode rounds applications when the reproduce setting is on"),
+    ("N42", "P3.1", "sw/reproduce.py",
+     "        if len(cands) == 1:",
+     "        if len(cands) >= 1:",
+     "Unknown applications loaded although several values fit (invented)"),
+    ("N43", "P3.1", "sw/reproduce.py",
+     '                unknown.append((c["cell_id"], y))',
+     "                pass",
+     "Unknown applications load as known zeros"),
+    ("N44", "P3.1", "sw/reproduce.py",
+     "            fv = fv - c_file.get(key, 0.0)",
+     "            fv = fv",
+     "Non-reproducible cells left in the file's figures"),
+    ("N45", "P3.1", "sw/ledger.py",
+     "                labels.ABA509_AGREES if abs(grid[key] - v) < 1e-6 else labels.ABA509_DIFFERS)",
+     "                labels.ABA509_AGREES if abs(grid[key] - v) < 1.5 else labels.ABA509_DIFFERS)",
+     "509 counts agree within one student"),
+    ("N46", "P3.1", "sw/ledger.py",
+     "        if c > 0 and below <= qn + 1e-9 and below + c >= qn - 1e-9:",
+     "        if c > 0 and below < qn and below + c >= qn - 1e-9:",
+     "509 quartile on a band boundary allows only the lower band"),
 ]
 
 # Excel-formula mutants [v0.6.2, P2-01] (spec section 11, test 20; run with --excel). Each changes one formula string in
@@ -443,8 +546,8 @@ EXCEL_MUTANTS = [
      "Incentive eligibility ignores bonus_min_score"),
     ("E03", "XL+", W, '''IF({S_("upper")}=1,{LVf("pool_multiplier")},1)*\'''', '''{LVf("pool_multiplier")}*\'''',
      "Pool multiplier applied below the pool threshold"),
-    ("E04", "XL+", W, '''(1+{LVf("segment_pool_lift_pct")}/100*{B("in_seg")})', lc.apps[i]''',
-     '''(1+{LVf("segment_pool_lift_pct")}/100)', lc.apps[i]''', "Segment lift applied outside the segment"),
+    ("E04", "XL+", W, '''f'(1+{LVf("segment_pool_lift_pct")}/100*{B("in_seg")})')''',
+     '''f'(1+{LVf("segment_pool_lift_pct")}/100)')''', "Segment lift applied outside the segment"),
     ("E05", "XL", W,
      '''            yf = (f'MIN({S_("cap")},MAX({S_("floor")},MIN({S_("cap")},MAX({S_("floor")},{S_("y0")}+in_slope_{k}/100*'
                   f'({B("award")}-{S_("a0")})/1000))+{B("shift")}/100))')''',
@@ -472,8 +575,8 @@ EXCEL_MUTANTS = [
     ("E13", "XL+", W, '''IF(({B("award")}>={S_("award_lo")}-\'''', '''IF(({B("award")}>={S_("award_lo")}-0*\'''',
      "Evidence tolerance ignored below the observed range"),
     ("E14", "XL+", W, '''f'{T}-{B("award")}-{NR}\'''', '''f'{T}-{B("award")}\'''', "Net tuition weight without need"),
-    ("E15", "XL+", W, '''f"ROUND(in_tuition_base*(1+{LVf('tuition_increase_pct')}/100)/in_tuition_rounding_usd,"''',
-     '''f"ROUND(in_tuition_base*(1+{LVf('tuition_increase_pct')}/100)/in_tuition_rounding_usd+0.5,"''',
+    ("E15", "XL+", W, '''f"ROUND(in_tuition_base*(1+{LVf('tuition_increase_pct')}/100)/in_tuition_rounding_usd,0)"''',
+     '''f"ROUND(in_tuition_base*(1+{LVf('tuition_increase_pct')}/100)/in_tuition_rounding_usd+0.5,0)"''',
      "Scenario tuition rounded up instead of to the nearest step"),
     ("E16", "XL+", W, '''return f"1-NORMSDIST(({d['CAP']}+0.5-{M})/{SDV})"''', '''return f"1-NORMSDIST(({d['CAP']}-{M})/{SDV})"''',
      "P(class over cap) without the continuity correction"),
@@ -568,6 +671,35 @@ EXCEL_MUTANTS = [
     ("E62", "P21", W, '''=1,{LVf("yield_shift_pts_segment")},\'''',
      '''=1,{LVf("yield_shift_pts_segment")}+{LVf("yield_shift_pts")},\'''',
      "Segment override adds to the global shift"),
+    # ---- P3: Phase 3 (reproduce builds, integer branches, mode switch) ----------------------------------------
+    ("E63", "P3", W, '''                yf = (f'IF(in_mode="Reproduce",{ref("Reproduce", self.r0p + i, self.pblock[s.name] + 2)},{yf})')''',
+     "                yf = yf", "Ledger yield ignores the Reproduce sheet in mode Reproduce"),
+    ("E64", "P3", W, """            tf = f'IF(in_mode="Reproduce",{ref("Reproduce", self.prow["tuition"], self.pblock[s.name])},{tf})'""",
+     "            tf = tf", "Ledger tuition ignores the loaded tuition in mode Reproduce"),
+    ("E65", "P3", W, """f'IF(in_integer_admits=1,ROUND({B("apps")}*{B("rate")},0),'""",
+     """f'IF(in_integer_admits=1,({B("apps")}*{B("rate")}),'""", "Integer admits not rounded"),
+    ("E66", "P3", W, """f'IF(in_integer_enrolled=1,ROUND({B("mu")},0),{B("mu")})'""",
+     """f'IF(in_integer_enrolled=1,{B("mu")},{B("mu")})'""", "Integer enrolled not rounded"),
+    ("E67", "P3", W, """f'IF(in_integer_admits=1,ROUND({a1f}*{B("rate")},0),{a1f}*{B("rate")})'""",
+     """f'IF(in_integer_admits=1,({a1f}*{B("rate")}),{a1f}*{B("rate")})'""", "Admits at pool multiplier 1 not rounded"),
+    ("E68", "P3", W, "                nbad = int(sum(int(pyc(run.lcs[s][k]).sum()) for s in S))",
+     "                nbad = 0", "Checks expect OK for the integrity counts whatever the ledger holds"),
+    ("E69", "P3", W, '''-{self.PR(s.name, 'award')})^2>0.25)*1)"''',
+     '''-{self.PR(s.name, 'rate')})^2>0.25)*1)"''', "Reproduce check compares awards with admit rates"),
+    ("E70", "P3", W, '''f'IF(in_mode="Live","OK",{xs(labels.MODE_LIVE_BUILD)})', "OK")''',
+     '''f'IF(in_mode="Reproduce","OK",{xs(labels.MODE_LIVE_BUILD)})', "OK")''', "Live-build mode check inverted"),
+    ("E71", "P3", W, '''self.val("Reproduce", r, c0 + 2, float(ld["yield"][i]), "in_r4")''',
+     '''self.val("Reproduce", r, c0 + 2, float(ld["yield"][i]) + 0.01, "in_r4")''', "Reproduce sheet shows other yields than the ledger's"),
+    # ---- P3.1: Phase 3 completion (DECISIONS Nov 18; R3-3, R3-4) --------------------------------------------
+    ("E72", "P3.1", W, """        return f'IF((in_mode="Reproduce")*(in_round_apps_after_pool=1)=1,ROUND({f},0),{f})'""",
+     """        return f'IF((in_mode="Reproduce")*(in_round_apps_after_pool=1)=1,({f}),{f})'""",
+     "Ledger applications not rounded in mode Reproduce"),
+    ("E73", "P3.1", W, """                         "" if unknown is not None and unknown[i, j] else apps, "n0")""",
+     """                         apps, "n0")""", "History shows unknown applications as 0"),
+    ("E74", "P3.1", W, """IF(({C}-{A})^2<1E-12,""", """IF(({C}-{A})^2>1E-12,""", "509 count verdict inverted"),
+    ("E75", "P3.1", W, """                f'IF({given}=0,{xs(labels.ABA509_NOT_RUN.format(y=y))},""",
+     """                f'IF({given}<0,{xs(labels.ABA509_NOT_RUN.format(y=y))},""",
+     "509 Checks row never reports 'not run'"),
 ]
 
 # Survivors accepted because they cannot change any result on valid input: id -> reason. Empty unless a run shows
@@ -625,7 +757,7 @@ def _test_id(caught_by):
 def _run_suite(work, excel, timeout, stop_first):
     count_file = os.path.join(work, "collected.txt")
     cmd = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *(["-x"] if stop_first else []),
-           *_test_files(excel)]
+           *_test_files(excel), *[a for d in DESELECT for a in ("--deselect", d)]]
     try:
         r = subprocess.run(cmd, cwd=work, env=_env(excel, count_file), capture_output=True, text=True,
                            timeout=timeout)
@@ -688,8 +820,13 @@ def main():
     ap.add_argument("--only", default="", help="comma-separated mutant IDs")
     ap.add_argument("--timeout", type=int, default=900, help="seconds per suite run")
     ap.add_argument("--excel", action="store_true",
-                    help="run the Excel-formula mutants (sw/workbook.py) against tests 3, 8, 9 and 18 in LibreOffice")
+                    help="run the Excel-formula mutants (sw/workbook.py) against tests 3, 6, 8, 9 and 18 in "
+                         "LibreOffice")
+    ap.add_argument("--deselect", action="append", default=[],
+                    help="pytest node-id prefix to leave out of every run, baseline included (repeatable); for "
+                         "example the reproduce pass-criterion tests while they report known mismatches")
     args = ap.parse_args()
+    DESELECT.extend(args.deselect)
 
     pool = EXCEL_MUTANTS if args.excel else MUTANTS
     ids = [m[0] for m in MUTANTS + EXCEL_MUTANTS]
@@ -747,6 +884,7 @@ def main():
     name = "report_excel.json" if args.excel else "report.json"
     with open(os.path.join(out_dir, name), "w") as f:
         json.dump({"mode": "excel" if args.excel else "python", "baseline": line, "baseline_collected": base_count,
+                   "deselected": DESELECT, "fixture": os.environ.get("YA_FIXTURE_PATH") is not None,
                    "counts": counts, "catches_by_test": by_test, "warning": warning, "wall_seconds": wall,
                    "jobs": args.jobs, "results": results, "equivalent": EQUIVALENT}, f, indent=1)
     bad = [r for r in results if r["status"] in ("survived", "not applied", "count mismatch")]

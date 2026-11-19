@@ -6,8 +6,8 @@
 Writes output/<client>/<plan_cycle>/<build_id>/workbook.xlsx (and, with --pdf, the Summary render; with --sentinel,
 workbook_sentinel.xlsx, every cached value -999, for the desktop Excel check). The build id is a hash of the inputs
 (config, cell data, scenarios, requirements.lock) and the generator code (sw/*.py) [v0.6.2, P21-03], so two builds
-share it only if they are the same apart from RunLog's timestamp. Live mode only: reproduce mode is Phase 3 and is
-not built.
+share it only if they are the same apart from RunLog's timestamp. Live mode; reproduce-mode workbooks are built by
+sw/reproduce.py (spec section 9), which reuses make_run and the workbook generator.
 """
 import argparse
 import copy
@@ -28,7 +28,7 @@ from .config import ConfigError, load as load_config
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 SCENARIO_FIELDS = {f.name for f in fields(L.Scenario)} - {"name", "parent", "admit_rate", "award_usd", "full_tuition",
-                                                         "notices"}
+                                                         "notices", "yield_loaded", "tuition_loaded_usd"}
 BASELINE_FIELDS = {"name", "description", "segment"}
 
 
@@ -42,6 +42,7 @@ class Run:
     parents: dict                      # name -> parent Scenario or None
     lcs: dict                          # name -> {case: LedgerCase}
     meta: dict = field(default_factory=dict)
+    loaded: dict = field(default_factory=dict)   # reproduce builds: name -> loaded values (sw/reproduce.py)
 
     def scen(self, name):
         for s in self.scenarios:
@@ -87,16 +88,21 @@ def scenarios_from_specs(specs, cells, cfg):
     return out
 
 
-def make_run(cfg, cells, scenarios, meta=None):
-    if cfg["integer_admits"]:
-        raise ConfigError("live-mode workbook needs integer_admits false (spec section 2: integer counts are "
-                          "reproduce mode only; the Trim sheet does not settle integer admits)")
+def make_run(cfg, cells, scenarios, meta=None, loaded=None):
+    if cfg["mode"] == "live" and (cfg["integer_admits"] or cfg["integer_enrolled"]):
+        raise ConfigError("live-mode workbook needs integer_admits and integer_enrolled false (spec section 2: integer "
+                          "counts are reproduce mode only; the Trim sheet, built in live mode only, does not settle "
+                          "integer admits)")
     base = response.base_yield(cells, cfg)
     by = {s.name: s for s in scenarios}
     parents = {s.name: (by[s.parent] if s.parent else None) for s in scenarios}
     lcs = {s.name: {k: L.evaluate(cells, cfg, s, base, k) for k in CASES} for s in scenarios}
+    if cfg["mode"] == "reproduce":
+        missing = [s.name for s in scenarios if s.name not in (loaded or {})]
+        if missing:
+            raise ConfigError(f"reproduce build: no loaded values for {missing}")
     return Run(cfg=cfg, cells=cells, base=base, scenarios=list(scenarios), parents=parents, lcs=lcs,
-               meta=dict(meta or {}))
+               meta=dict(meta or {}), loaded=dict(loaded or {}))
 
 
 def _sha(b):
@@ -105,10 +111,17 @@ def _sha(b):
 
 def input_hashes(cfg_path, cells, scen_bytes):
     with open(cfg_path, "rb") as f:
-        cfg_h = _sha(f.read())
+        cfg_b = f.read()
     buf = io.StringIO()
     cells.to_long().to_csv(buf, index=False, float_format="%.10g")
-    data_h = _sha(buf.getvalue().encode())
+    return hashes_from_bytes(cfg_b, buf.getvalue().encode(), scen_bytes)
+
+
+def hashes_from_bytes(cfg_bytes, data_bytes, scen_bytes):
+    """Hashes and build id from the bytes of the config, the cell table and the scenarios (reproduce builds pass the
+    effective config and the loaded values)."""
+    cfg_h = _sha(cfg_bytes)
+    data_h = _sha(data_bytes)
     lock = os.path.join(ROOT, "requirements.lock")
     with open(lock, "rb") as f:
         lock_h = _sha(f.read())

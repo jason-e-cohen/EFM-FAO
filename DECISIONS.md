@@ -4,6 +4,43 @@
 
 ## 1. Decisions by date
 
+### November 18, 2026 (Jason): Phase 3 accepted
+
+Reproduce mode meets its criteria: 57 of 57 derivable criteria pass (3 Baseline criteria not derivable from the file; 2 cells not reproducible from the file, excluded and counted). Desktop Excel parity measured on the reproduce sentinel build `08c50a6fabaf` (Excel for Mac 16): 29,063 formula cells, 0 value mismatches, 0 cells still at -999, 0 formula-text differences; the rounding probe gives 3 in Excel, Python and LibreOffice, so the 15-significant-digit rounding stands (`output/phase3/excel_compare_report.json`). Mutation checks: Python 115 of 115, Excel 75 of 75 (before the sentinel file-name fix, which changed no formula). The History sheet's 509 check confirms the lower-band mismatch (LSAT 25th percentile in 2024 and 2025, median in 2024); OD-14 holds Scenario 4's median and percentile rows.
+
+### November 18, 2026 (Jason): 509 findings and Scenario 4 deliverable scope
+
+| Decision | IDs |
+|---|---|
+| Scenario 4's first deliverable to Richmond carries class size, NTR, the pool strip and P(class > cap). Its median and percentile rows are held until Brandon says which LSAT the Yellow Arrows grid bands by (OD-14), because the fixture's lower LSAT bands disagree with the 509 and band-level results depend on the basis | R3-4, BM-7 |
+| Tuition: the 509 figures stand for 2024 ($55,550) and 2025 ($57,700); 2027 is $63,500 (Brandon, confirmed by Jason Nov 18; Board approval February 2027) | BM-2, OD-09 |
+| Percentile placeholder: 25th percentile at LSAT 158 (the nearest band to Richmond's published 158 and 159) until Brandon confirms the target | BM-1, OD-13 |
+| The three R3-4 additions are adopted: a 509 reconciliation check on the History sheet (report only), a data-request line asking for bands by highest LSAT, and the LSAT-basis question to Brandon | R3-4 |
+
+### November 18, 2026 (Jason): Phase 3 reproduce mode (`Review_Phase3_Build.md`)
+
+| Decision | IDs |
+|---|---|
+| Reproduce mode counts unscored and blank-GPA enrollees the "excluded" way, as the fixture does (18 of 18 groups) and as the ABA 509 does; one rule in live and reproduce modes. O41's basis question is closed; only the 509's interpolation convention is unknown, which does not matter at band resolution | R3 decision 1, O41 |
+| Applications are rounded after the pool multiplier in reproduce mode only (`reproduce.round_apps_after_pool`) | R3 decision 2 |
+| Cells whose base applications cannot be recovered consistently from the file are marked "not reproducible from the file", excluded from the criteria on both sides and counted; never invented. History shows unknown applications as blank | R3 decision 3 |
+| Ledger rounding at 15 significant digits kept; confirmed in LibreOffice, to be confirmed in desktop Excel on the reproduce sentinel copy | R3 decision 4, R3-3 |
+| Richmond's public ABA 509 figures for 2024 and 2025 entered in `config/richmond.yaml` for the History sheet's 509 reconciliation (report only) | R3-4 |
+
+### November 18, 2026 (Jason): Scenario 4 in a Richmond deliverable (`Review_Phase3_Build.md` R3-2)
+
+| Decision | IDs |
+|---|---|
+| Exception to the fixture rule: Scenario 4's levers from the Yellow Arrows workbook may be entered in a live build on Richmond's own cell data, and that workbook may go to Richmond's named roles through the secure channel, because it is Richmond's own scenario returned to Richmond. The Scenario 4 scenario file is generated at run time into a git-ignored path, never committed. All other fixture limits stand (no git, Supabase, dashboard, public or marketing use, or other clients' work); Scenarios 1 to 3 are not covered. Recorded in `CLAUDE.md` (rules). | BM-7, R3-2 |
+
+### November 17, 2026 (Jason): Brandon Metheny's reply (`Review_Points_Brandon_Nov17.md`)
+
+| Decision | IDs |
+|---|---|
+| Shrink path: NY/PA (segment) cells are protected only at or above `score.floor` (154); segment cells below 154 are trimmed in normal order (`trim.protect_segment: above_floor`) | BM-5 |
+| The transform from Brandon's state counts to segment shares per cell is handled as the data arrives, outside this pass | BM-9 |
+| BM-1 to BM-4, BM-6 to BM-8 and BM-10 go to a reviewer session for the v0.6.3 amendment and a Phase 2.2 plan | BM-1 to BM-10 |
+
 ### November 17, 2026 (Jason): Phase 2 accepted
 
 Desktop Excel parity measured: the sentinel build (every cached value -999), recalculated and saved by desktop Excel, matched Python on every formula cell of every sheet with 0 mismatches (`tests/compare_excel_saved.py`). Phase 2 is accepted. Re-run after the P21 follow-up on build `a5d46aca1735` (synthetic world 101), saved by Microsoft Excel 16 for Mac: all 57,483 formula cells match Python, none still holds -999, and no formula differs from the build (`output/phase2/excel_compare_report.json`). Windows Excel is not yet checked; check it before the first workbook goes to Richmond.
@@ -100,8 +137,12 @@ Net-price yield response; goal-seek helper and schedule authoring layer; dashboa
 |---|---|---|
 | OD-05 / O42 | Which discount rate Dean Rooksby means (entering class or all JD; fees); whether it is a hard constraint | Brandon |
 | OD-08 | The class target path toward 100 to 115 | Brandon |
-| OD-09 | The exact 2027 tuition increase and the path after it | Brandon |
+| OD-09 | 2027 settled at $63,500 (Nov 18); the 2026-27 base-cycle tuition for `tuition_base` and the path after 2027 remain open | Brandon / Jason |
 | OD-10 | Whether Richmond's budget figure covers total aid (merit, need, specialty) or merit only | Brandon |
+| OD-11 | Whether 140 was a hard cap in 2025 (the 509 first-year class was 146) | Brandon |
+| OD-13 | The percentile target Brandon wants (placeholder 25th percentile at 158) | Brandon |
+| OD-14 | Which LSAT the Yellow Arrows grid bands students by (highest, most recent or average); holds Scenario 4's median and percentile rows | Brandon |
+| OD-15 | Whether "full ride" means full tuition with no stipend (BM-8) | Brandon |
 | O41 | ABA 509 basis for unscored students in percentiles; how deferrals enter 509 yield | Jason (509 instructions) |
 | O43 | Small-cell rule for files, the policy document and public material (methodology section 9) | Cat |
 | O36 | Screen re-run without the guardrail (frozen until a client considers a price test) | Later |
