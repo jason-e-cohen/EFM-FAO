@@ -4,6 +4,17 @@
 
 ## 1. Decisions by date
 
+### November 19, 2026 (Jason): Phase 4 review (`Review_Phase4_Build.md`)
+
+| Decision | IDs |
+|---|---|
+| One margin per event on the Summary: the median rows keep the at-or-above-minus-below margin; the percentile block omits q = 0.5 targets and labels its margin "swaps: students below t who could replace students at or above t" | R4-03 |
+| A scenario's need departure from `need.total` is a fixed dollar amount, in reproduce and live modes (Scenario 4: the $10,000 need cut mirrors the $10,000 NY/PA specialty); Brandon to confirm (OD-16) | R4-07 |
+| Keep the inclusive tie rule (a percentile holds when exactly a share q is below t) and state it on the Summary, README and methodology: the ABA averages the two middle scores, so near a tie the probability can read a few points high (up to about 4 points on synthetic data). The earlier "immaterial" wording is withdrawn | R4-08 |
+| `hold_position_rows` (Richmond: true) replaces every median and percentile figure with "held pending confirmation of the LSAT basis (OD-14)" until Brandon answers | R4-06 |
+| The Yellow Arrows file never leaves Jason's Mac; any review that needs the fixture runs its tests through Claude Code there. Recorded in `CLAUDE.md` | Fixture handling |
+| All other Phase 4 review findings go to the fix pass; LibreOffice 26.8 is the acceptance version | R4-01, R4-02, R4-04, R4-05, R4-09 to R4-17 |
+
 ### November 19, 2026 (Jason): Phase 4 build
 
 | Decision | IDs |
@@ -35,7 +46,7 @@ Reproduce mode meets its criteria: 57 of 57 derivable criteria pass (3 Baseline 
 
 | Decision | IDs |
 |---|---|
-| Reproduce mode counts unscored and blank-GPA enrollees the "excluded" way, as the fixture does (18 of 18 groups) and as the ABA 509 does; one rule in live and reproduce modes. O41's basis question is closed; only the 509's interpolation convention is unknown, which does not matter at band resolution | R3 decision 1, O41 |
+| Reproduce mode counts unscored and blank-GPA enrollees the "excluded" way, as the fixture does (18 of 18 groups) and as the ABA 509 does; one rule in live and reproduce modes. O41's basis question is closed; the 509's exact percentile convention is unknown and can move a probability by a few points near a tie (R4-08, Nov 19) | R3 decision 1, O41 |
 | Applications are rounded after the pool multiplier in reproduce mode only (`reproduce.round_apps_after_pool`) | R3 decision 2 |
 | Cells whose base applications cannot be recovered consistently from the file are marked "not reproducible from the file", excluded from the criteria on both sides and counted; never invented. History shows unknown applications as blank | R3 decision 3 |
 | Ledger rounding at 15 significant digits kept; confirmed in LibreOffice, to be confirmed in desktop Excel on the reproduce sentinel copy | R3 decision 4, R3-3 |
@@ -157,7 +168,8 @@ Net-price yield response; goal-seek helper and schedule authoring layer; dashboa
 | OD-13 | The percentile target Brandon wants (placeholder 25th percentile at 158) | Brandon |
 | OD-14 | Which LSAT the Yellow Arrows grid bands students by (highest, most recent or average); holds Scenario 4's median and percentile rows | Brandon |
 | OD-15 | Whether "full ride" means full tuition with no stipend (BM-8) | Brandon |
-| O41 | Basis closed Nov 18 (509 excludes unscored students, as the fixture does). Still open: the 509's exact percentile interpolation convention (immaterial at band level) and how deferrals enter 509 yield | Jason (509 instructions) |
+| OD-16 | Whether Scenario 4's $10,000 need cut is a fixed amount (as built) or a lower per-student rate | Brandon |
+| O41 | Basis closed Nov 18 (509 excludes unscored students, as the fixture does). Still open: the 509's exact percentile convention (it can move a probability by a few points near a tie; R4-08) and how deferrals enter 509 yield | Jason (509 instructions) |
 | O43 | Small-cell rule for files, the policy document and public material (methodology section 9) | Cat |
 | O36 | Screen re-run without the guardrail (frozen until a client considers a price test) | Later |
 | O37 | Year-shock calibration from public data | Phase 2 or before the live build |
