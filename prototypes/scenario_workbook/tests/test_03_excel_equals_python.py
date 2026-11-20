@@ -91,8 +91,10 @@ def test_edge_inputs_reach_every_branch(edge_wb):
     assert go.yield_shift_pts != 0 and go.yield_shift_pts_in not in (None, 0, go.yield_shift_pts)
     assert ins.any() and (gl.shift[ins] == go.yield_shift_pts_in).all()
     assert (gl.shift[cells.residency == "out"] == go.yield_shift_pts).all()
-    # need_total override; non-integer goal; flag-only child is not valid
-    assert lc["Need override"]["middle"].need_rate != lc["Baseline"]["middle"].need_rate
+    # need_total override (R4-07: a fixed departure, the rate unchanged); non-integer goal; flag-only child is not valid
+    no, nb = lc["Need override"]["middle"], lc["Baseline"]["middle"]
+    assert no.need_rate == nb.need_rate and no.need_lump == run.scen("Need override").need_total - cfg["need"]["total"]
+    assert no.need_lump != 0 and nb.need_lump == 0
     g = run.scen("Goal 24.3").segment_goal
     assert g != int(g)
     fo, gp = run.scen("Flag only"), run.scen("Goal 24.3")
@@ -132,6 +134,47 @@ def test_edge_inputs_reach_every_branch(edge_wb):
         return float(L.xround((e[mask] * ea.award_usd[mask]).sum() / e[mask].sum() / 1000.0) * 1000.0)
     assert ex((ea.award_usd < tb) & (e > 0)) != got                          # flag ignored
     assert ex(~ea.full_tuition & (ea.award_usd < le.tuition) & (e > 0)) != got   # plan-year tuition
+
+
+def test_edge_below_workbook_equals_python(edge_below_wb):
+    """[R4-09] The edge inputs under unscored_in_median: below, compared cell by cell: the Ledger percentile and median
+    signs give unscored -1, and the spread bands count unscored below every bound (mutants RX01, RX02)."""
+    count, bad = _compare(edge_below_wb)
+    with open(os.path.join(PHASE2, "test03_edge_below_report.json"), "w") as f:
+        json.dump({"workbook": edge_below_wb["path"], "cells_compared": dict(count),
+                   "mismatches": {k: v[:20] for k, v in bad.items()}}, f, indent=1, default=str)
+    assert sum(count.values()) > 10_000
+    assert not bad, {k: v[:5] for k, v in bad.items()}
+
+
+def test_below_and_lowest_band_branches_reached(edge_wb, edge_below_wb):
+    """[R4-09, R4-10] Under 'below' unscored enrollees change a percentile probability and a spread band against the
+    same inputs under 'excluded'; the 'Lowest band' scenario puts the 25th and 75th percentile bands in the lowest band
+    in both workbooks, and the Summary shows its text ('below <next bound>')."""
+    from sw import risk
+    re_, rb = edge_wb["info"]["run"], edge_below_wb["info"]["run"]
+    assert re_.cfg["unscored_in_median"] == "excluded" and rb.cfg["unscored_in_median"] == "below"
+    diff_p, diff_band = 0, 0
+    for s in rb.scenarios:
+        le, lb = re_.lcs[s.name]["middle"], rb.lcs[s.name]["middle"]
+        assert (lb.enrolled[~rb.cells.scored] > 0).any()
+        for q, t in risk.pct_targets(rb.cfg):
+            diff_p += risk.pct(le, q, t)["p_pct_q_t"] != risk.pct(lb, q, t)["p_pct_q_t"]
+        for q in risk.SPREAD_QS:
+            diff_band += risk.pct_band(le, q) != risk.pct_band(lb, q)
+    assert diff_p > 0 and diff_band > 0
+    un = [risk.pct_band(r.lcs["Unscored near the 25th"]["middle"], 0.25) for r in (re_, rb)]
+    assert un[0] > un[1], un
+    lows = sorted(float(b) for b in rb.cfg["score"]["bands"])
+    for bundle in (edge_wb, edge_below_wb):
+        run = bundle["info"]["run"]
+        lc = run.lcs["Lowest band"]["middle"]
+        assert risk.pct_band(lc, 0.25) == lows[0] and risk.pct_band(lc, 0.75) == lows[0]
+        ws = bundle["values"]["Summary"]
+        j = [s.name for s in run.scenarios].index("Lowest band")
+        texts = [ws.cell(r, 3 + j).value for r in range(1, ws.max_row + 1)
+                 if str(ws.cell(r, 1).value or "").startswith("Spread: ") and "lower bound" not in ws.cell(r, 1).value]
+        assert texts == [f"below {lows[1]:g}"] * 2, texts
 
 
 def test_sentinel_guard(sentinel_wb):
@@ -234,13 +277,27 @@ def _replace_formula(src, dst, sheet, coord, new_formula):
                 out.writestr(item, data)
 
 
-def _excel_check(path):
+def _excel_check(path, report):
+    """R4-15: tests write the comparison report to a temporary file, never to output/excel_check/."""
     import compare_excel_saved
-    return compare_excel_saved.main([path, "--show", "2"])
+    return compare_excel_saved.main([path, "--show", "2", "--report", str(report)])
 
 
-def test_excel_check_passes_on_a_recalculated_sentinel_copy(sentinel_wb):
-    assert _excel_check(sentinel_wb["recalc_path"]) == 0
+def test_excel_check_passes_on_a_recalculated_sentinel_copy(sentinel_wb, tmp_path):
+    rep = tmp_path / "report.json"
+    assert _excel_check(sentinel_wb["recalc_path"], rep) == 0
+    assert json.load(open(rep))["build_id"] == sentinel_wb["info"]["build_id"]
+
+
+def test_excel_check_report_path(tmp_path):
+    """R4-15: a hand run writes output/excel_check/<build_id>.json (reproduce builds: <build_id>_reproduce.json); the
+    tests pass --report."""
+    import compare_excel_saved
+    from conftest import ROOT
+    assert compare_excel_saved.report_path(None, "abc123def456", False) == os.path.join(
+        ROOT, "output", "excel_check", "abc123def456.json")
+    assert compare_excel_saved.report_path(None, "abc123def456", True).endswith("abc123def456_reproduce.json")
+    assert compare_excel_saved.report_path(str(tmp_path / "x.json"), "abc", False) == str(tmp_path / "x.json")
 
 
 def test_excel_check_refuses_unrecalculated_or_altered_copies(sentinel_wb, main_wb, tmp_path):
@@ -249,22 +306,23 @@ def test_excel_check_refuses_unrecalculated_or_altered_copies(sentinel_wb, main_
     # the tuition formula of the first scenario on Ledger_Middle
     from xlsxwriter.utility import xl_rowcol_to_cell
     coord = xl_rowcol_to_cell(3, lay["lblock"][("middle", "Baseline")]["in_seg"] + 1)
+    rep = tmp_path / "report.json"
     # (a) the sentinel workbook as built, never opened
-    assert _excel_check(sentinel_wb["path"]) != 0
+    assert _excel_check(sentinel_wb["path"], rep) != 0
     # (b) resaved by LibreOffice without recalculation
     prof = lo.make_profile(str(tmp_path), recalc=False)
     resave = lo.recalc(sentinel_wb["path"], str(tmp_path / "norecalc"), profile=prof)
-    assert _excel_check(resave) != 0
+    assert _excel_check(resave, rep) != 0
     # (c) that resave with one Ledger formula replaced by =0
     alt = str(tmp_path / "norecalc_zero.xlsx")
     _replace_formula(resave, alt, "Ledger_Middle", coord, "0")
-    assert _excel_check(alt) != 0
+    assert _excel_check(alt, rep) != 0
     # also: the normal (non-sentinel) build, and a recalculated sentinel copy with one formula typed over but its
     # correct value kept (only the formula-text check can see it)
-    assert _excel_check(main_wb["path"]) != 0
+    assert _excel_check(main_wb["path"], rep) != 0
     alt2 = str(tmp_path / "recalc_zero.xlsx")
     _replace_formula(sentinel_wb["recalc_path"], alt2, "Ledger_Middle", coord, "0")
-    assert _excel_check(alt2) == 1
+    assert _excel_check(alt2, rep) == 1
 
 
 def test_build_id_hashes_the_generator_code(tmp_path):

@@ -147,6 +147,37 @@ def test_tuition_by_year_usd_validation(raw):
         config.validate(_with(raw, tuition_increase_by_year={}))
 
 
+def test_tuition_by_year_usd_later_year_needs_no_earlier_increase(raw):
+    """R4-14: a dollar figure resets the factor, so the years before it need no increase: {2028: 60,000} with plan 2028
+    and no 2027 value loads and gives the dollar figure; a year after it still needs an increase (the message says
+    so). The Excel builder handles the missing year."""
+    import tempfile
+    from sw import build
+    r = _with(raw, tuition_increase_by_year={}, tuition_by_year_usd={2028: 60_000},
+              cycle=dict(raw["cycle"], plan_cycle=2028))
+    cfg = config.validate(r)
+    assert config.plan_increase_pct(cfg, 2028) == 100.0 * (60_000 / 53_900 - 1.0)
+    assert config.scenario_tuition(cfg, config.plan_increase_pct(cfg, 2028)) == 60_000
+    with pytest.raises(ConfigError, match="unless a later year"):
+        config.plan_increase_pct(cfg, 2027)                    # 2027 alone: no increase and no dollar figure
+    d = tempfile.mkdtemp()
+    cp = os.path.join(d, "cfg.yaml")
+    with open(cp, "w") as f:
+        yaml.safe_dump(r, f)
+    path, info = build.build(cp, "synthetic", os.path.join(ROOT, "config", "scenarios_synthetic.yaml"), d)
+    assert info["run"].lcs[info["run"].scenarios[0].name]["middle"].tuition == 60_000
+
+
+def test_hold_position_rows_setting(raw):
+    """R4-06: hold_position_rows is false by default and must be true or false; Richmond holds (OD-14)."""
+    assert config.validate(raw)["hold_position_rows"] is False
+    assert config.validate(_with(raw, hold_position_rows=True))["hold_position_rows"] is True
+    with pytest.raises(ConfigError, match="hold_position_rows"):
+        config.validate(_with(raw, hold_position_rows="yes"))
+    with open(os.path.join(ROOT, "config", "richmond.yaml")) as f:
+        assert yaml.safe_load(f)["hold_position_rows"] is True
+
+
 def test_protect_segment_and_pool_date(raw):
     cfg = config.validate(_with(raw, trim={"protect_segment": "above_floor", "floor_rate": 0.0, "exempt_cells": []}))
     assert cfg["trim"]["protect_segment"] == "above_floor"

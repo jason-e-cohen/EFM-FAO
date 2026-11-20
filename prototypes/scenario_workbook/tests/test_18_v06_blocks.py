@@ -117,7 +117,8 @@ def test_class_size_table(main_wb):
             for key in targets:
                 want += [row["median"][key]["margin"], row["median"][key]["p"]]
             for key in risk.pct_targets(cfg):                                       # [v0.6.3, BM-1]
-                want += [row["pct"][key]["margin"], row["pct"][key]["p"]]
+                if key[0] != 0.5:                                                   # R4-03: q = 0.5 left out
+                    want += [row["pct"][key]["margin"], row["pct"][key]["p"]]
             want += [row["ntr_y1"], row["discount_entering_y1"], row["segment_enrolled"],
                      "" if row["lowest_band_admitted"] is None else row["lowest_band_admitted"]]
             want += [row["admits_cut_by_band"].get(b, 0.0) for b in bands]
@@ -155,8 +156,13 @@ def test_net_tuition_lines(main_wb):
         assert close(fixed[j][0], tw["net_tuition_line_fixed"])
         assert close(scaled[j][0], tw["net_tuition_line_scaled"])
         assert close(ws.cell(r0 + j, 3).value, tw["example_award"])
-        assert ws.cell(r0 + j, 5).value == tw["net_tuition_line_fixed_text"]
-        assert ws.cell(r0 + j, 6).value == tw["net_tuition_line_scaled_text"]
+    # R4-02: the two sentences follow the figures, two rows per scenario, merged from column B
+    r1 = r0 + len(run.scenarios)
+    for j, s in enumerate(run.scenarios):
+        tw = strip.tuition(run.lcs[s.name]["middle"])
+        assert ws.cell(r1 + 2 * j, 1).value == s.name
+        assert ws.cell(r1 + 2 * j, 2).value == tw["net_tuition_line_fixed_text"]
+        assert ws.cell(r1 + 2 * j + 1, 2).value == tw["net_tuition_line_scaled_text"]
 
 
 def test_narratives(main_wb):

@@ -50,6 +50,8 @@ DEFAULTS = {
                                                   # sw/reproduce.py, which sets it
     "reproduce": None,                            # reproduce-mode settings (spec section 9; DECISIONS Nov 18)
     "aba_509_by_cohort": None,                    # optional public ABA 509 figures per history cohort (R3-4)
+    "hold_position_rows": False,                  # R4-06: true replaces every median and percentile figure on the
+                                                  # Summary with labels.HOLD_POSITION (Richmond until OD-14)
 }
 
 REPRODUCE_KEYS = {"tuition_increase_pct", "unscored_in_median", "round_apps_after_pool"}
@@ -248,6 +250,9 @@ def validate(raw):
     if pg != sorted(pg) or len(set(pg)) != len(pg):
         raise ConfigError("risk.pool_grid must be strictly ascending (the growth-to-date marker reads it in order)")
 
+    if not isinstance(cfg["hold_position_rows"], bool):
+        raise ConfigError("hold_position_rows must be true or false")
+
     if float(cfg["marginal_admit_yield_slope"]) != 0.0:
         notes.append(labels.MARGINAL_ADMIT_NOTE.format(x=cfg["marginal_admit_yield_slope"]))
     cfg["_notes"] = notes
@@ -334,16 +339,21 @@ def plan_increase_pct(cfg, plan_year):
 
     [v0.6.3, BM-2] A year in tuition_by_year_usd takes precedence: the factor relative to tuition_base becomes
     tuition_by_year_usd / tuition_base there, so the implied increase 100 x (tuition_by_year_usd / tuition_base - 1)
-    is stored unrounded and round_to(tuition_base x (1 + p), tuition_rounding_usd) returns the dollar figure."""
+    is stored unrounded and round_to(tuition_base x (1 + p), tuition_rounding_usd) returns the dollar figure.
+
+    R4-14: the factor starts at the last year up to plan_year with a dollar figure (it resets the factor), so years
+    before it need no increase."""
     base = cfg["cycle"]["base_cycle"]
     usd = cfg.get("tuition_by_year_usd") or {}
-    f = 1.0
-    for y in range(base + 1, plan_year + 1):
+    start = max([y for y in usd if base < y <= plan_year], default=base)
+    f = usd[start] / float(cfg["tuition_base"]) if start in usd else 1.0
+    for y in range(start + 1, plan_year + 1):
         if y in usd:
             f = usd[y] / float(cfg["tuition_base"])
             continue
         if y not in cfg["tuition_increase_by_year"]:
-            raise ConfigError(f"tuition_increase_by_year has no value for {y}")
+            raise ConfigError(f"tuition_increase_by_year has no value for {y} (each year from base_cycle to the plan "
+                              "year needs an increase, unless a later year up to the plan year has tuition_by_year_usd)")
         f *= 1.0 + cfg["tuition_increase_by_year"][y] / 100.0
     return 100.0 * (f - 1.0)
 

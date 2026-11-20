@@ -382,6 +382,9 @@ def reproduce_config(cfg_raw, fx):
     raw["integer_admits"] = True
     raw["integer_enrolled"] = True
     raw["mode"] = "reproduce"
+    # R4-06: the hold is for the delivered live build; a reproduce build is the validation fixture's check (never
+    # delivered) and keeps its median and percentile rows so they can be compared with the file
+    raw["hold_position_rows"] = False
     return validate(raw)
 
 

@@ -194,12 +194,14 @@ def test_distribution_agrees_with_summary_and_ledger(main_wb, edge_wb):
             for ki, k in enumerate(CASES):
                 for j in range(len(S)):
                     assert close(rows[(lab, k)][j], summ[ki][j]), (lab, k, S[j])
-        for k in CASES:
+        dist = read_range(wb, "DIST_TOP_QUARTILE_MERIT_SHARE")                # R4-05: the contract range
+        for ki, k in enumerate(CASES):
             for j, s in enumerate(S):
                 e = _ledger(bundle, k, s, "enrolled").astype(float)
                 aw = _ledger(bundle, k, s, "award").astype(float)
                 got = rows[("Share of merit dollars to the top quartile of enrolled", k)][j]
                 assert abs(got - _top_quartile(e, aw, score, scored, gpa)) < 1e-9, (k, s)
+                assert dist[ki][j] == got
         am = np.array(read_range(wb, "AWARD_MATRIX"), dtype=float)
         res, seg = _static(bundle, "middle", "residency"), _static(bundle, "middle", "segment")
         groups = {}
@@ -226,7 +228,8 @@ def test_contract_table_is_complete():
             "additional_enrollees", "aid_per_additional", "ntr_per_additional", "incentive_valid",
             "tuition_whatif[grid]", "net_tuition_line_fixed", "net_tuition_line_scaled", "yield_strip[grid]",
             "breakeven_shift_class", "breakeven_shift_ntr", "pool_strip[grid]", "class_table[grid]",
-            "evidence_extrapolated_share", "award_matrix", "step_sizes", "p_segment_goal_exact"}
+            "evidence_extrapolated_share", "award_matrix", "step_sizes", "p_segment_goal_exact",
+            "top_quartile_merit_share"}                                               # R4-05, spec 0A item 8
     assert spec <= names, sorted(spec - names)
 
 

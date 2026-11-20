@@ -15,7 +15,8 @@ cell, as Excel saved it, with the Python value at test 3's tolerances (strings a
 relative, 1e-9 absolute near zero); a cell still holding -999 fails. It also compares each cell's formula text with the
 rebuild's (case, spacing, the _xlfn. prefix and the printing of numeric literals ignored), so a formula typed over
 shows even when its value happens to match, and it lists input cells (Inputs, Levers) that differ from the build.
-Results go to output/phase2/excel_compare_report.json. Exit status 0 when every cell was recalculated, has the built
+Results go to output/excel_check/<build_id>.json (R4-15, DECISIONS Nov 19: one file per build, which no test
+overwrites; tests pass --report with a temporary path). Exit status 0 when every cell was recalculated, has the built
 formula and matches; 1 otherwise; 2 when the file is refused.
 
 For a non-synthetic build (data from a CSV), pass --data with the CSV path. --config and --scenarios override the
@@ -29,7 +30,10 @@ Reproduce builds (R3-3; RunLog 'mode' Reproduce) are compared the same way. Buil
 The script rebuilds from the fixture (YA_FIXTURE_PATH or --fixture) or the synthetic seed, checks the build id, also
 lists edited inputs on the Reproduce sheet, and reports the rounding probe on Checks: ROUND(0.35/0.14, 0), whose
 argument is one binary step below 2.5 (Python and LibreOffice give 3; if Excel differs, follow Excel). Results go to
-output/phase3/excel_compare_report.json.
+output/excel_check/<build_id>_reproduce.json.
+
+The earlier reports (output/phase2/ and output/phase3/excel_compare_report.json) are no longer written: tests used to
+overwrite the Phase 2 file with a LibreOffice result (Review_Phase4_Build.md R4-15).
 """
 import argparse
 import collections
@@ -75,6 +79,14 @@ def application(path):
     return (m.group(1) if m else "") + (f" {v.group(1)}" if v else "")
 
 
+def report_path(given, build_id, reproduce):
+    """R4-15: --report when given; otherwise output/excel_check/<build_id>.json (<build_id>_reproduce.json for a
+    reproduce build)."""
+    if given:
+        return given
+    return os.path.join(ROOT, "output", "excel_check", f"{build_id}{'_reproduce' if reproduce else ''}.json")
+
+
 def main(argv=None):
     import openpyxl
     from sw import build
@@ -86,6 +98,8 @@ def main(argv=None):
     ap.add_argument("--data", help="cells CSV for a non-synthetic build (default: the synthetic seed on RunLog)")
     ap.add_argument("--fixture", help="validation fixture for a reproduce build (default: YA_FIXTURE_PATH)")
     ap.add_argument("--show", type=int, default=15, help="mismatches to print per sheet")
+    ap.add_argument("--report", help="report path (default output/excel_check/<build_id>.json; tests pass a temporary "
+                                     "path)")
     args = ap.parse_args(argv)
 
     vals = openpyxl.load_workbook(args.saved, data_only=True)
@@ -221,9 +235,8 @@ def main(argv=None):
               f"Python {probe_rep['python']!r}, saved copy {probe_rep['saved_copy']!r}"
               + ("" if close(probe_rep["saved_copy"], probe_rep["python"]) else
                  " -- differs: follow Excel (Review_Phase3_Build.md, ledger rounding)"))
-    out = os.path.join(ROOT, "output", "phase3" if reproduce else "phase2")
-    os.makedirs(out, exist_ok=True)
-    rep = os.path.join(out, "excel_compare_report.json")
+    rep = report_path(args.report, info["build_id"], reproduce)
+    os.makedirs(os.path.dirname(os.path.abspath(rep)), exist_ok=True)
     with open(rep, "w") as f:
         json.dump({"saved": os.path.abspath(args.saved), "application": app, "build_id": info["build_id"],
                    "cells_compared": dict(count), "still_sentinel": dict(sentinel_left), "mismatches": dict(bad),

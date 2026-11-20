@@ -4,6 +4,10 @@ On a copy of the main workbook, edit Inputs pool_ytd_growth (0.12 to 0.33) and r
 is saved the same way without the edit. Only the marker cells change: the growth shown beside the pool strip, the
 nearest-row cell and the marker column (every other formula cell is identical), and the marker moves from the row of
 m = 1.1 to the row of m = 1.3 in every scenario's block.
+
+R4-13: growth 0.15 (an exact midpoint) marks the 1.2 row in Excel. R4-10, R4-11: in an edited copy, a q = 0.5 target's t
+follows the median threshold, the implied tuition increase follows tuition_by_year_usd, and Checks reports all_jd with
+a blank continuing_ntr_usd.
 """
 import os
 
@@ -47,3 +51,70 @@ def test_only_the_marker_cells_change(main_wb, lo_profile):
     sh, r, c = info["layout"]["marker_cells"][1]
     assert base[sh].cell(r + 1, c + 1).value == grid.index(1.1) + 1
     assert edit[sh].cell(r + 1, c + 1).value == grid.index(1.3) + 1
+
+
+def _edit(src, out, edits, profile):
+    """Copy src with {defined name or (name, index): value} edits on Inputs, recalculate, return values."""
+    from sw import lo
+    wb = openpyxl.load_workbook(src)
+    for key, v in edits.items():
+        name, i = key if isinstance(key, tuple) else (key, 0)
+        (sheet, coord), = list(wb.defined_names[name].destinations)
+        cells = wb[sheet][coord.replace("$", "")]
+        cell = cells[0][i] if isinstance(cells, tuple) else cells
+        cell.value = v
+    os.makedirs(out, exist_ok=True)
+    p = os.path.join(out, "copy.xlsx")
+    wb.save(p)
+    return openpyxl.load_workbook(lo.recalc(p, os.path.join(out, "recalculated"), profile=profile), data_only=True)
+
+
+def test_growth_tie_marks_the_upper_row_in_excel(main_wb, lo_profile):
+    """R4-13: 1 + 0.15 is the midpoint of 1.1 and 1.2; the marker goes to the 1.2 row in Excel as in Python."""
+    info = main_wb["info"]
+    grid = info["run"].cfg["risk"]["pool_grid"]
+    wb = _edit(main_wb["path"], os.path.join(PHASE2, "marker_tie"), {"in_pool_ytd_growth": 0.15}, lo_profile)
+    sh, r, c = info["layout"]["marker_cells"][1]
+    assert wb[sh].cell(r + 1, c + 1).value == grid.index(1.2) + 1
+
+
+def test_live_inputs_median_tuition_and_goal_basis(main_wb, lo_profile):
+    """R4-10, R4-11. In one edited copy of the main workbook: (a) the first median threshold moved from 166 to 165:
+    the q = 0.5 percentile target that reads it follows (Inputs pct_t), and its P(percentile) equals P(median) at the
+    new threshold (the same event); (b) tuition_by_year_usd for the plan year set: the implied increase on Inputs is
+    100 x (dollars / tuition_base - 1) and Baseline's Ledger tuition is the dollar figure; (c) ntr_goal_basis set to
+    all_jd with continuing_ntr_usd blank: the Checks row reports it."""
+    from conftest import close, read_range
+    from sw import labels
+    run, info = main_wb["info"]["run"], main_wb["info"]
+    cfg = run.cfg
+    assert cfg["score"]["median_thresholds"][0] == 166 and cfg.get("continuing_ntr_usd") is None
+    plan = cfg["cycle"]["plan_cycle"]
+    yrs = sorted(set(cfg["tuition_increase_by_year"]) | set(cfg.get("tuition_by_year_usd") or {}))
+    usd = 58000.0
+    wb = _edit(main_wb["path"], os.path.join(PHASE2, "live_inputs"),
+               {("in_median_thresholds", 0): 165, ("in_tuition_by_year_usd", yrs.index(plan)): usd,
+                "in_ntr_goal_basis": "all_jd"}, lo_profile)
+    # (a)
+    pt = read_range(wb, "in_pct_t")[0]
+    jq = [i for i, p in enumerate(cfg["score"]["percentile_targets"]) if p["q"] == 0.5][0]
+    assert pt[jq] == 165
+    nS, nc = len(run.scenarios), 3
+    pp = read_range(wb, "SUM_P_PCT_Q_T")[jq * nc:(jq + 1) * nc]
+    pm = read_range(wb, "SUM_P_MEDIAN_T")[0:nc]              # median target 0 (now 165)
+    assert all(close(a, b) for ra, rb in zip(pp, pm) for a, b in zip(ra, rb))
+    # (b)
+    tb = float(cfg["tuition_base"])
+    imp = read_range(wb, "in_tuition_implied_pct")[0][yrs.index(plan)]
+    assert close(imp, 100 * (usd / tb - 1))
+    lay = info["layout"]
+    ws = wb[lay["case_sheet"]["middle"]]
+    assert close(ws.cell(lay["ledger_head_rows"]["T"] + 1, lay["lblock"][("middle", run.scenarios[0].name)]["in_seg"]
+                         + 2).value, usd)
+    # (c)
+    texts = [wb["Checks"].cell(r, 3).value for r in range(1, wb["Checks"].max_row + 1)]
+    assert labels.ALL_JD_NEEDS_CONTINUING in texts
+    base = openpyxl.load_workbook(main_wb["recalc_path"], data_only=True)
+    assert labels.ALL_JD_NEEDS_CONTINUING not in [base["Checks"].cell(r, 3).value
+                                                   for r in range(1, base["Checks"].max_row + 1)]
+    assert nS > 0

@@ -106,14 +106,19 @@ def changes_parts(has_parent):
             " cells; admit rates changed in ", ("rates_changed", "g"), " cells.", ("awards_ignored", "ignored")]
 
 
-def outcome_parts(n_score_thresholds):
+def outcome_parts(n_score_thresholds, hold=False):
+    """hold (config hold_position_rows, R4-06): each median's margin and probability are replaced by
+    labels.HOLD_POSITION."""
     parts = ["Class ", ("class_mean", "d1"), " (90% outcome range ", ("class_lo90", "d1"), " to ",
              ("class_hi90", "d1"), "). "]
     for i in range(n_score_thresholds):
-        parts += [("score_measure", "raw"), " median ", (f"t{i}", "g"), ": margin ", (f"margin{i}", "d1"),
-                  ", probability ", (f"p{i}", "prob"), ". "]
-    parts += ["GPA median ", ("gpa_t", "g"), ": margin ", ("gpa_margin", "d1"), ", probability ", ("gpa_p", "prob"),
-              ". ", ("below_floor", "d1"), " enrolled below ", ("floor", "g"), ". Full-tuition ", ("ft", "d1"),
+        parts += [("score_measure", "raw"), " median ", (f"t{i}", "g")]
+        parts += [f": {labels.HOLD_POSITION}. "] if hold else [": margin ", (f"margin{i}", "d1"), ", probability ",
+                                                              (f"p{i}", "prob"), ". "]
+    parts += ["GPA median ", ("gpa_t", "g")]
+    parts += [f": {labels.HOLD_POSITION}. "] if hold else [": margin ", ("gpa_margin", "d1"), ", probability ",
+                                                          ("gpa_p", "prob"), ". "]
+    parts += [("below_floor", "d1"), " enrolled below ", ("floor", "g"), ". Full-tuition ", ("ft", "d1"),
               ", no merit award ", ("nm", "d1"), ". First-year NTR ", ("ntr", "musd"), " (90% outcome range ",
               ("ntr_lo", "musd"), " to ", ("ntr_hi", "musd"), "), discount rate (entering class, first year) ",
               ("discount", "pct1"), ". Tuition ", ("tuition", "usd"), " (+", ("p", "pp1"), "%); class target ",
@@ -214,7 +219,7 @@ def changes(run, vals, s):
 
 def outcome(run, vals, s):
     ctx = {"shock_source": run.cfg["risk"]["shock_source"]}
-    parts = outcome_parts(len(run.cfg["score"]["median_thresholds"]))
+    parts = outcome_parts(len(run.cfg["score"]["median_thresholds"]), bool(run.cfg.get("hold_position_rows")))
     return text(parts, values(run, vals, s), ctx) + labels_text(run, s)
 
 

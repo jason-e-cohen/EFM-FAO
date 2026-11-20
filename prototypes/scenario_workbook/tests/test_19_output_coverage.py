@@ -423,6 +423,38 @@ def test_award_matrix_and_step_sizes():
                                  "band_lower": 161.0, "step_usd": 25000.0}]
 
 
+def test_top_quartile_share_value_with_mixed_residency_at_the_line():
+    """R4-16 (mutant N83, by value). With c2, c3 and c4 at admit rate 0 the class is 8.1 (c1 4.6 in-state at 53,000;
+    c5 2.0 out-of-state at 45,000; c6 1.5 unscored) and the quartile line (2.025) falls inside position 170 hi, which
+    holds c1 and c5 (different residency). Taken together in proportion the share is 2.025 / 6.6 = 0.306818. Split by
+    residency it would differ: in-state first gives 2.025 / 4.6 x 243,800 / 333,800 = 0.321534; out-of-state first
+    (90,000 + 0.025 / 4.6 x 243,800) / 333,800 = 0.273587. Only the share is asserted."""
+    cfg, cells, base = _setup()
+    s2 = L.derive(L.baseline(cells, cfg), "s2", cfg, cells, admit_rate={"c2": 0.0, "c4": 0.0, "c3": 0.0})
+    lc = L.evaluate(cells, cfg, s2, base, "middle")
+    assert L.kpis(lc)["top_quartile_merit_share"] == pytest.approx(2.025 / 6.6, abs=1e-12)
+    assert abs(2.025 / 6.6 - 2.025 / 4.6 * 243800 / 333800) > 0.01
+    assert abs(2.025 / 6.6 - (90000 + 0.025 / 4.6 * 243800) / 333800) > 0.01
+
+
+def test_need_departure_is_a_fixed_amount():
+    """R4-07 (DECISIONS Nov 19): need.total scales with class (1,000 per enrollee on the toy); a scenario's need_total
+    departure from need.total is a fixed amount in live mode as in reproduce mode. need_total 20,000 (5,000 below
+    25,000): need = 1,000 x class - 5,000 at the Baseline class (30.6: 25,600) and at a class cut by half (c2 at rate
+    0: 18.6, need 13,600), where a changed rate (800 per enrollee) would give 24,480 and 14,880."""
+    cfg, cells, base = _setup()
+    b = L.baseline(cells, cfg)
+    for rates, cls in (({}, 30.6), ({"c2": 0.0}, 18.6)):
+        s = L.derive(b, "n", cfg, cells, need_total=20000.0, admit_rate=rates or None)
+        lc = L.evaluate(cells, cfg, s, base, "middle")
+        m = L.money(lc)
+        assert lc.need_rate == 1000.0 and lc.need_lump == -5000.0
+        assert float(lc.enrolled.sum()) == pytest.approx(cls, abs=1e-9)
+        assert m["need"] == pytest.approx(1000.0 * cls - 5000.0, abs=1e-6)
+        assert m["ntr_y1"] == pytest.approx(m["gross_y1"] - m["merit"] - m["need"] - m["specialty"], abs=1e-6)
+        assert risk.ntr(lc)["ntr_mean"] == pytest.approx(m["ntr_y1"], abs=1e-6)
+
+
 def test_top_quartile_merit_share():
     """[Phase 4] Class 30.6, so the top quartile is 7.65 enrollees. Positions, highest first: 170 hi (c1 4.6 at 53,000 and
     c5 2.0 at 45,000: 6.6 enrolled, 333,800), 170 lo (c3 3.0 at 30,000: 90,000), 161 hi, 161 lo, unscored blank (c6,

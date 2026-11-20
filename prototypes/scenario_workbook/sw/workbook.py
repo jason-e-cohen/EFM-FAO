@@ -28,6 +28,7 @@ from . import CASES
 from . import contract as K
 from . import labels
 from . import ledger as L
+from . import lo as LO
 from . import narrative as NAR
 from . import response
 from . import risk
@@ -46,6 +47,9 @@ PROBE_EXPR = "0.35/0.14"
 REPRO_SHEETS = ["README", "Inputs", "History", "Response", "Levers", "Ledger_Low", "Ledger_Middle", "Ledger_High",
                 "Summary", "Distribution", "Checks", "Reproduce", "RunLog"]
 MODE_LABEL = {"live": "Live", "reproduce": "Reproduce"}
+LABEL_CHARS = 62        # characters per line of a column-A Summary label (46 wide, Arial 9) [R4-02]
+SCEN_CHARS = 17.5       # characters per line of a scenario column (14 wide, Arial 9)
+POOL_PARTS_TITLE = "Working values: pool strip split at m = 1 (not printed)"        # R4-01
 LEVER_FIELDS = [  # (field, label, kind): kind num, int01, text, opt (optional number)
     ("description", "description", "text"), ("plan_year", "plan_year (label)", "num"),
     ("tuition_increase_pct", "tuition_increase_pct", "num"),
@@ -145,6 +149,8 @@ class Book:
         self.targets = risk.median_targets(self.cfg)
         self.ptargets = risk.pct_targets(self.cfg)               # [v0.6.3, BM-1]
         self.score_ts = L.score_thresholds(self.cfg)
+        self.hold = K.hold(self.cfg)                               # R4-06
+        self.row_h = {}                                           # Summary row heights (max of every request)
         self.inp = {}
         self.inp_list = {}
 
@@ -163,13 +169,14 @@ class Book:
             "hlt": F(dict(base, bold=True, valign="top")),
             "sec": F(dict(base, bold=True, font_size=11, bg_color="#E8E8E8")),
             "t": F(base), "tw": F(dict(base, text_wrap=True, valign="top")),
+            "lw": F(dict(base, text_wrap=True)),                 # wrapped label, bottom-aligned with its row [R4-02]
             "note": F(dict(base, italic=True, font_color="#555555")),
             "notew": F(dict(base, italic=True, font_color="#555555", text_wrap=True, valign="top")),
             "data": F(dict(base, num_format="#,##0")),           # counts [v0.6.2, P2-05]
             "datat": F(base),
         }
         nums = {"num": "General", "usd": "$#,##0", "n1": "#,##0.0", "n0": "#,##0", "r3": "0.000", "r4": "0.0000",
-                "pct1": "0.0%", "prob": "0%", "int": "0", "text": "@", "pp": "0.0"}
+                "pct1": "0.0%", "prob": "0%", "int": "0", "text": "@", "pp": "0.0", "sci": "0.00E+00"}
         for k, nf in nums.items():
             self.f[k] = F(dict(base, num_format=nf))
             self.f["in_" + k] = F(dict(inp, num_format=nf))
@@ -311,7 +318,7 @@ class Book:
         return rng(CASE_SHEET[k], self.r0l, c, self.r0l + self.n - 1, c)
 
     def LH(self, k, s, key):
-        if key == "need_lump":                       # reproduce builds only (spec section 0A item B5)
+        if key == "need_lump":                       # the need departure (spec section 0A item B5; R4-07)
             return ref(CASE_SHEET[k], 5, self.lblock[(k, s)]["in_seg"] + 3)
         row = {"name": 2, "T": 3, "p": 4, "need_rate": 5, "seg": 6}[key]
         return ref(CASE_SHEET[k], row, self.lblock[(k, s)]["in_seg"] + 1)
@@ -362,8 +369,11 @@ class Book:
             ws.protect("", {"format_columns": True, "format_rows": True})
             ws.set_landscape()
             ws.set_paper(1)
-        for name in ("Summary", "Inputs", "Checks", "README", "RunLog"):
+        for name in ("Inputs", "Checks", "README", "RunLog"):
             self.ws[name].fit_to_pages(1, 0)
+        # R4-01, R4-02: Summary prints at a readable scale, wide tables continuing across pages with columns A and B
+        # repeated (the PDF render, sw/lo.py, sets each section separately)
+        self.ws["Summary"].set_print_scale(70)
 
     # ------------------------------------------------------------------------------------------------------------
     # Inputs
@@ -620,12 +630,19 @@ class Book:
 
     def tuition_factor_x(self, year):
         """Excel factor tuition(year) / tuition_base, as config.plan_increase_pct computes it [v0.6.3, BM-2]: the
-        increases compound; a year with tuition_by_year_usd resets the factor to tuition_by_year_usd / tuition_base."""
+        increases compound; a year with tuition_by_year_usd resets the factor to tuition_by_year_usd / tuition_base.
+        R4-14: a year with no row on Inputs (no increase and no dollar figure in the config) breaks the chain; a later
+        dollar figure restarts it, and clearing that figure gives a blank factor (an error downstream, never a silent
+        1)."""
         f = "1"
         for y in range(self.cfg["cycle"]["base_cycle"] + 1, year + 1):
+            if y not in self.tyears:
+                f = None
+                continue
             i = self.tyears.index(y)
             inc, usd = self.inp_list["tuition_increase_pct"][i], self.inp_list["tuition_by_year_usd"][i]
-            f = f'IF({usd}="",{f}*(1+{inc}/100),{usd}/in_tuition_base)'
+            prev = '""' if f is None else f"{f}*(1+{inc}/100)"
+            f = f'IF({usd}="",{prev},{usd}/in_tuition_base)'
         return f
 
     # ------------------------------------------------------------------------------------------------------------
@@ -1208,14 +1225,14 @@ class Book:
         self.fx(sheet, 4, c0 + 1, LVf("tuition_increase_pct"), s.tuition_increase_pct, "pp")
         self.txt(sheet, 5, c0, "need rate")
         nt = LVf("need_total")
-        nrf = f'IF({nt}="",in_need_total,{nt})/in_need_reference_class'
+        # R4-07: need.total scales with class (the rate per enrollee); a scenario's need_total departure from need.total
+        # is a fixed amount, in live and reproduce modes
+        nrf = "in_need_total/in_need_reference_class"
         if self.repro:
-            # spec section 0A item B5: reproduce mode takes the need rate rounded to whole dollars per enrollee and a
-            # scenario's need_total departure from need.total as a fixed amount (the fixture's need rule)
+            # spec section 0A item B5: reproduce mode takes the need rate rounded to whole dollars per enrollee
             nrf = f'IF(in_mode="Reproduce",ROUND(in_need_total/in_need_reference_class,0),{nrf})'
-            self.txt(sheet, 5, c0 + 2, "need departure")
-            self.fx(sheet, 5, c0 + 3, f'IF(in_mode="Reproduce",IF({nt}="",0,{nt}-in_need_total),0)', lc.need_lump,
-                    "usd")
+        self.txt(sheet, 5, c0 + 2, "need departure")
+        self.fx(sheet, 5, c0 + 3, f'IF({nt}="",0,{nt}-in_need_total)', lc.need_lump, "usd")
         self.fx(sheet, 5, c0 + 1, nrf, lc.need_rate, "usd")
         self.txt(sheet, 6, c0, "segment")
         sg = LVf("segment")
@@ -1435,10 +1452,10 @@ class Book:
         d["T"], d["NR"] = self.LH(k, s, "T"), self.LH(k, s, "need_rate")
         d["SPEC"], d["CAP"], d["TGT"] = self.LV(s, "specialty_usd"), self.LV(s, "class_cap"), self.LV(s, "class_target")
         d["GOAL"] = self.LV(s, "segment_goal")
-        # K: the constant subtracted from sum w e for ntr_y1: specialty, plus (reproduce builds) the need departure
-        # (spec section 0A item B5). NL: that departure (0 in live builds).
-        d["NL"] = self.LH(k, s, "need_lump") if self.repro else None
-        d["K"] = f"({d['SPEC']}+{d['NL']})" if self.repro else d["SPEC"]
+        # K: the constant subtracted from sum w e for ntr_y1: specialty plus the need departure (spec section 0A item
+        # B5; R4-07, live and reproduce). NL: that departure.
+        d["NL"] = self.LH(k, s, "need_lump")
+        d["K"] = f"({d['SPEC']}+{d['NL']})"
         return d
 
     def fm(self, name, k, s, t_index=None):
@@ -1451,7 +1468,7 @@ class Book:
         SDV = f"SQRT(MAX({V},1E-300))"
         cls = f"SUM({E})"
         merit = f"SUM({d['spend']})"
-        need = f"{d['NR']}*{cls}" + (f"+{d['NL']}" if self.repro else "")
+        need = f"{d['NR']}*{cls}+{d['NL']}"
         gross = f"{cls}*{d['T']}"
         aid = f"({merit}+{d['NR']}*{cls}+{d['K']})"
         SW = f"SUMPRODUCT({d['w']},{MU})"
@@ -1497,7 +1514,8 @@ class Book:
                  f"MAX(SQRT(MAX({VN},0)),1E-300)))")
             return f if name == "p_ntr_y1_ge_target" else f'IF(in_ntr_goal_basis="all_jd",{f},"")'
         if name == "jd_ntr":
-            return f'IF(in_ntr_goal_basis="all_jd",in_continuing_ntr_usd+{gross}-{aid},"")'
+            return (f'IF(in_ntr_goal_basis="all_jd",in_continuing_ntr_usd+{gross}-{aid},'
+                    f'{xs(labels.NOT_USED_ENTERING)})')
         if name == "ntr_lo90":
             return f"{SW}-{d['K']}-1.645*SQRT(MAX({VN},0))"
         if name == "ntr_hi90":
@@ -1661,6 +1679,8 @@ class Book:
             ws.set_column(2, 40, 14)
         else:
             self.cpos = {}
+            self.pool_parts = {}
+        self.sum_maxc = 1 + max(len(self.S), 8)
         S = [s.name for s in self.S]
         self.sw_head()
         self.sw_selected(S)
@@ -1675,17 +1695,25 @@ class Book:
         self.sw_narratives(S)
         self.sw_labels()
         self.sw_contract(S)
+        r_print, c_print = self.sr, self.sum_maxc   # R4-01: the working values below are outside the print area
+        self.sw_pool_parts(S)
         if not dry:
-            self.ws["Summary"].freeze_panes(4, 2)
+            ws = self.ws["Summary"]
+            ws.freeze_panes(4, 2)
+            ws.print_area(0, 0, r_print - 1, c_print)
+            ws.repeat_columns(0, 1)
+            self.summary_print_rows = r_print
 
     # writing helpers that respect the dry pass
     def s_txt(self, r, c, t, fmt="t"):
         if not self.dry:
             self.txt("Summary", r, c, t, fmt)
+            self.sum_maxc = max(self.sum_maxc, c)
 
     def s_fx(self, r, c, f, v, fmt="num"):
         if not self.dry:
             self.fx("Summary", r, c, f, v, fmt)
+            self.sum_maxc = max(self.sum_maxc, c)
 
     def s_name(self, nm, r0, c0, r1, c1):
         if not self.dry:
@@ -1762,6 +1790,10 @@ class Book:
                                   f"{self.targets[0][1]:g}", "p_median_t", "prob", 0)]:
             self.s_txt(self.sr, 0, lab)
             self.s_fx(self.sr, 1, "in_case_selector", "Middle", "t")
+            if self._held(nm, ti):
+                self.s_hold_cells(self.sr, 2, len(S))
+                self.sr += 1
+                continue
             for j, s in enumerate(S):
                 if self.dry:
                     continue
@@ -1770,24 +1802,62 @@ class Book:
                 self.s_fx(self.sr, 2 + j, f"INDEX({rr},{sel})", self.pv(nm, "middle", s, ti), fmt)
             self.sr += 1
 
-    def _row(self, S, label, unit, gen, fmt):
-        """One Summary row across scenarios. gen(s) -> (formula, value)."""
-        self.s_txt(self.sr, 0, label)
+    def s_height(self, r, h):
+        """Summary row height: the largest requested (R4-02)."""
+        if self.dry:
+            return
+        self.row_h[r] = max(self.row_h.get(r, 0), h)
+        self.ws["Summary"].set_row(r, self.row_h[r])
+
+    def s_label(self, r, label, fmt="lw"):
+        """Column-A label, wrapped within column A (46 wide) with a row height that fits it (R4-02)."""
+        self.s_txt(r, 0, label, fmt)
+        if label and len(label) > LABEL_CHARS:
+            self.s_height(r, 12 * math.ceil(len(label) / LABEL_CHARS))
+
+    def s_hold_cells(self, r, c0, n, merge=True):
+        """R4-06: labels.HOLD_POSITION in place of the figures in columns c0 .. c0 + n - 1: one merged cell for a
+        display row, or every cell (merge=False) for a contract range, wrapped."""
+        if self.dry or n <= 0:
+            return
+        ws = self.ws["Summary"]
+        if merge and n > 1:
+            ws.merge_range(r, c0, r, c0 + n - 1, labels.HOLD_POSITION, self.f["tw"])
+            per_line = int(SCEN_CHARS * n)
+        else:
+            for c in range(c0, c0 + n):
+                ws.write_string(r, c, labels.HOLD_POSITION, self.f["tw"])
+            per_line = int(SCEN_CHARS)
+        self.s_height(r, 12 * math.ceil(len(labels.HOLD_POSITION) * 1.1 / per_line))
+
+    def _row(self, S, label, unit, gen, fmt, held=False, merge=True):
+        """One Summary row across scenarios. gen(s) -> (formula, value). held (R4-06): the scenario columns carry
+        labels.HOLD_POSITION instead of the figures (merged unless the row is a contract range)."""
+        self.s_label(self.sr, label)
         self.s_txt(self.sr, 1, unit)
-        for j, s in enumerate(S):
-            f, v = gen(s)
-            self.s_fx(self.sr, 2 + j, f, v, fmt)
+        if held:
+            self.s_hold_cells(self.sr, 2, len(S), merge)
+        else:
+            for j, s in enumerate(S):
+                f, v = gen(s)
+                self.s_fx(self.sr, 2 + j, f, v, fmt)
         self.sr += 1
+
+    def _held(self, name, t=None):
+        """R4-06: is the figure held (t: the index into score_ts for the share and count at or above t)."""
+        tv = self.score_ts[t] if (name in ("share_at_or_above_t", "enrolled_at_or_above") and t is not None) else None
+        return K.is_held(self.cfg, name, tv)
 
     def _cref_row(self, S, label, unit, name, fmt, k="middle", t=None):
         def gen(s):
             if self.dry:
                 return "0", 0
             return self.cref(name, k, s, t), self.pv(name, k, s, t)
-        self._row(S, label, unit, gen, fmt)
+        self._row(S, label, unit, gen, fmt, held=self._held(name, t))
 
     def _direct_row(self, S, label, unit, name, fmt, k="middle", t=None):
-        self._row(S, label, unit, lambda s: (self.fm(name, k, s, t), self.pv(name, k, s, t)), fmt)
+        self._row(S, label, unit, lambda s: (self.fm(name, k, s, t), self.pv(name, k, s, t)), fmt,
+                  held=self._held(name, t))
 
     def sw_main(self, S):
         cfg = self.cfg
@@ -1825,6 +1895,9 @@ class Book:
         self._direct_row(S, "Enrolled with GPA class hi", "students", "enrolled_gpa_hi", "n1")
         self._cref_row(S, "Unscored enrolled (outside the score margins)", "students", "unscored_count", "n1")
         self._direct_row(S, "Blank-GPA enrolled (outside the GPA margin)", "students", "gpa_blank_count", "n1")
+        self.s_note(f"Tie rule (median and percentile targets): a target {labels.PCT_TIE_RULE}. The median margin is "
+                    "the enrolled at or above t minus those below (one swap moves it by 2); the percentile rows below "
+                    "count swaps.")
         for ti, (m, t) in enumerate(self.targets):
             nm = "GPA" if m == "gpa" else meas
             self._cref_row(S, f"Median margin, {nm} {t:g}", "students", "margin_t", "n1", t=ti)
@@ -1844,16 +1917,34 @@ class Book:
         self._cref_row(S, "ntr_y1 (first-year net tuition revenue, entering class)", "USD", "ntr_y1", "usd")
         self._direct_row(S, f"ntr_y1, {labels.RANGE_OUTCOME}: low", "USD", "ntr_lo90", "usd")
         self._direct_row(S, f"ntr_y1, {labels.RANGE_OUTCOME}: high", "USD", "ntr_hi90", "usd")
-        self._cref_row(S, "P(ntr_y1 at or above ntr_target; under all_jd the effective entering target)",
-                       "probability", "p_ntr_y1_ge_target", "prob")
-        # [v0.6.3, BM-4] JD revenue goal (blank under entering_y1)
+        # R4-12: the target itself and the effective entering target the probability reads
+        tgt, eff = cfg.get("ntr_target"), ntr_target_effective(cfg)
+        self._row(S, "ntr_target (Inputs; under all_jd the total JD goal)", "USD",
+                  lambda s: ('IF(in_ntr_target="","none",in_ntr_target)', "none" if tgt is None else tgt), "usd")
+        self._row(S, "Effective entering target (ntr_target, less continuing revenue under all_jd)", "USD",
+                  lambda s: ('IF(in_ntr_target_eff="","none",in_ntr_target_eff)', "none" if eff is None else eff),
+                  "usd")
+        self._cref_row(S, "P(ntr_y1 at or above the effective entering target)", "probability",
+                       "p_ntr_y1_ge_target", "prob")
+        # [v0.6.3, BM-4] JD revenue goal; R4-12: "not used (entering_y1)" under entering_y1
         all_jd = cfg.get("ntr_goal_basis") == "all_jd"
+        NU = xs(labels.NOT_USED_ENTERING)
         self._row(S, f"Continuing-student net tuition, all_jd ({labels.CONTINUING_LABEL})", "USD",
-                  lambda s: ('IF(in_ntr_goal_basis="all_jd",in_continuing_ntr_usd,"")',
-                             cfg.get("continuing_ntr_usd") if all_jd else None), "usd")
-        self._direct_row(S, "Projected JD net tuition = continuing (client-supplied) + ntr_y1", "USD", "jd_ntr", "usd")
-        self._cref_row(S, "P(continuing + ntr_y1 at or above ntr_target), all_jd", "probability", "p_jd_ntr_ge_goal",
-                       "prob")
+                  lambda s: (f'IF(in_ntr_goal_basis="all_jd",in_continuing_ntr_usd,{NU})',
+                             cfg.get("continuing_ntr_usd") if all_jd else labels.NOT_USED_ENTERING), "usd")
+
+        def jd(s):
+            v = self.pv("jd_ntr", "middle", s)
+            return self.fm("jd_ntr", "middle", s), (v if all_jd else labels.NOT_USED_ENTERING)
+        self._row(S, "Projected JD net tuition = continuing (client-supplied) + ntr_y1", "USD", jd, "usd")
+
+        def pjd(s):
+            if self.dry:
+                return "0", 0
+            v = self.pv("p_jd_ntr_ge_goal", "middle", s)
+            return (f'IF(in_ntr_goal_basis="all_jd",{self.cref("p_jd_ntr_ge_goal", "middle", s)},{NU})',
+                    v if all_jd else labels.NOT_USED_ENTERING)
+        self._row(S, "P(continuing + ntr_y1 at or above ntr_target), all_jd", "probability", pjd, "prob")
         self._cref_row(S, labels.DISCOUNT_LABEL, "ratio", "discount_entering_y1", "pct1")
         self._cref_row(S, "Average aid per enrollee", "USD", "avg_aid", "usd")
         base0 = self.S[0].name
@@ -1883,11 +1974,14 @@ class Book:
         the rho 0.5 line and the approximation flag; then the spread bands for q = 0.25 and 0.75."""
         cfg = self.cfg
         meas = cfg["score"]["measure"]
-        self.s_note(f"Percentile targets (score.percentile_targets; {labels.PCT_MARGIN_UNIT}). The q = 0.5 rows "
-                    f"repeat the median at half its margin. {labels.GPA_PCT_NOTE}")
+        # R4-03: one margin per event; q = 0.5 targets are the median rows above and are left out here
+        self.s_note(f"Percentile targets other than the median (score.percentile_targets; q = 0.5 targets are the "
+                    f"median rows above). Margin in swaps ({labels.PCT_MARGIN_UNIT}). {labels.GPA_PCT_NOTE}")
         for ti, (q, t) in enumerate(self.ptargets):
+            if q == 0.5:
+                continue
             lab = f"{ordinal(q)} percentile (q {q:g}) at or above {meas} {t:g}"
-            self._cref_row(S, f"{lab}: margin (swaps at the same class size)", "students", "margin_q_t", "n1", t=ti)
+            self._cref_row(S, f"{lab}: margin ({labels.PCT_MARGIN_SWAPS})", "students", "margin_q_t", "n1", t=ti)
             self._cref_row(S, f"P({lab})", "probability", "p_pct_q_t", "prob", t=ti)
             self._cref_row(S, f"P({lab}), rho 0.5: {labels.RHO_SENSITIVITY}", "probability", "p_pct_q_t_rho05",
                            "prob", t=ti)
@@ -1904,7 +1998,7 @@ class Book:
                                  for b in self.inp_list["score_bands"])
                 return f'IF({N}<=0,"",IF(MAX({terms})<0,"",MAX({terms})))', self.vals["pct_band"][s][q]
             self._row(S, f"Spread: {ordinal(q)} percentile band, lower bound ({labels.BAND_NOT_SCORE_LABEL})",
-                      meas, gen, "num")
+                      meas, gen, "num", held=self._held("pct_band_q"), merge=False)
         self.s_name("SUM_PCT_BAND_Q", r0, 2, self.sr - 1, 2 + len(S) - 1)
         lows = sorted(float(b) for b in cfg["score"]["bands"])
         for qi, q in enumerate(risk.SPREAD_QS):
@@ -1917,7 +2011,8 @@ class Book:
                 f = (f'IF({c}="","",IF({k}=1,{c}&"+",IF(({c}={lo0:g})*({c}<=0)=1,"below "&INDEX(in_score_bands,{k}-1),'
                      f'{c}&" to below "&INDEX(in_score_bands,{k}-1))))')
                 return f, v
-            self._row(S, f"Spread: {ordinal(q)} percentile band ({labels.BAND_NOT_SCORE_LABEL})", "", gen_t, "t")
+            self._row(S, f"Spread: {ordinal(q)} percentile band ({labels.BAND_NOT_SCORE_LABEL})", "", gen_t, "t",
+                      held=self._held("pct_band_q"))
 
     def sw_lowhigh(self, S):
         self.s_sec(f"{labels.RANGE_CASES} ({labels.RANGE_CASES_NOTE})", self.lab_note())
@@ -1927,11 +2022,16 @@ class Book:
         for ti, (m, t) in enumerate(self.targets):
             rows.append((f"P(median holds), {'GPA' if m == 'gpa' else meas} {t:g}", "p_median_t", "prob", ti))
         for ti, (q, t) in enumerate(self.ptargets):                       # [v0.6.3, BM-1]
-            rows.append((f"P({ordinal(q)} percentile at or above {meas} {t:g})", "p_pct_q_t", "prob", ti))
+            if q != 0.5:                                                   # R4-03: q = 0.5 is the median row
+                rows.append((f"P({ordinal(q)} percentile at or above {meas} {t:g})", "p_pct_q_t", "prob", ti))
         for lab, nm, fmt, ti in rows:
             for k in ("low", "high"):
                 self.s_txt(self.sr, 0, lab)
                 self.s_txt(self.sr, 1, CASE_TITLE[k])
+                if self._held(nm, ti):
+                    self.s_hold_cells(self.sr, 2, len(S))
+                    self.sr += 1
+                    continue
                 for j, s in enumerate(S):
                     if not self.dry:
                         self.s_fx(self.sr, 2 + j, self.cref(nm, k, s, ti), self.pv(nm, k, s, ti), fmt)
@@ -2024,7 +2124,10 @@ class Book:
                   implied, "usd")
 
     def _strip_table(self, S, which, keycol_label, key_fmt, grid_refs, colheads, fmts, gen):
-        """Rows (s, grid value); gen(s, gi) -> list of (formula, value)."""
+        """Rows (s, grid value); gen(s, gi) -> list of (formula, value). R4-06: under hold, the median and percentile
+        columns (contract.held_strip_col) carry labels.HOLD_POSITION in every cell."""
+        cols = K.strip_columns(self.cfg)[which]
+        held = {i for i, c in enumerate(cols) if self.hold and K.held_strip_col(c)}
         self.s_txt(self.sr, 0, "scenario", "h")
         self.s_txt(self.sr, 1, keycol_label, "h")
         for c, h in enumerate(colheads):
@@ -2041,7 +2144,10 @@ class Book:
                 if not self.dry:
                     self.s_fx(self.sr, 1, gref, rows[idx][1], key_fmt)
                     for c, (f, v) in enumerate(gen(s, gi)):
-                        self.s_fx(self.sr, 2 + c, f, v, fmts[c])
+                        if c in held:
+                            self.s_hold_cells(self.sr, 2 + c, 1, merge=False)
+                        else:
+                            self.s_fx(self.sr, 2 + c, f, v, fmts[c])
                     expect = rows[idx][2]
                     assert len(expect) == len(colheads)
                 idx += 1
@@ -2074,16 +2180,19 @@ class Book:
         self.s_name("TW_TUITION_WHATIF", r0, 2, r1, 2 + len(cols) - 1)
         # [v0.6.3, BM-4] under all_jd the what-if shows ntr_y1 only, with continuing revenue held fixed
         self.s_txt(self.sr, 0, "Continuing revenue (all_jd)")
-        self.s_fx(self.sr, 2, f'IF(in_ntr_goal_basis="all_jd",{xs(labels.CONTINUING_HELD)},"")',
-                  labels.CONTINUING_HELD if cfg.get("ntr_goal_basis") == "all_jd" else "", "t")
-        self.sr += 2
-        # the two net-tuition lines
+        self.s_fx(self.sr, 2, f'IF(in_ntr_goal_basis="all_jd",{xs(labels.CONTINUING_HELD)},'
+                              f'{xs(labels.NOT_USED_ENTERING)})',
+                  labels.CONTINUING_HELD if cfg.get("ntr_goal_basis") == "all_jd" else labels.NOT_USED_ENTERING, "t")
+        self.sr += 1
+        # the two net-tuition lines (R4-02: a section of their own, so a continued page repeats their own header)
+        self.s_sec("Net-tuition lines (Middle case; arithmetic at constant award)", self.lab_note(shock=False))
         self.s_txt(self.sr, 0, "scenario", "h")
-        for c, h in enumerate(["fixed-dollar line (T_s - T_base)", "example award A", "scaled line p (T_base - A)",
-                               "Awards fixed in dollars", "Awards scaled with tuition"]):
+        for c, h in enumerate(["fixed-dollar line (T_s - T_base)", "example award A", "scaled line p (T_base - A)"]):
             self.s_txt(self.sr, 1 + c, h, "h")
+        self.s_height(self.sr, 36)
         self.sr += 1
         r0 = self.sr
+        line_txt = []
         for s in S:
             self.s_txt(self.sr, 0, s)
             if not self.dry:
@@ -2103,14 +2212,27 @@ class Book:
                 self.s_fx(r, 3, f"{P}/100*(in_tuition_base-{a1(r, 2)})", tw["net_tuition_line_scaled"], "usd")
                 fixed_t = NAR.template_formula(labels.NET_TUITION_FIXED,
                                                {"diff": f'"$"&TEXT({a1(r, 1)},"#,##0")&""'})
-                self.s_fx(r, 4, fixed_t, tw["net_tuition_line_fixed_text"], "t")
                 scaled_t = NAR.template_formula(labels.NET_TUITION_SCALED, {
                     "p": f'TEXT({P},"0.0")&"%"', "x": f'"$"&TEXT({a1(r, 3)},"#,##0")',
                     "award": f'"$"&TEXT({a1(r, 2)},"#,##0")'})
-                self.s_fx(r, 5, scaled_t, tw["net_tuition_line_scaled_text"], "t")
+                line_txt.append((s, fixed_t, tw["net_tuition_line_fixed_text"], scaled_t,
+                                 tw["net_tuition_line_scaled_text"]))
             self.sr += 1
         self.s_name("TW_NET_TUITION_LINE_FIXED", r0, 1, self.sr - 1, 1)
         self.s_name("TW_NET_TUITION_LINE_SCALED", r0, 3, self.sr - 1, 3)
+        # R4-02: the two lines as sentences (each begins "Awards fixed in dollars" or "Awards scaled with tuition"),
+        # merged across columns B to the last scenario column so the text is not cut
+        last = 1 + max(len(S), 6)
+        for s in S:
+            for kind in ("fixed", "scaled"):
+                self.s_txt(self.sr, 0, s if kind == "fixed" else "")
+                if not self.dry:
+                    _, ff, fv, sf, sv = next(x for x in line_txt if x[0] == s)
+                    f, v = (ff, fv) if kind == "fixed" else (sf, sv)
+                    self.ws["Summary"].merge_range(self.sr, 1, self.sr, last, "", self.f["mergew"])
+                    self.s_fx(self.sr, 1, f, v, "mergew")
+                    self.s_height(self.sr, 24)
+                self.sr += 1
         self.s_note("Both lines are arithmetic at constant award; neither changes yield. Example award: "
                     "enrolled-weighted mean base-cycle lever award over enrollees whose lever award, before any "
                     "incentive, is below base-cycle tuition and whose cell has no full-tuition flag, zero awards "
@@ -2158,9 +2280,10 @@ class Book:
                 out.append((f"1-NORMSDIST((-0.5-({gp}-{gm}))/SQRT(MAX({vm},1E-300)))", row["median"][key]["p"]))
             return out
         r0, r1 = self._strip_table(S, "yield_strip", "shift (pts)", "pp", self.inp_list["yield_shift_grid"], heads,
-                                   fmts, gen)
+                                   fmts, gen)                     # R4-06: median columns held under hold
         self.s_name("YS_YIELD_STRIP", r0, 2, r1, 2 + len(cols) - 1)
-        self.sr += 1
+        self.s_sec("Yield strip: clip count and break-even shifts (Middle case)",
+                   self.lab_note(shock=False) + " " + labels.ASSUMPTION_LABEL + ".")
         self.s_txt(self.sr, 0, "scenario", "h")
         for c, h in enumerate(["cells where a bound would bind at the largest shift",
                                f"shift that moves the expected class to target ({labels.LINEAR_APPROX})",
@@ -2195,18 +2318,21 @@ class Book:
                    f"Every lever applied except the pool multiplier, which m replaces (the segment lift stays). Median "
                    f"at {meas} {t0:g}; P(holds) for each percentile target. Growth to date (Inputs pool_ytd_growth: "
                    f"complete applications at or above score.pool_threshold against the same week of the prior cycle; "
-                   f"{labels.POOL_YTD_LABEL}) marks the row nearest 1 + growth.")
-        self.s_txt(self.sr, 0, "Pool growth to date (pool_ytd_growth), as of, grid row nearest 1 + growth")
+                   f"{labels.POOL_YTD_LABEL}) marks the row nearest 1 + growth ({labels.POOL_YTD_TIE}). The strip "
+                   f"splits each scenario at m = 1 into a part below score.pool_threshold and a part at or above it "
+                   f"(working values at the foot of this sheet, not printed).")
+        self.s_label(self.sr, "Pool growth to date (pool_ytd_growth), as of, grid row nearest 1 + growth")
         self.s_fx(self.sr, 2, 'IF(in_pool_ytd_growth="","not set",in_pool_ytd_growth)',
                   "not set" if cfg.get("pool_ytd_growth") is None else cfg["pool_ytd_growth"], "pct1")
         self.s_fx(self.sr, 3, f'IF(in_pool_ytd_as_of="",{xs(labels.POOL_YTD_NO_DATE)},in_pool_ytd_as_of)',
                   cfg.get("pool_ytd_as_of") or labels.POOL_YTD_NO_DATE, "t")
-        # [v0.6.3, BM-6] nearest grid row: 1 + the number of midpoints between adjacent grid values below 1 + growth
-        # (the grid is ascending; a tie goes to the lower row)
+        # [v0.6.3, BM-6] nearest grid row: 1 + the number of midpoints between adjacent grid values at or below
+        # 1 + growth (the grid is ascending; R4-13: a tie goes to the upper row, within 1e-9)
         gsh, gr, gc0, _, gc1 = self.names["in_pool_grid"]
         if gc1 > gc0:
             lo_r, hi_r = rng(gsh, gr, gc0, gr, gc1 - 1), rng(gsh, gr, gc0 + 1, gr, gc1)
-            nf = f'IF(in_pool_ytd_growth="","",1+SUMPRODUCT((({lo_r}+{hi_r})/2<1+in_pool_ytd_growth)*1))'
+            nf = (f'IF(in_pool_ytd_growth="","",1+SUMPRODUCT(((({lo_r}+{hi_r})/2-(1+in_pool_ytd_growth))'
+                  f'<=0.000000001)*1))')
         else:
             nf = 'IF(in_pool_ytd_growth="","",1)'
         nearest = self.vals["strips"][S[0]]["pool_strip"]["nearest_row"] if S else None
@@ -2214,51 +2340,13 @@ class Book:
         self.pool_nearest = a1(self.sr, 4)
         self.marker_cells = [("Summary", self.sr, 2), ("Summary", self.sr, 4)]
         self.sr += 1
-        # parts at m = 1
-        pk = ["M", "V", "Gp", "Gm", "Vm", "W", "Vn"]
-        qk = [(j, x) for j in range(len(self.ptargets)) for x in ("Gp", "Gm", "Vp", "Vm")]
-        self.s_txt(self.sr, 0, "scenario: split at m = 1", "h")
-        self.s_txt(self.sr, 1, "part", "h")
-        for c, h in enumerate(pk):
-            self.s_txt(self.sr, 2 + c, h, "h")
-        for c, (j, x) in enumerate(qk):
-            q, t = self.ptargets[j]
-            self.s_txt(self.sr, 2 + len(pk) + c, f"{x} q {q:g}, t {t:g}", "h")
-        self.sr += 1
-        self.pool_parts = {}
         sd = "in_common_shock_sd"
-        for s in S:
-            d = self.g("middle", s)
-            A1 = self.LR("middle", s, "admits_pool1")
-            Y, W, U, G = d["yield"], d["w"], d["upper"], d["g0"]
-            for part, u in (("lo", 0), ("hi", 1)):
-                self.s_txt(self.sr, 0, s)
-                self.s_txt(self.sr, 1, part)
-                m = f"({U}={u})"
-                fs = {"M": f"SUMPRODUCT({m}*{A1}*{Y})", "V": f"SUMPRODUCT({m}*{A1}*{Y}*(1-{Y}))",
-                      "Gp": f"SUMPRODUCT({m}*({G}=1)*{A1}*{Y})", "Gm": f"SUMPRODUCT({m}*({G}=-1)*{A1}*{Y})",
-                      "Vm": f"SUMPRODUCT({m}*({G}<>0)*{A1}*{Y}*(1-{Y}))", "W": f"SUMPRODUCT({m}*{W}*{A1}*{Y})",
-                      "Vn": f"SUMPRODUCT({m}*{W}*{W}*{A1}*{Y}*(1-{Y}))"}
-                for c, key in enumerate(pk):
-                    v = self.vals["parts"][s][part][key] if not self.dry else 0
-                    self.s_fx(self.sr, 2 + c, fs[key], v, "usd" if key in ("W", "Vn") else "num")
-                    self.pool_parts[(s, part, key)] = a1(self.sr, 2 + c)
-                pp = self.vals["strips"][s]["pool_strip"]["pct_parts"] if not self.dry else None
-                for c, (j, x) in enumerate(qk):
-                    P_ = d[f"p{j}"]
-                    sgn = "=1" if x in ("Gp", "Vp") else "=-1"
-                    var = f"*(1-{Y})" if x in ("Vp", "Vm") else ""
-                    v = pp[self.ptargets[j]][part][x] if not self.dry else 0
-                    self.s_fx(self.sr, 2 + len(pk) + c, f"SUMPRODUCT({m}*({P_}{sgn})*{A1}*{Y}{var})", v, "num")
-                    self.pool_parts[(s, part, f"{x}{j}")] = a1(self.sr, 2 + len(pk) + c)
-                self.sr += 1
-        self.sr += 1
         cols = K.strip_columns(cfg)["pool_strip"]
         heads = ["growth (m - 1)", "expected class", "P(class above cap)", f"median margin {t0:g}",
                  f"P(median) {t0:g}", "mean ntr_y1", "ntr_y1 SD"]
         heads += [f"P({ordinal(q)} percentile at or above {t:g})" for q, t in self.ptargets]
         heads += ["growth to date"]
-        fmts = ["pct1", "n1", "prob", "n1", "prob", "usd", "usd"] + ["prob"] * len(self.ptargets) + ["t"]
+        fmts = ["pct1", "n1", "prob", "n1", "prob", "usd", "usd"] + ["prob"] * len(self.ptargets) + ["tw"]
         marker_txt = (f'"growth to date ("&IF(in_pool_ytd_as_of="",{xs(labels.POOL_YTD_NO_DATE)},in_pool_ytd_as_of)'
                       f'&") is about here"')
         mcol = 2 + len(cols) - 1
@@ -2298,33 +2386,95 @@ class Book:
         r0, r1 = self._strip_table(S, "pool_strip", "pool multiplier m", "num", self.inp_list["pool_grid"], heads,
                                    fmts, gen)
         self.s_name("PS_POOL_STRIP", r0, 2, r1, 2 + len(cols) - 1)
-        # [v0.6.3, BM-6] break-even pool multipliers (expectations, not probabilities)
-        self.sr += 1
+        # [v0.6.3, BM-6] break-even pool multipliers (expectations, not probabilities); R4-04: a note in place of a
+        # number when the break-even is not a pool size on the grid (strip.breakeven_m)
+        self.s_sec("Break-even pool multipliers (Middle case)", self.lab_note(shock=False))
         self.s_note(labels.POOL_BREAKEVEN_LABEL[0].upper() + labels.POOL_BREAKEVEN_LABEL[1:] + ". m_class = (class "
-                    "target - M_lo) / M_hi; m_q = -E[M_q]_lo / E[M_q]_hi (blank when the hi part is zero).")
+                    "target - M_lo) / M_hi; m_q = -E[M_q]_lo / E[M_q]_hi. In place of a number: "
+                    f"'{labels.POOL_BE_ANY}' when the target holds with no growth in the top pool at all; "
+                    f"'{labels.POOL_BE_NOT_REACHED}' when growth does not bring it to the target; "
+                    f"'{labels.POOL_BE_ABOVE_GRID}' or '{labels.POOL_BE_BELOW_GRID}' when the multiplier lies outside "
+                    "risk.pool_grid.")
         self.s_txt(self.sr, 0, "scenario", "h")
         self.s_txt(self.sr, 1, "break-even pool multiplier", "h")
         self.s_txt(self.sr, 2, "expected class meets the target", "h")
         for j, (q, t) in enumerate(self.ptargets):
             self.s_txt(self.sr, 3 + j, f"expected margin zero: {ordinal(q)} percentile at {t:g}", "h")
-        if not self.dry:
-            self.ws["Summary"].set_row(self.sr, 36)
+        self.s_height(self.sr, 48)
         self.sr += 1
         r0 = self.sr
+        ANY, NOT = xs(labels.POOL_BE_ANY), xs(labels.POOL_BE_NOT_REACHED)
+        ABV, BLW = xs(labels.POOL_BE_ABOVE_GRID), xs(labels.POOL_BE_BELOW_GRID)
+
+        def be_x(elo, ehi):
+            """strip.breakeven_m in Excel."""
+            m = f"(-{elo}/{ehi})"
+            return (f"IF({ehi}=0,IF({elo}>=0,{ANY},{NOT}),IF({m}<=0,IF({ehi}>0,{ANY},{NOT}),"
+                    f"IF({m}>MAX(in_pool_grid),{ABV},IF({m}<MIN(in_pool_grid),{BLW},{m}))))")
         for s in S:
             self.s_txt(self.sr, 0, s)
             if not self.dry:
                 P = lambda part, key: self.pool_parts[(s, part, key)]  # noqa: E731
                 be = self.vals["pool_be"][s]
-                self.s_fx(self.sr, 2, f'IF({P("hi", "M")}<>0,({self.LV(s, "class_target")}-{P("lo", "M")})/'
-                                      f'{P("hi", "M")},"")', be[0], "r3")
+                self.s_fx(self.sr, 2, be_x(f"({P('lo', 'M')}-{self.LV(s, 'class_target')})", P("hi", "M")), be[0],
+                          "r3")
                 for j in range(len(self.ptargets)):
+                    if self.hold:                                                   # R4-06
+                        self.s_hold_cells(self.sr, 3 + j, 1, merge=False)
+                        continue
                     q = self.inp_list["pct_q"][j]
                     elo = f"({q}*{P('lo', f'Gp{j}')}-(1-{q})*{P('lo', f'Gm{j}')})"
                     ehi = f"({q}*{P('hi', f'Gp{j}')}-(1-{q})*{P('hi', f'Gm{j}')})"
-                    self.s_fx(self.sr, 3 + j, f'IF({ehi}<>0,-{elo}/{ehi},"")', be[1 + j], "r3")
+                    self.s_fx(self.sr, 3 + j, be_x(elo, ehi), be[1 + j], "r3")
             self.sr += 1
         self.s_name("PS_POOL_BREAKEVEN_M", r0, 2, self.sr - 1, 2 + len(self.ptargets))
+
+    def sw_pool_parts(self, S):
+        """R4-01: the pool strip's split at m = 1 (lo part below score.pool_threshold, hi part at or above), working
+        values the strip and the break-evens read. Last on Summary, outside its print area and the PDF render."""
+        self.s_sec(POOL_PARTS_TITLE, self.lab_note() + " Working values for the pool strip: each scenario's Ledger "
+                   "(Middle case) at pool multiplier 1, split into the part below score.pool_threshold (lo) and the "
+                   "part at or above it (hi). M expected class, V binomial variance, Gp and Gm expected enrolled at "
+                   "or above and below the first median threshold, Vm their variance, W expected sum of (tuition - "
+                   "award - need rate), Vn its variance; then Gp, Gm, Vp and Vm for each percentile target.")
+        self.pool_parts_row = self.sr
+        pk = ["M", "V", "Gp", "Gm", "Vm", "W", "Vn"]
+        pfmt = {"M": "n1", "V": "n1", "Gp": "n1", "Gm": "n1", "Vm": "n1", "W": "usd", "Vn": "sci"}
+        qk = [(j, x) for j in range(len(self.ptargets)) for x in ("Gp", "Gm", "Vp", "Vm")]
+        self.s_txt(self.sr, 0, "scenario: split at m = 1", "h")
+        self.s_txt(self.sr, 1, "part", "h")
+        for c, h in enumerate(pk):
+            self.s_txt(self.sr, 2 + c, h, "h")
+        for c, (j, x) in enumerate(qk):
+            q, t = self.ptargets[j]
+            self.s_txt(self.sr, 2 + len(pk) + c, f"{x} q {q:g}, t {t:g}", "h")
+        self.s_height(self.sr, 36)
+        self.sr += 1
+        for s in S:
+            d = self.g("middle", s)
+            A1 = self.LR("middle", s, "admits_pool1")
+            Y, W, U, G = d["yield"], d["w"], d["upper"], d["g0"]
+            for part, u in (("lo", 0), ("hi", 1)):
+                self.s_txt(self.sr, 0, s)
+                self.s_txt(self.sr, 1, part)
+                m = f"({U}={u})"
+                fs = {"M": f"SUMPRODUCT({m}*{A1}*{Y})", "V": f"SUMPRODUCT({m}*{A1}*{Y}*(1-{Y}))",
+                      "Gp": f"SUMPRODUCT({m}*({G}=1)*{A1}*{Y})", "Gm": f"SUMPRODUCT({m}*({G}=-1)*{A1}*{Y})",
+                      "Vm": f"SUMPRODUCT({m}*({G}<>0)*{A1}*{Y}*(1-{Y}))", "W": f"SUMPRODUCT({m}*{W}*{A1}*{Y})",
+                      "Vn": f"SUMPRODUCT({m}*{W}*{W}*{A1}*{Y}*(1-{Y}))"}
+                for c, key in enumerate(pk):
+                    v = self.vals["parts"][s][part][key] if not self.dry else 0
+                    self.s_fx(self.sr, 2 + c, fs[key], v, pfmt[key])
+                    self.pool_parts[(s, part, key)] = a1(self.sr, 2 + c)
+                pp = self.vals["strips"][s]["pool_strip"]["pct_parts"] if not self.dry else None
+                for c, (j, x) in enumerate(qk):
+                    P_ = d[f"p{j}"]
+                    sgn = "=1" if x in ("Gp", "Vp") else "=-1"
+                    var = f"*(1-{Y})" if x in ("Vp", "Vm") else ""
+                    v = pp[self.ptargets[j]][part][x] if not self.dry else 0
+                    self.s_fx(self.sr, 2 + len(pk) + c, f"SUMPRODUCT({m}*({P_}{sgn})*{A1}*{Y}{var})", v, "n1")
+                    self.pool_parts[(s, part, f"{x}{j}")] = a1(self.sr, 2 + len(pk) + c)
+                self.sr += 1
 
     def sw_class_table(self, S):
         cfg = self.cfg
@@ -2345,7 +2495,7 @@ class Book:
             nm = "GPA" if m == "gpa" else meas
             heads += [f"margin {nm} {t:g}", f"P(median) {nm} {t:g}"]
             fmts += ["n1", "prob"]
-        for q, t in self.ptargets:                                                    # [v0.6.3, BM-1]
+        for _, (q, t) in K.ct_ptargets(cfg):                       # [v0.6.3, BM-1]; R4-03: q = 0.5 left out
             heads += [f"margin {ordinal(q)} pct {t:g} (swaps)", f"P({ordinal(q)} pct at or above {t:g})"]
             fmts += ["n1", "prob"]
         heads += ["ntr_y1", labels.DISCOUNT_LABEL, "segment enrolled", "lowest band admitted"]
@@ -2354,7 +2504,7 @@ class Book:
         heads += [f"admits cut, {b if b == 'unscored' else format(b, 'g')}" for b in bands]
         fmts += ["n1"] * len(bands)
         heads += ["status"]
-        fmts += ["t"]
+        fmts += ["tw"]
         sd, rho = "in_common_shock_sd", "in_shock_corr"
         NS = xs(labels.NO_SEGMENT_CELLS)
         ct_rows = {}
@@ -2395,7 +2545,7 @@ class Book:
                 out.append((wrap(f"SUMPRODUCT({G},{AN},{Y})"), row_vals[ci]))
                 out.append((wrap(f"1-NORMSDIST((-0.5-({gp}-{gm}))/SQRT(MAX({vm},1E-300)))"), row_vals[ci + 1]))
                 ci += 2
-            for tj in range(len(self.ptargets)):
+            for tj, _ in K.ct_ptargets(cfg):
                 Pq = d[f"p{tj}"]
                 q, cr = self.inp_list["pct_q"][tj], self.inp_list["pct_corr"][tj]
                 gp = f"SUMPRODUCT(({Pq}=1)*{AN}*{Y})"
@@ -2481,7 +2631,8 @@ class Book:
                         f = NAR.formula(NAR.changes_parts(p is not None), r, ctx_x)
                         v = NAR.changes(self.run, self.vals, sc)
                     else:
-                        f = NAR.formula(NAR.outcome_parts(nt), r, ctx_x) + "&" + NAR.labels_formula_parts(lr)
+                        f = NAR.formula(NAR.outcome_parts(nt, self.hold), r, ctx_x) + "&" + \
+                            NAR.labels_formula_parts(lr)
                         v = NAR.outcome(self.run, self.vals, sc)
                     ws.merge_range(self.sr, 2, self.sr, width, "", self.f["mergew"])
                     self.expected[("Summary", self.sr, 2)] = v
@@ -2493,8 +2644,11 @@ class Book:
         self.s_sec("Labels and range kinds")
         self.s_txt(self.sr, 0, "SHOCK_LABEL", "hl")
         # [v0.6.2, P2-04] the template filled in from Inputs (live)
+        last = 1 + max(len(self.S), 6)
+        if not self.dry:
+            self.ws["Summary"].merge_range(self.sr, 1, self.sr, last, "", self.f["mergew"])
         self.s_fx(self.sr, 1, NAR.template_formula(labels.SHOCK_LABEL, {"s": "in_common_shock_sd"}),
-                  labels.shock_label(self.cfg["risk"]["common_shock_sd"]), "t")
+                  labels.shock_label(self.cfg["risk"]["common_shock_sd"]), "mergew")
         self.sr += 1
         items = [("RESPONSE_LABEL", labels.RESPONSE_LABEL), ("ASSUMPTION_LABEL", labels.ASSUMPTION_LABEL),
                  ("SEGMENT_SHARE_LABEL", labels.SEGMENT_SHARE_LABEL),
@@ -2505,10 +2659,18 @@ class Book:
                  ("Probability display", f"while shock_source is illustrative: '{labels.PROB_UNDER}' and "
                                          f"'{labels.PROB_OVER}' beyond 5% and 95%"),
                  ("Need aid", "see Inputs (need aid scales with class; need_rate does not change with the class "
-                              "target)")]
+                              "target); " + labels.NEED_DEPARTURE_NOTE + " (R4-07)"),
+                 ("Tie rule", "a median or percentile target " + labels.PCT_TIE_RULE + " (R4-08)"),
+                 ("Held figures", f"while hold_position_rows is true, every median and percentile figure reads "
+                                  f"'{labels.HOLD_POSITION}' (R4-06); this build: "
+                                  + ("held" if self.hold else "not held"))]
+        # R4-02: the explanation is merged across the scenario columns and wrapped, so it is not cut
+        last = 1 + max(len(self.S), 6)
         for a, b in items:
             self.s_txt(self.sr, 0, a, "hl")
-            self.s_txt(self.sr, 1, b)
+            if not self.dry:
+                self.ws["Summary"].merge_range(self.sr, 1, self.sr, last, b, self.f["mergew"])
+                self.s_height(self.sr, 12 * max(1, math.ceil(len(b) * 1.1 / (10 * 1.1 + SCEN_CHARS * (last - 1)))))
             self.sr += 1
 
     def sw_contract(self, S):
@@ -2550,11 +2712,14 @@ class Book:
                         lab = f"{rn} [{'GPA ' if m == 'gpa' else ''}{t:g}]"
                 self.s_txt(self.sr, 0, lab)
                 self.s_txt(self.sr, 1, CASE_TITLE[k])
+                held = self._held(name, ti)                               # R4-06: every cell of the range
                 for j, s in enumerate(S):
                     if self.dry:
                         self.cpos[(name, k, s, ti)] = (self.sr, 2 + j)
-                    else:
+                    elif not held:
                         self.s_fx(self.sr, 2 + j, self.fm(name, k, s, ti), self.pv(name, k, s, ti), fmt)
+                if held:
+                    self.s_hold_cells(self.sr, 2, len(S), merge=False)
                 self.sr += 1
         self.s_name(rn, r0, 2, self.sr - 1, 2 + len(S) - 1)
 
@@ -2678,6 +2843,8 @@ class Book:
                     self.fx(sh, r, 2 + j, f, v, fmt)
                 r += 1
             self.dist_rows[key] = r0
+            if key == "top_quartile_merit_share":                        # R4-05: contract range, s x k
+                self.name(K.range_name("top_quartile_merit_share", "DIST"), sh, r0, 2, r0 + len(CASES) - 1, 1 + nS)
 
         # step sizes (Middle-case resolved award; awards do not depend on the case)
         r_st = d0 + ng + 2
@@ -2860,6 +3027,10 @@ class Book:
             row("Spend against budget_total (Middle case; budget_basis: total aid, or merit only)", s,
                 f'IF(in_budget_total="","not set (budget_total blank)",IF({xr}<=in_budget_total,"OK: "&{kr}&" $"&'
                 f'TEXT({xr},"#,##0")&" within budget",{kr}&" $"&TEXT({xr},"#,##0")&" above budget"))', v)
+        # R4-11: ntr_goal_basis is a live drop-down; all_jd with a blank continuing_ntr_usd would count it as 0
+        row("Revenue goal: " + labels.ALL_JD_NEEDS_CONTINUING, "Inputs",
+            f'IF((in_ntr_goal_basis="all_jd")*(in_continuing_ntr_usd="")=1,{xs(labels.ALL_JD_NEEDS_CONTINUING)},"OK")',
+            "OK")
         # history reconciliation [v0.6.2, Q-8f]
         for j, h in enumerate(self.vals["history_reconciliation"]):
             act = self.inp_list["merit_actual_by_cohort"][j]
@@ -3041,7 +3212,10 @@ class Book:
                 ("mode", MODE_LABEL[self.cfg["mode"]] + (" (reproduce build: loaded values on the Reproduce sheet; "
                                                           + m.get("reproduce_source", "") + ")" if self.repro
                                                           else " (live build)")),
-                ("python", platform.python_version()), ("xlsxwriter", xlsxwriter.__version__)]
+                ("python", platform.python_version()), ("xlsxwriter", xlsxwriter.__version__),
+                ("LibreOffice acceptance version (config/tools.yaml)", LO.acceptance_version() or "not set"),
+                ("hold_position_rows", "held: every median and percentile figure reads '" + labels.HOLD_POSITION
+                 + "'" if self.hold else "not held")]
         for i, (a, b) in enumerate(rows):
             self.txt("RunLog", 2 + i, 0, a, "hl")
             self.txt("RunLog", 2 + i, 1, str(b))
@@ -3111,8 +3285,14 @@ class Book:
              "all_jd, ntr_target is the total JD goal and every ntr_target figure reads ntr_target - "
              "continuing_ntr_usd (" + labels.CONTINUING_LABEL + "). tuition_by_year_usd, when set for a year, takes "
              "precedence over tuition_increase_by_year; Inputs shows the implied increase. Pool growth to date marks "
-             "the pool-strip row nearest 1 + growth; the break-even pool multipliers are expectations ("
-             + labels.POOL_BREAKEVEN_LABEL + ")."),
+             "the pool-strip row nearest 1 + growth (" + labels.POOL_YTD_TIE + "); the break-even pool multipliers "
+             "are expectations (" + labels.POOL_BREAKEVEN_LABEL + "), shown as a note when they are not a pool size "
+             "on the grid. Need aid: " + labels.NEED_DEPARTURE_NOTE + "."),
+            ("Medians and percentiles", "A median or percentile target " + labels.PCT_TIE_RULE + ". The median "
+             "margin is enrolled at or above t minus enrolled below; the percentile margin counts "
+             + labels.PCT_MARGIN_SWAPS + "; the Summary shows one margin per event (q = 0.5 targets are the median "
+             "rows). hold_position_rows: " + ("true, so every median and percentile figure reads '"
+                                              + labels.HOLD_POSITION + "'" if self.hold else "false") + "."),
             ("Yield", "One Ledger column per case: clip(clip(y0 + b/100 (award - a0)/1000, floor, cap) + shift/100, "
                       "floor, cap). The Response rung grid is display only (R-01). Yield is constant when admit rates "
                       "change (D1); sticker price does not move applications or yield (D10)."),

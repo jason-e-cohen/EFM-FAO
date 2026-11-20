@@ -5,3 +5,8 @@
 # profile whose registrymodifications.xcu sets /org.openoffice.Office.Calc/Formula/Load/OOXMLRecalcMode to 0.
 
 soffice_path: /Applications/LibreOffice.app/Contents/MacOS/soffice
+
+# LibreOffice version used for acceptance (Jason, Nov 19, 2026; Review_Phase4_Build.md R4-17). Results can depend on the
+# engine version: the Checks rounding probe ROUND(0.35/0.14, 0) gives 2 in LibreOffice 24.2.7 and 3 in 26.8, Python and
+# Excel for Mac. RunLog records this value; test 10 fails when the installed soffice reports another version.
+libreoffice_acceptance_version: 26.8.3.1

@@ -110,6 +110,30 @@ def edge_wb(lo_profile):
     return _build_and_recalc("edge", sp, lo_profile, seed=edge.SEED, cfg_path=cp)
 
 
+@pytest.fixture(scope="session")
+def edge_below_wb(lo_profile):
+    """[R4-09] The edge workbook under unscored_in_median: below, recalculated."""
+    import edge
+    cp, sp = edge.write(os.path.join(PHASE2, "edge_below_inputs"), below=True)
+    return _build_and_recalc("edge_below", sp, lo_profile, seed=edge.SEED, cfg_path=cp)
+
+
+@pytest.fixture(scope="session")
+def hold_wb(lo_profile):
+    """[R4-06] The main synthetic workbook with hold_position_rows true, recalculated."""
+    import yaml
+    d = os.path.join(PHASE2, "hold_inputs")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(ROOT, "config", "synthetic.yaml")) as f:
+        raw = yaml.safe_load(f)
+    raw["hold_position_rows"] = True
+    cp = os.path.join(d, "hold_config.yaml")
+    with open(cp, "w") as f:
+        f.write("# synthetic.yaml with hold_position_rows true (tests/conftest.py hold_wb). Every value is synthetic.\n")
+        yaml.safe_dump(raw, f, sort_keys=False)
+    return _build_and_recalc("hold", os.path.join(ROOT, "config", "scenarios_synthetic.yaml"), lo_profile, cfg_path=cp)
+
+
 def read_range(wb, name):
     """Values of a workbook-level named range as a 2-D list (None read as '')."""
     dn = wb.defined_names[name]

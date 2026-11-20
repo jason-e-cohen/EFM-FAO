@@ -43,6 +43,21 @@ PCT_MARGIN_UNIT = ("margin: swaps of an enrollee below t for one at or above t, 
                    "enrollees below t uses k(1 - q)")
 GPA_PCT_NOTE = "GPA percentiles are not supported (the cell schema has one GPA boundary)."
 
+# Phase 4 review fix pass (Review_Phase4_Build.md; DECISIONS Nov 19)
+PCT_MARGIN_SWAPS = "swaps: students below t who could replace students at or above t"            # R4-03
+PCT_TIE_RULE = ("holds when exactly a share q is below t; the ABA averages the two middle scores, so near a tie this "
+                "can read a few points high")                                                     # R4-08
+HOLD_POSITION = "held pending confirmation of the LSAT basis (OD-14)"                             # R4-06
+POOL_BE_ANY = "holds at any pool size"                                                            # R4-04
+POOL_BE_NOT_REACHED = "not reached by growth"
+POOL_BE_ABOVE_GRID = "above the pool grid"
+POOL_BE_BELOW_GRID = "below the pool grid"
+POOL_YTD_TIE = "a tie between two grid rows goes to the upper row"                                # R4-13
+NOT_USED_ENTERING = "not used (entering_y1)"                                                       # R4-12
+ALL_JD_NEEDS_CONTINUING = "ntr_goal_basis all_jd needs continuing_ntr_usd"                         # R4-11
+NEED_DEPARTURE_NOTE = ("a scenario's need_total departure from need.total is a fixed dollar amount (it does not scale "
+                       "with class); need.total itself scales with class")                       # R4-07
+
 # Segment block [v0.6, B1-8, B1-14]
 NO_SEGMENT_CELLS = "no segment cells in the data"
 SEGMENT_APPROX = "approximate (fewer than 30 expected)"          # [v0.6.1, OP-3]

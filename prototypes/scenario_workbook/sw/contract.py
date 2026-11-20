@@ -14,6 +14,12 @@ workbook and the tests:
   AWARD_MATRIX     rows: cells (workbook order); columns: scenarios; the resolved award (plan-year dollars)
   STEP_SIZES       rows: adjacent score-band pairs within residency x segment x GPA class (ledger.awards order);
                    columns: scenarios; the award at the higher band minus the award at the lower band (Distribution)
+  DIST_TOP_QUARTILE_MERIT_SHARE  grain s x k on the Distribution sheet (rows cases, columns scenarios) [R4-05]
+
+Class-size table (R4-03): its percentile columns leave out q = 0.5 targets (the median columns carry them), so the
+Summary shows one margin per event. Break-even pool multipliers (R4-04) are numbers or a note (strip.breakeven_m).
+Hold (config hold_position_rows, R4-06): every median and percentile figure (HELD_NAMES, the share and count at or above
+a median or percentile t, the spread bands, the median and percentile strip columns and m_q) is labels.HOLD_POSITION.
 
 Names are canonical: one range per figure, no aliases [v0.6.2, Q-1]; a short form in the spec's Source column (for
 example SUM_PCAP) is read as the prefix only. `p_segment_goal` in the workbook is the normal form (spec section 3);
@@ -58,6 +64,9 @@ SKT_SHARE = [("share_at_or_above_t", "SUM", "ledger.kpis")]
 SKQ = [("margin_q_t", "SUM", "risk.pct"), ("p_pct_q_t", "SUM", "risk.pct"),           # [v0.6.3, BM-1]
        ("p_pct_q_t_rho05", "SUM", "risk.pct")]
 PER_SCENARIO_Q = [("pct_band_q", "SUM", "risk.pct_band")]                              # rows q, columns s
+DIST_SK = [("top_quartile_merit_share", "DIST", "ledger.top_quartile_merit")]          # s x k on Distribution [R4-05]
+HELD_NAMES = {"margin_t", "p_median_t", "p_median_t_rho05", "margin_q_t", "p_pct_q_t", "p_pct_q_t_rho05",
+              "pct_band_q", "pct_expected_below", "pct_approximate"}                    # R4-06
 POOL_BE = [("pool_breakeven_m", "PS", "strip.pool_strip")]                            # rows s, columns m_class, m_q
 PER_SCENARIO = [("net_tuition_line_fixed", "TW", "strip.tuition"), ("net_tuition_line_scaled", "TW", "strip.tuition"),
                 ("breakeven_shift_class", "YS", "strip.yield_strip"),
@@ -76,6 +85,37 @@ def range_name(name, prefix):
     return f"{prefix}_{name.upper()}"
 
 
+def hold(cfg):
+    """R4-06: config hold_position_rows."""
+    return bool(cfg.get("hold_position_rows"))
+
+
+def held_ts(cfg):
+    """Score thresholds whose share and count at or above are median or percentile figures (held under hold)."""
+    return set(cfg["score"]["median_thresholds"]) | {t for _, t in risk.pct_targets(cfg)}
+
+
+def is_held(cfg, name, t=None):
+    """True when the figure `name` (at score threshold t, for the share and count at or above t) is held."""
+    if not hold(cfg):
+        return False
+    if name in HELD_NAMES:
+        return True
+    if name in ("share_at_or_above_t", "enrolled_at_or_above"):
+        return t in held_ts(cfg)
+    return False
+
+
+def held_strip_col(col):
+    """A strip column that carries a median or percentile figure (held under hold)."""
+    return col.startswith(("margin", "p_median", "p_pct"))
+
+
+def ct_ptargets(cfg):
+    """(index, (q, t)) of the percentile targets the class-size table shows: q = 0.5 left out (R4-03)."""
+    return [(j, qt) for j, qt in enumerate(risk.pct_targets(cfg)) if qt[0] != 0.5]
+
+
 def band_keys(cfg):
     """Columns of 'admits cut by band' in the class-size table: each score band, then unscored."""
     return [float(b) for b in cfg["score"]["bands"]] + ["unscored"]
@@ -88,7 +128,7 @@ def strip_columns(cfg):
         med += [f"margin_{meas}_{t:g}", f"p_median_{meas}_{t:g}"]
     pq = [(q, t) for q, t in risk.pct_targets(cfg)]
     pct_cols = []
-    for q, t in pq:
+    for _, (q, t) in ct_ptargets(cfg):
         pct_cols += [f"margin_q{q:g}_{t:g}", f"p_pct_q{q:g}_{t:g}"]
     return {
         "tuition_whatif": ["tuition", "ntr_y1", "net_tuition_per_student", "discount_entering_y1"],
@@ -144,6 +184,7 @@ def compute(run):
                 "full_tuition_n": kp["full_tuition_n"], "no_merit_award_n": kp["no_merit_award_n"],
                 "barbell": kp["barbell"], "evidence_extrapolated_share": ev["evidence_extrapolated_share"],
                 "evidence_labels": ev["evidence_labels"],
+                "top_quartile_merit_share": kp["top_quartile_merit_share"],
                 "segment_enrolled": sg["segment_enrolled"], "segment_lo90": sg["segment_lo90"],
                 "segment_hi90": sg["segment_hi90"], "p_segment_goal": sg["p_segment_goal_normal"],
                 "p_segment_goal_exact": sg["p_segment_goal"], "segment_share": sg["segment_share"],
@@ -228,7 +269,7 @@ def strip_rows(run, vals, which):
                     v = [r["f"], r["class_mean"], r["p_class_over_cap"]]
                     for key in targets:
                         v += [r["median"][key]["margin"], r["median"][key]["p"]]
-                    for key in vals["ptargets"]:
+                    for _, key in ct_ptargets(cfg):
                         v += [r["pct"][key]["margin"], r["pct"][key]["p"]]
                     v += [r["ntr_y1"], r["discount_entering_y1"], r["segment_enrolled"], r["lowest_band_admitted"]]
                     cut = r["admits_cut_by_band"]
@@ -264,8 +305,29 @@ def dump(run, vals=None):
     out["AWARD_MATRIX"] = [[_num(run.lcs[s]["middle"].award[i]) for s in names] for i in range(run.cells.n)]
     steps = {s: L.awards(run.lcs[s]["middle"])["step_sizes"] for s in names}
     out["STEP_SIZES"] = [[_num(steps[s][i]["step_usd"]) for s in names] for i in range(len(steps[names[0]]))]
+    for name, prefix, _ in DIST_SK:
+        out[range_name(name, prefix)] = [[_num(vals["sk"][(s, k)][name]) for s in names] for k in CASES]
     out["p_segment_goal_exact"] = [[_num(vals["sk"][(s, k)]["p_segment_goal_exact"]) for s in names] for k in CASES]
+    if hold(run.cfg):
+        _apply_hold(run.cfg, vals, out)
     return out
+
+
+def _apply_hold(cfg, vals, out):
+    """R4-06: replace every median and percentile figure in the dump by labels.HOLD_POSITION, as the workbook does."""
+    H = labels.HOLD_POSITION
+    for name, prefix, _ in SKT + SKQ + PER_SCENARIO_Q:
+        rn = range_name(name, prefix)
+        out[rn] = [[H for _ in row] for row in out[rn]]
+    rn = "SUM_SHARE_AT_OR_ABOVE_T"                      # the same rule as the workbook's rows (is_held)
+    out[rn] = [[H for _ in row] if is_held(cfg, "share_at_or_above_t", vals["score_ts"][i // len(CASES)]) else row
+               for i, row in enumerate(out[rn])]
+    out["PS_POOL_BREAKEVEN_M"] = [[row[0]] + [H for _ in row[1:]] for row in out["PS_POOL_BREAKEVEN_M"]]
+    for which, prefix, _ in STRIPS:
+        rn = range_name(which, prefix)
+        cols = strip_columns(cfg)[which]
+        hc = {i for i, c in enumerate(cols) if held_strip_col(c)}
+        out[rn] = [[H if j in hc else x for j, x in enumerate(row)] for row in out[rn]]
 
 
 def contract_table():
@@ -279,6 +341,7 @@ def contract_table():
     rows += [(range_name(n, p), f"{n}[grid]", "s x grid", src) for n, p, src in STRIPS]
     rows += [("AWARD_MATRIX", "award_matrix", "s x cell", "ledger.awards")]
     rows += [("STEP_SIZES", "step_sizes", "s x step", "ledger.awards")]
+    rows += [(range_name(n, p), n, "s x k", src) for n, p, src in DIST_SK]
     return rows
 
 

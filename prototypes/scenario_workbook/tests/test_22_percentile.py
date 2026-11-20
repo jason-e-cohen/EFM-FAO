@@ -121,6 +121,18 @@ def test_spread_band_hand_case(toy):
     assert labels.BAND_NOT_SCORE_LABEL == "band, not a score"
 
 
+def test_spread_band_tie_is_inclusive(toy):
+    """R4-08, R4-13 (mutant R02): the spread band holds a bound t when the share below t is at most q, a tie included.
+    The toy's share below 165 to 170 is 19.5 / 29.1; at q equal to it exactly the band is 170 (inclusive), not 161 (a
+    strict rule). The percentile probability's event is inclusive too: margin 0 holds."""
+    cfg, cells, lc = toy
+    e, sc = lc.enrolled, cells.score_lo
+    scored = ~np.isnan(sc)
+    q = float(e[scored & (sc < 170.0)].sum()) / float(e[scored].sum())
+    assert risk.pct_band(lc, q) == 170.0
+    assert risk.pct_band(lc, q - 1e-12) == 161.0
+
+
 def test_margin_unit(toy):
     """One swap (an enrollee below t replaced by one at or above t, class size fixed) changes the margin by exactly 1;
     adding k enrollees below t without removing anyone changes it by -k(1 - q)."""

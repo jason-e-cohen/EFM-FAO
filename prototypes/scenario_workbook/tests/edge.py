@@ -34,6 +34,14 @@ scaled-line example award (Q-5)                     "Example award edges": zero-
 [Phase 4] Distribution: merit of zero               "No merit awards": every award 0 and no full-tuition flag (the
                                                     top-quartile share's zero-merit branch); positions with no
                                                     enrolled (the fraction's zero branch) occur in every scenario
+[R4-10] spread band in the lowest band              "Lowest band": admit rates 0.9 in the lowest score band and 0.02
+                                                    elsewhere, so the 25th and 75th percentile bands are the lowest
+                                                    ("below 152" text)
+[R4-09] unscored_in_median: below                   `write(out_dir, below=True)`: the same inputs under 'below'
+                                                    (the percentile sign and spread-band branches for unscored);
+                                                    "Unscored near the 25th": unscored admit rates 1.0 and the two
+                                                    lowest scored bands' rates x 1.8, so counting unscored below moves
+                                                    the 25th percentile band (158 excluded, 154 below)
 """
 import copy
 import os
@@ -66,7 +74,7 @@ def segment_pool_min(cells, cfg):
     return min(pools.values())
 
 
-def config_dict():
+def config_dict(below=False):
     from sw import config
     with open(os.path.join(ROOT, "config", "synthetic.yaml")) as f:
         raw = yaml.safe_load(f)
@@ -89,6 +97,10 @@ def config_dict():
     e["tuition_by_year_usd"] = {2027: TUITION_2027}
     e["pool_ytd_growth"] = 0.33
     e["pool_ytd_as_of"] = None
+    if below:                                                   # R4-09
+        e["client"]["id"] = "synthetic_edge_below"
+        e["client"]["name"] = "Synthetic law world (edge workbook, unscored below)"
+        e["unscored_in_median"] = "below"
     for c in EXEMPT:
         assert c in list(cells.cell_id), c
     return e
@@ -127,22 +139,53 @@ def no_merit_scenario(cells):
             "overrides": {"award_usd": {c: 0 for c in ids}, "full_tuition": {c: 0 for c in ids}}}
 
 
+def lowest_band_scenario(cells):
+    """[R4-10] Admit rates 0.9 in the lowest score band and 0.02 elsewhere: most of the class is in the lowest band, so
+    the spread rows reach the lowest band's text ("below <next bound>")."""
+    lo = float(np.nanmin(cells.score_lo))
+    rate = {c: (0.9 if s == lo else 0.02) for c, s in zip(cells.cell_id, cells.score_lo) if not np.isnan(s)}
+    return {"name": "Lowest band", "parent": "Baseline",
+            "description": "Admit rates 0.9 in the lowest score band, 0.02 elsewhere: the spread bands are the lowest",
+            "overrides": {"admit_rate": rate}}
+
+
+def unscored_near_scenario(cells, cfg):
+    """[R4-09] Unscored admit rates 1.0 and the two lowest scored bands' rates x 1.8 (at most 1): the 25th percentile
+    band is 158 when unscored are excluded and 154 when they count below every bound."""
+    from sw import ledger as L
+    b0 = L.baseline(cells, cfg)
+    low2 = sorted({float(x) for x in cells.score_lo if not np.isnan(x)})[1:3]
+    rate = {}
+    for i, (c, s) in enumerate(zip(cells.cell_id, cells.score_lo)):
+        if np.isnan(s):
+            rate[c] = 1.0
+        elif float(s) in low2:
+            rate[c] = float(min(1.0, b0.admit_rate[i] * 1.8))
+    return {"name": "Unscored near the 25th", "parent": "Baseline",
+            "description": "Unscored admit rates 1.0; the two lowest scored bands x 1.8: 'below' moves the 25th band",
+            "overrides": {"admit_rate": rate}}
+
+
 def scenarios():
     from sw import config
-    return SCENARIOS + [no_merit_scenario(world(config.validate(config_dict())))]
+    cfg = config.validate(config_dict())
+    cells = world(cfg)
+    return SCENARIOS + [no_merit_scenario(cells), lowest_band_scenario(cells), unscored_near_scenario(cells, cfg)]
 
 
-def write(out_dir):
+def write(out_dir, below=False):
     os.makedirs(out_dir, exist_ok=True)
     cp = os.path.join(out_dir, "edge_config.yaml")
     sp = os.path.join(out_dir, "edge_scenarios.yaml")
     with open(cp, "w") as f:
         f.write("# Edge workbook config (tests/edge.py): synthetic.yaml with edge settings. Every value is synthetic.\n")
-        yaml.safe_dump(config_dict(), f, sort_keys=False)
+        yaml.safe_dump(config_dict(below), f, sort_keys=False)
     with open(sp, "w") as f:
         f.write("# Edge workbook scenarios (tests/edge.py). Every value is synthetic.\n")
         yaml.safe_dump({"scenarios": scenarios()}, f, sort_keys=False)
     return cp, sp
 
 
-__all__ = ["write", "world", "config_dict", "SCENARIOS", "scenarios", "no_merit_scenario", "EXEMPT", "segment_pool_min", "np"]
+__all__ = ["write", "world", "config_dict", "SCENARIOS", "scenarios", "no_merit_scenario", "lowest_band_scenario",
+           "unscored_near_scenario",
+           "EXEMPT", "segment_pool_min", "np"]

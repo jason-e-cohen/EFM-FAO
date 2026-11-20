@@ -156,22 +156,24 @@ def pool_strip(cells, cfg, scen, base, grid=None):
             "ntr_mean": Wm - lc1.ntr_const, "ntr_sd": math.sqrt(max(Vn, 0.0)),
             "pct": {key: _pool_pct(pparts[key], key[0], m, s, rho) for key in pparts},
         })
-    # [v0.6.3, BM-6] growth-to-date marker: the grid row nearest 1 + pool_ytd_growth (ties to the lower row)
+    # [v0.6.3, BM-6] growth-to-date marker: the grid row nearest 1 + pool_ytd_growth. R4-13: a tie goes to the upper
+    # row (round half up), with a 1e-9 tolerance so 1 + 0.15 marks the 1.2 row whatever the last binary digit
     g_ytd = cfg.get("pool_ytd_growth")
     nearest = None
     if g_ytd is not None:
         target = 1.0 + float(g_ytd)
-        nearest = 1 + sum(1 for a, b in zip(grid[:-1], grid[1:]) if (a + b) / 2 < target)
+        nearest = 1 + sum(1 for a, b in zip(grid[:-1], grid[1:]) if (a + b) / 2 - target <= 1e-9)
     marker = labels.POOL_YTD_MARKER.format(as_of=cfg.get("pool_ytd_as_of") or labels.POOL_YTD_NO_DATE)
     for gi, row in enumerate(rows):
         row["marker"] = marker if nearest == gi + 1 else ""
-    # [v0.6.3, BM-6] break-even pool multipliers (expectations, not probabilities)
-    be = {"class": (scen.class_target - P["M"]) / Q["M"] if Q["M"] != 0 else None}
+    # [v0.6.3, BM-6] break-even pool multipliers (expectations, not probabilities). R4-04: a plain note instead of a
+    # number when the break-even is not a pool size on the grid (breakeven_m)
+    be = {"class": breakeven_m(P["M"] - scen.class_target, Q["M"], grid)}
     for key, pp in pparts.items():
         q = key[0]
         e_lo = q * pp["lo"]["Gp"] - (1 - q) * pp["lo"]["Gm"]
         e_hi = q * pp["hi"]["Gp"] - (1 - q) * pp["hi"]["Gm"]
-        be[key] = -e_lo / e_hi if e_hi != 0 else None
+        be[key] = breakeven_m(e_lo, e_hi, grid)
     return {
         "pool_breakeven_m": be,
         "pool_breakeven_label": labels.POOL_BREAKEVEN_LABEL,
@@ -185,6 +187,25 @@ def pool_strip(cells, cfg, scen, base, grid=None):
         "label": labels.POOL_STRIP_LABEL,
         "rounding_note": "ledger rounds admits; strip does not" if cfg["integer_admits"] else "",
     }
+
+
+def breakeven_m(e_lo, e_hi, grid):
+    """R4-04. The pool multiplier m at which e_lo + m x e_hi = 0 (the expected class minus the target, or the expected
+    percentile margin), or a note:
+      e_hi > 0 and e_lo >= 0, or e_hi = 0 and e_lo >= 0   POOL_BE_ANY (holds with no top-pool growth at all)
+      e_hi < 0 and e_lo <= 0, or e_hi = 0 and e_lo < 0    POOL_BE_NOT_REACHED (pool growth does not lift it to zero)
+      m above / below the grid                            POOL_BE_ABOVE_GRID / POOL_BE_BELOW_GRID
+    otherwise m, a number on the grid's range (with e_hi < 0 the margin falls to zero at m as the pool grows)."""
+    if e_hi == 0:
+        return labels.POOL_BE_ANY if e_lo >= 0 else labels.POOL_BE_NOT_REACHED
+    m = -e_lo / e_hi
+    if m <= 0:
+        return labels.POOL_BE_ANY if e_hi > 0 else labels.POOL_BE_NOT_REACHED
+    if m > max(grid):
+        return labels.POOL_BE_ABOVE_GRID
+    if m < min(grid):
+        return labels.POOL_BE_BELOW_GRID
+    return m
 
 
 def _pool_pct(pp, q, m, s, rho):

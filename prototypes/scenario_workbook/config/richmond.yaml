@@ -108,3 +108,7 @@ pool_ytd_growth: null              # [v0.6.3, BM-6] applications at or above sco
 pool_ytd_as_of: null
 small_cell_suppression: none
 marginal_admit_yield_slope: 0
+
+# R4-06 (Jason, Nov 19, 2026): every median and percentile figure on the Summary reads "held pending confirmation of
+# the LSAT basis (OD-14)" until Brandon says which LSAT the Yellow Arrows grid bands by.
+hold_position_rows: true
