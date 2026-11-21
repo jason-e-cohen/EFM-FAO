@@ -110,6 +110,9 @@ def pool_strip(cells, cfg, scen, base, grid=None):
 
     Splits the Ledger at m = 1 into a lo part (score below score.pool_threshold) and a hi part; the hi part scales
     with m. Exact for the ledger without rounding; with integer_admits the ledger rounds and the strip does not.
+    F-4 (Review_Phase4_FixPass.md): the median at every score median threshold (row "median", keyed by t), and P(holds)
+    for each percentile target other than q = 0.5 (row "pct"; the median columns carry q = 0.5). The columns are in
+    contract.strip_columns order: class, P(class above cap), NTR, then the median and percentile figures.
     """
     s = float(cfg["risk"]["common_shock_sd"])
     rho = float(cfg["risk"]["shock_corr_above_below"])
@@ -120,21 +123,24 @@ def pool_strip(cells, cfg, scen, base, grid=None):
     mu = lc1.admits * lc1.yld
     v = lc1.admits * lc1.yld * (1 - lc1.yld)
     w = lc1.w
-    t = cfg["score"]["median_thresholds"][0]
-    g = risk.median_signs(cells, cfg, "score", t)
     parts = {}
     for name, msk in (("lo", lo), ("hi", hi)):
-        parts[name] = {
-            "M": float(mu[msk].sum()), "V": float(v[msk].sum()),
-            "Gp": float(mu[msk & (g > 0)].sum()), "Gm": float(mu[msk & (g < 0)].sum()),
-            "Vm": float(v[msk & (g != 0)].sum()),
-            "W": float((w * mu)[msk].sum()), "Vn": float((w * w * v)[msk].sum()),
-        }
+        parts[name] = {"M": float(mu[msk].sum()), "V": float(v[msk].sum()),
+                       "W": float((w * mu)[msk].sum()), "Vn": float((w * w * v)[msk].sum())}
     P, Q = parts["lo"], parts["hi"]
-    # [v0.6.3, BM-6] percentile targets: G+ and G- (and their binomial variances) split the same way
-    targets = risk.pct_targets(cfg)
+    # medians: G+ and G- (expected scored enrolled at or above and below t) and their binomial variance, split the same
+    # way, at every score median threshold
+    med_parts = {}
+    for t in cfg["score"]["median_thresholds"]:
+        g = risk.median_signs(cells, cfg, "score", t)
+        med_parts[t] = {name: {"Gp": float(mu[msk & (g > 0)].sum()), "Gm": float(mu[msk & (g < 0)].sum()),
+                               "Vm": float(v[msk & (g != 0)].sum())} for name, msk in (("lo", lo), ("hi", hi))}
+    # [v0.6.3, BM-6] percentile targets other than q = 0.5 (F-4): G+ and G- (and their binomial variances) split the
+    # same way
     pparts = {}
-    for q, tq in targets:
+    for q, tq in risk.pct_targets(cfg):
+        if q == 0.5:
+            continue
         gq = risk.median_signs(cells, cfg, "score", tq)
         pparts[(q, tq)] = {name: {"Gp": float(mu[msk & (gq > 0)].sum()), "Gm": float(mu[msk & (gq < 0)].sum()),
                                   "Vp": float(v[msk & (gq > 0)].sum()), "Vm": float(v[msk & (gq < 0)].sum())}
@@ -143,17 +149,14 @@ def pool_strip(cells, cfg, scen, base, grid=None):
     for m in grid:
         M = P["M"] + m * Q["M"]
         V = P["V"] + m * Q["V"] + s * s * M * M
-        Gp = P["Gp"] + m * Q["Gp"]
-        Gm = P["Gm"] + m * Q["Gm"]
-        Vm = P["Vm"] + m * Q["Vm"] + s * s * (Gp * Gp + Gm * Gm - 2 * rho * Gp * Gm)
         Wm = P["W"] + m * Q["W"]
         Vn = P["Vn"] + m * Q["Vn"] + s * s * Wm * Wm
         cap = scen.class_cap
         rows.append({
             "pool_multiplier": m, "growth": m - 1.0, "class_mean": M,
             "p_class_over_cap": float(1 - risk.Phi((cap + 0.5 - M) / math.sqrt(max(V, 1e-300)))),
-            "margin": Gp - Gm, "p_median": float(1 - risk.Phi((-0.5 - (Gp - Gm)) / math.sqrt(max(Vm, 1e-300)))),
             "ntr_mean": Wm - lc1.ntr_const, "ntr_sd": math.sqrt(max(Vn, 0.0)),
+            "median": {t: _pool_median(mp, m, s, rho) for t, mp in med_parts.items()},
             "pct": {key: _pool_pct(pparts[key], key[0], m, s, rho) for key in pparts},
         })
     # [v0.6.3, BM-6] growth-to-date marker: the grid row nearest 1 + pool_ytd_growth. R4-13: a tie goes to the upper
@@ -167,8 +170,11 @@ def pool_strip(cells, cfg, scen, base, grid=None):
     for gi, row in enumerate(rows):
         row["marker"] = marker if nearest == gi + 1 else ""
     # [v0.6.3, BM-6] break-even pool multipliers (expectations, not probabilities). R4-04: a plain note instead of a
-    # number when the break-even is not a pool size on the grid (breakeven_m)
+    # number when the break-even is not a pool size on the grid (breakeven_m). F-4: the medians under their own key
+    # ("median", t); the percentile targets other than q = 0.5
     be = {"class": breakeven_m(P["M"] - scen.class_target, Q["M"], grid)}
+    for t, mp in med_parts.items():
+        be[("median", t)] = breakeven_m(mp["lo"]["Gp"] - mp["lo"]["Gm"], mp["hi"]["Gp"] - mp["hi"]["Gm"], grid)
     for key, pp in pparts.items():
         q = key[0]
         e_lo = q * pp["lo"]["Gp"] - (1 - q) * pp["lo"]["Gm"]
@@ -177,10 +183,11 @@ def pool_strip(cells, cfg, scen, base, grid=None):
     return {
         "pool_breakeven_m": be,
         "pool_breakeven_label": labels.POOL_BREAKEVEN_LABEL,
+        "med_parts": med_parts,
         "pct_parts": pparts,
         "nearest_row": nearest,
+        "nearest_m": None if nearest is None else grid[nearest - 1],
         "pool_strip": rows,
-        "threshold": t,
         "parts": parts,
         "pool_ytd_growth": cfg.get("pool_ytd_growth"),
         "pool_ytd_label": labels.POOL_YTD_LABEL,
@@ -191,11 +198,12 @@ def pool_strip(cells, cfg, scen, base, grid=None):
 
 def breakeven_m(e_lo, e_hi, grid):
     """R4-04. The pool multiplier m at which e_lo + m x e_hi = 0 (the expected class minus the target, or the expected
-    percentile margin), or a note:
+    median or percentile margin), or a note:
       e_hi > 0 and e_lo >= 0, or e_hi = 0 and e_lo >= 0   POOL_BE_ANY (holds with no top-pool growth at all)
       e_hi < 0 and e_lo <= 0, or e_hi = 0 and e_lo < 0    POOL_BE_NOT_REACHED (pool growth does not lift it to zero)
       m above / below the grid                            POOL_BE_ABOVE_GRID / POOL_BE_BELOW_GRID
-    otherwise m, a number on the grid's range (with e_hi < 0 the margin falls to zero at m as the pool grows)."""
+    otherwise m, a number on the grid's range: with e_hi > 0 a floor (the target holds from m up); with e_hi < 0 a
+    ceiling (the margin falls to zero at m as the pool grows), shown as the text labels.POOL_BE_AT_MOST (F-2)."""
     if e_hi == 0:
         return labels.POOL_BE_ANY if e_lo >= 0 else labels.POOL_BE_NOT_REACHED
     m = -e_lo / e_hi
@@ -205,7 +213,19 @@ def breakeven_m(e_lo, e_hi, grid):
         return labels.POOL_BE_ABOVE_GRID
     if m < min(grid):
         return labels.POOL_BE_BELOW_GRID
+    if e_hi < 0:
+        return labels.POOL_BE_AT_MOST.format(m=f"{m:.3f}")
     return m
+
+
+def _pool_median(mp, m, s, rho):
+    """Margin and P(median holds) at threshold t and pool multiplier m from the lo/hi split (risk.cf_median on the split
+    sums)."""
+    P_, Q_ = mp["lo"], mp["hi"]
+    Gp = P_["Gp"] + m * Q_["Gp"]
+    Gm = P_["Gm"] + m * Q_["Gm"]
+    Vm = P_["Vm"] + m * Q_["Vm"] + s * s * (Gp * Gp + Gm * Gm - 2 * rho * Gp * Gm)
+    return {"margin": Gp - Gm, "p": float(1 - risk.Phi((-0.5 - (Gp - Gm)) / math.sqrt(max(Vm, 1e-300))))}
 
 
 def _pool_pct(pp, q, m, s, rho):

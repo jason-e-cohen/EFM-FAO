@@ -58,6 +58,22 @@ ALL_JD_NEEDS_CONTINUING = "ntr_goal_basis all_jd needs continuing_ntr_usd"      
 NEED_DEPARTURE_NOTE = ("a scenario's need_total departure from need.total is a fixed dollar amount (it does not scale "
                        "with class); need.total itself scales with class")                       # R4-07
 
+# Phase 4.2 (Review_Phase4_FixPass.md F-1 to F-6, section 7)
+POOL_BE_AT_MOST = "at most {m}"                     # F-2: a break-even that is a ceiling (the target fails beyond m)
+LOWEST_BAND = "below {b}"                           # section 7: the lowest score band (lower bound 0 or less)
+HELD_COLUMNS = "median and percentile figures"      # section 7: held strip columns collapsed into one in the PDF
+# The client legend (Summary "Labels and range kinds"): plain names and wording, no review IDs or config keys
+LEGEND_NAMES = {"SHOCK_LABEL": "Year-to-year variation", "RESPONSE_LABEL": "Response",
+                "ASSUMPTION_LABEL": "Client-input assumptions", "SEGMENT_SHARE_LABEL": "Segment share",
+                "PCT_APPROX_LABEL": "Approximate percentile", "BAND_NOT_SCORE_LABEL": "Score bands",
+                "CONTINUING_LABEL": "Continuing students", "POOL_BREAKEVEN_LABEL": "Break-even pool multiplier"}
+LEGEND_PROB = ("while the year-to-year variation is illustrative (not yet calibrated), probabilities below 5% read "
+               "'{under}' and above 95% read '{over}'")
+LEGEND_NEED = ("need aid scales with the class at a fixed amount per enrollee; a scenario's change to total need aid "
+               "is a fixed dollar amount and does not scale with the class")
+LEGEND_TIE = "a median or percentile target {rule}"
+LEGEND_HELD = "until the LSAT basis is confirmed, every median and percentile figure reads '{hold}'. This workbook: {state}"
+
 # Segment block [v0.6, B1-8, B1-14]
 NO_SEGMENT_CELLS = "no segment cells in the data"
 SEGMENT_APPROX = "approximate (fewer than 30 expected)"          # [v0.6.1, OP-3]

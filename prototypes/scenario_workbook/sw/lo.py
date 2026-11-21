@@ -110,34 +110,101 @@ def recalc(xlsx, out_dir, profile=None):
 
 
 # ---------------------------------------------------------------------------------------------------------------
-# Summary render (spec test 10; Phase 4; Review_Phase4_Build.md R4-01, R4-02)
+# Summary render (spec test 10; Phase 4; Review_Phase4_Build.md R4-01, R4-02; Phase 4.2, Review_Phase4_FixPass.md
+# section 7)
 #
-# Character and page geometry, approximate and conservative. A column of width w (Excel units: the default font's digit
-# width, 7 px) is 7w + 5 px; Arial 9 runs about 5 px a character, so a line holds about 1.4w characters. The render
-# wraps at RENDER_CHARS_PER_UNIT x w (fewer, so wrapped lines rarely overflow) and gives LINE_PT per line. A landscape
-# Letter page at the default margins (0.75 in each side) is PAGE_WIDTH_PT wide. Sections that fit at MIN_SCALE or
-# larger print fit to one page width; wider sections print at MIN_SCALE and continue across pages, with columns A and
-# B and the section's header row repeated.
+# Geometry in points. Text widths come from Arial's glyph widths (the Helvetica metrics, which Arial and Liberation
+# Sans share), at the cell's font size and weight. A column of width w (Excel units: the default font's digit width,
+# 7 px) is 7w + 5 px = col_pt(w) points. The render leaves PAD_PT for the cell margins and GAP_PT between a text and its
+# neighbour, plus INDENT_PT per indent level; wrapped text takes LINE_PT per line (at 9 pt). Text in a figure column
+# (C onward) never runs on into the next column: it wraps in its own cell (Phase 4.2). A landscape Letter page at the
+# default margins (0.75 in each side) is PAGE_WIDTH_PT wide. Sections that fit at MIN_SCALE or larger print fit to one
+# page width; wider sections print at MIN_SCALE and continue across pages, with columns A and B and the section's
+# header row repeated, and their title and notes wrapped within A:B so a continued page shows them whole.
 
-RENDER_CHARS_PER_UNIT = 1.3
 LINE_PT = 12.0
 PAGE_WIDTH_PT = 684.0
 MIN_SCALE = 0.75
 MAX_PAGES_ACROSS = 3
-SKIP_PREFIX = "Working values"          # the pool strip's split at m = 1: not printed (R4-01)
+PAD_PT = 3.0
+GAP_PT = 4.0
+INDENT_PT = 9.0
+FIG_TEXT_PT = 72.0      # a figure column's text (notes, flags, statuses) wraps past about 16 characters
+LO_PAD_PT = 2.8         # LibreOffice's own cell margins, left and right together: it wraps text at the width less these
+SKIP_PREFIX = ("Working values", "Interface contract")     # not printed (R4-01; Phase 4.2: the contract ranges)
+
+_ASCII = "".join(chr(c) for c in range(32, 127))
+# Helvetica (= Arial) advance widths per 1000 em, for characters 32 to 126
+_W_REG = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278] + [556] * 10 + \
+    [278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
+     667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278,
+     556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334,
+     584]
+_W_BOLD = [278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278] + [556] * 10 + \
+    [333, 333, 584, 584, 584, 611, 975, 722, 722, 722, 722, 667, 611, 778, 722, 278, 556, 722, 611, 833, 722, 778,
+     667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 333, 278, 333, 584, 556, 333, 556, 611, 556, 611, 556, 333,
+     611, 611, 278, 278, 556, 278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389,
+     584]
+_AFM = {False: dict(zip(_ASCII, _W_REG)), True: dict(zip(_ASCII, _W_BOLD))}
 
 
-def eff_len(t, bold=False):
-    """Characters a text takes, in average-character units: names in capitals and underscores and bold text run
-    wider than ordinary text."""
-    if not t:
-        return 0.0
-    caps = sum(1 for ch in t if ch.isupper() or ch == "_" or ch.isdigit()) / len(t)
-    return len(t) * (1.25 if caps > 0.6 else 1.0) * (1.1 if bold else 1.0)
+def text_pt(t, bold=False, size=9.0):
+    """Width of one line of text in points (Arial glyph widths; other characters at a digit's width)."""
+    w = _AFM[bool(bold)]
+    return sum(w.get(ch, 556) for ch in str(t)) * float(size) / 1000.0
+
+
+def line_widths(t, cap, bold=False, size=9.0):
+    """Widths of the lines a greedy word wrap at cap points makes (a word longer than a line is one line)."""
+    sp = text_pt(" ", bold, size)
+    out, cur = [], 0.0
+    for word in str(t).split():
+        n = text_pt(word, bold, size)
+        if cur and cur + sp + n <= cap:
+            cur += sp + n
+        else:
+            if cur:
+                out.append(cur)
+            cur = n
+    out.append(cur)
+    return out
+
+
+def lines_pt(t, cap, bold=False, size=9.0):
+    """Lines a word-wrapped text takes at cap points a line (a word longer than a line breaks)."""
+    sp = text_pt(" ", bold, size)
+    lines, cur = 1, 0.0
+    cap = max(cap, 1.0)
+    for word in str(t).split():
+        n = text_pt(word, bold, size)
+        if cur == 0:
+            cur = n
+        elif cur + sp + n <= cap:
+            cur += sp + n
+        else:
+            lines += 1
+            cur = n
+        while cur > cap:
+            lines += 1
+            cur -= cap
+    return lines
+
+
+def font_of(cell):
+    """(bold, size, indent points) of a cell."""
+    bold = bool(cell.font is not None and cell.font.b)
+    size = float(cell.font.sz) if cell.font is not None and cell.font.sz else 9.0
+    ind = INDENT_PT * float(cell.alignment.indent or 0) if cell.alignment is not None else 0.0
+    return bold, size, ind
 
 
 def col_pt(w):
     return (7.0 * w + 5.0) * 0.75
+
+
+def width_for_pt(pt):
+    """The column width (Excel units) whose col_pt is pt."""
+    return (pt / 0.75 - 5.0) / 7.0
 
 
 def display_text(v, fmt):
@@ -150,6 +217,14 @@ def display_text(v, fmt):
         return str(v)
     x = float(v)
     f = fmt or "General"
+    if f.startswith("[="):                      # a conditional section, '[=v]"text";rest' (the lowest score band)
+        cond, _, rest = f.partition(";")
+        try:
+            if x == float(cond[2:cond.index("]")]):
+                return cond[cond.index("]") + 1:].strip('"')
+        except ValueError:
+            pass
+        f = rest or "General"
     try:
         if f.startswith("$"):
             return f"${x:,.0f}"
@@ -168,6 +243,12 @@ def display_text(v, fmt):
     except (ValueError, IndexError):
         pass
     return f"{x:.10g}"
+
+
+def is_title(c):
+    """A section title cell (grey fill): it may run on across its row."""
+    return bool(c.fill is not None and c.fill.fgColor is not None
+                and str(c.fill.fgColor.rgb).upper().endswith("E8E8E8"))
 
 
 def _is_header(c):
@@ -189,7 +270,7 @@ def _merged_at(ws):
 
 def merge_held(ws, maxc, nrows):
     """R4-06 in the PDF copy only: a run of two or more adjacent cells in a row that read labels.HOLD_POSITION is shown
-    as one merged cell, so a held strip row stays one or two lines high. The workbook keeps the text in every cell (the
+    as one merged cell, so a held row stays one or two lines high. The workbook keeps the text in every cell (the
     contract ranges)."""
     from . import labels
     top, covered = _merged_at(ws)
@@ -211,11 +292,30 @@ def merge_held(ws, maxc, nrows):
                 c += 1
 
 
+def held_runs(src_ws, header_row, r1, maxc):
+    """Phase 4.2: runs of two or more adjacent figure columns (C onward) in which every table row below the header
+    reads labels.HOLD_POSITION (the held median and percentile columns of a strip). [[c, ...], ...]"""
+    from . import labels
+    H = labels.HOLD_POSITION
+    rows = [r for r in range(header_row + 1, r1 + 1) if src_ws.cell(r, 1).value not in (None, "")]
+    if not rows:
+        return []
+    cols = [c for c in range(3, maxc + 1) if all(src_ws.cell(r, c).value == H for r in rows)]
+    runs = []
+    for c in cols:
+        if runs and runs[-1][-1] == c - 1:
+            runs[-1].append(c)
+        else:
+            runs.append([c])
+    return [r for r in runs if len(r) >= 2]
+
+
 def fit_columns(ws, maxc, nrows):
     """Narrow each column to its content (never wider than in the workbook): numbers at their formatted width, text that
-    would wrap anyway capped at the workbook width, header words kept whole. Row 1 (the section title) and merged
-    cells do not count."""
+    would wrap anyway capped at the workbook width (columns A and B) or FIG_TEXT_PT (figure columns), header words kept
+    whole, the hold text on one line. Row 1 (the section title) and merged cells do not count."""
     from openpyxl.utils import get_column_letter
+    from . import labels
     top, covered = _merged_at(ws)
     for c in range(1, maxc + 1):
         key = get_column_letter(c)
@@ -228,31 +328,63 @@ def fit_columns(ws, maxc, nrows):
             t = display_text(cell.value, cell.number_format)
             if not t:
                 continue
-            bold = bool(cell.font is not None and cell.font.b)
+            bold, size, ind = font_of(cell)
             if _is_header(cell):
                 # headers wrap by word, in at most about four lines
-                need = max([need] + [eff_len(x, True) for x in t.split()] + [eff_len(t, True) / 4.0])
+                need = max([need] + [text_pt(x, True, size) for x in t.split()] + [text_pt(t, True, size) / 4.0])
             elif isinstance(cell.value, str):
-                # columns A and B hold labels; a figure column's text (notes, flags, statuses) wraps past 16
-                # characters; a word is never broken
-                texts.append(min(eff_len(t, bold), 1.3 * w0 if c <= 2 else 16))
-                need = max([need] + [min(eff_len(x, bold), 1.3 * w0) for x in t.split()])
+                full = text_pt(t, bold, size) + ind
+                if cell.value == labels.HOLD_POSITION:
+                    texts.append(full)                                      # the hold text stays on one line
+                else:
+                    texts.append(min(full, col_pt(w0) if c <= 2 else FIG_TEXT_PT))
+                need = max([need] + [min(text_pt(x, bold, size) + ind, col_pt(w0)) for x in t.split()])
             else:
-                need = max(need, len(t))                                      # a number never wraps
+                need = max(need, text_pt(t, bold, size))                    # a number never wraps
         if texts:
             # labels (columns A and B) set the width their longer entries need (the 80th percentile; the rest wraps);
-            # in a figure column the longest text sets it, up to 16 characters
+            # in a figure column the longest text sets it
             texts.sort()
             need = max(need, texts[int(0.8 * (len(texts) - 1))] if c <= 2 else texts[-1])
         if need == 0:
             continue
-        w = need / 1.3 + 1.5
-        ws.column_dimensions[key].width = round(min(w0, max(6.0, w)), 1)
+        w = width_for_pt(need + PAD_PT + GAP_PT)
+        ws.column_dimensions[key].width = round(min(w0, max(6.0, w)) + 0.05, 1)
+
+
+def settle_gaps(ws, maxc, nrows):
+    """Phase 4.2 (section 7, colliding headers): a text whose right-hand neighbour also holds text must end at least
+    GAP_PT short of its cell's edge on every line LibreOffice lays out (it wraps at the width less LO_PAD_PT, so a line
+    can otherwise run to within a hair of the next cell's text). Widen the column until that holds."""
+    from openpyxl.utils import get_column_letter
+    top, covered = _merged_at(ws)
+    for c in range(1, maxc):
+        key = get_column_letter(c)
+        for _ in range(6):
+            w = ws.column_dimensions[key].width or 10
+            worst = 0.0
+            for r in range(2, nrows + 1):
+                cell, nb = ws.cell(r, c), ws.cell(r, c + 1)
+                if (r, c) in top or (r, c) in covered or (r, c + 1) in covered:
+                    continue
+                if not isinstance(cell.value, str) or not cell.value or not isinstance(nb.value, str) or not nb.value:
+                    continue
+                bold, size, ind = font_of(cell)
+                cap = col_pt(w) - LO_PAD_PT - ind
+                wrap = cell.alignment is not None and cell.alignment.wrap_text
+                lw = line_widths(cell.value, cap, bold, size) if wrap else [text_pt(cell.value, bold, size)]
+                over = max(x for x in lw if x <= cap) if any(x <= cap for x in lw) else 0.0
+                if over > cap - GAP_PT:
+                    worst = max(worst, over + LO_PAD_PT + GAP_PT + ind)
+            if not worst:
+                break
+            ws.column_dimensions[key].width = round(width_for_pt(worst) + 0.1, 1)
 
 
 def wrap_overflow(ws, maxc, nrows):
     """Wrap every text cell longer than its rendered width (merged cells: the merged width) and give its row a height
-    that holds the lines (R4-02)."""
+    that holds the lines (R4-02). Unwrapped text in column A may run on into an empty column B; text in a figure
+    column wraps in its own cell (Phase 4.2)."""
     from copy import copy
     from openpyxl.utils import get_column_letter
     top, covered = _merged_at(ws)
@@ -267,25 +399,24 @@ def wrap_overflow(ws, maxc, nrows):
             if not t or not isinstance(cell.value, str):
                 continue
             c0, c1 = top.get((r, c), (c, c))
-            if (r, c) not in top and not (cell.alignment is not None and cell.alignment.wrap_text):
-                # unwrapped text runs on into empty cells to its right (section titles, short notes)
-                while c1 + 1 <= maxc and ws.cell(r, c1 + 1).value in (None, "") and (r, c1 + 1) not in covered \
+            if (r, c) not in top and not (cell.alignment is not None and cell.alignment.wrap_text) and c == 1:
+                # column A may run on into an empty column B; a section title across its whole (empty) row
+                last = maxc if is_title(cell) else 2
+                while c1 + 1 <= last and ws.cell(r, c1 + 1).value in (None, "") and (r, c1 + 1) not in covered \
                         and (r, c1 + 1) not in top:
                     c1 += 1
-            cap = RENDER_CHARS_PER_UNIT * sum(width[k] for k in range(c0, c1 + 1))
-            bold = bool(cell.font is not None and cell.font.b)
-            k = eff_len(t, bold) / len(t)
-            cap = cap / k                                       # in characters of this text
-            lines = 1
-            if len(t) > cap:
+            bold, size, ind = font_of(cell)
+            cap = sum(col_pt(width[k]) for k in range(c0, c1 + 1)) - PAD_PT - GAP_PT - ind
+            if text_pt(t, bold, size) > cap:
                 al = copy(cell.alignment)
                 al.wrap_text = True
                 if not _is_header(cell):
                     al.vertical = "top"
                 cell.alignment = al
+            lines = 1
             if cell.alignment is not None and cell.alignment.wrap_text:
-                lines = _lines(t, cap)
-            need_h = max(need_h, LINE_PT * lines)
+                lines = lines_pt(t, cap, bold, size)
+            need_h = max(need_h, LINE_PT * size / 9.0 * lines)
         cur = ws.row_dimensions[r].height
         if not _is_header(ws.cell(r, 1)):
             # the lines the row's text takes at the rendered widths (the workbook's own heights assume its widths)
@@ -300,25 +431,6 @@ def wrap_overflow(ws, maxc, nrows):
                     al = copy(cell.alignment)
                     al.vertical = "top"
                     cell.alignment = al
-
-
-def _lines(t, cap):
-    """Lines a word-wrapped text takes at cap characters a line."""
-    cap = max(int(cap), 1)
-    lines, cur = 1, 0
-    for word in t.split():
-        n = len(word)
-        if cur == 0:
-            cur = n
-        elif cur + 1 + n <= cap:
-            cur += 1 + n
-        else:
-            lines += 1
-            cur = n
-        while cur > cap:
-            lines += 1
-            cur -= cap
-    return lines
 
 
 def page_setup(ws, maxc, header_row):
@@ -347,13 +459,80 @@ def page_setup(ws, maxc, header_row):
     return MIN_SCALE, max(1, math.ceil(rest / per_page))
 
 
+def fit_heading_to_ab(ws, header_row):
+    """Phase 4.2: in a section printed across pages, the title (row 1) and the notes above the header row are merged
+    within A:B and wrapped, so the continued pages, which repeat only columns A and B, show them whole."""
+    from copy import copy
+    last = (header_row or 2) - 1
+    cap = col_pt(ws.column_dimensions["A"].width or 10) + col_pt(ws.column_dimensions["B"].width or 10)
+    cap -= PAD_PT + GAP_PT
+    for m in list(ws.merged_cells.ranges):
+        if m.min_row <= last and m.min_col == 1:
+            ws.unmerge_cells(str(m))
+    for r in range(1, last + 1):
+        cell = ws.cell(r, 1)
+        if not isinstance(cell.value, str) or not cell.value:
+            continue
+        if any(ws.cell(r, c).value not in (None, "") for c in range(2, 4)):
+            continue                                       # a labelled row with figures (pool growth to date)
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
+        al = copy(cell.alignment)
+        al.wrap_text, al.vertical = True, "top"
+        cell.alignment = al
+        bold, size, _ = font_of(cell)
+        ws.row_dimensions[r].height = LINE_PT * size / 9.0 * lines_pt(cell.value, cap, bold, size)
+
+
+def pad_after_numbers(ws, maxc, nrows):
+    """Phase 4.2 (section 7): in a figure column where a left-aligned text follows a number (a status after a count, a
+    flag after a dollar figure, the hold text after a probability), every left-aligned text is indented one level, so
+    none sits against the number to its left and the column reads aligned."""
+    from copy import copy
+
+    def is_num(v):
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+    for c in range(4, maxc + 1):
+        cells = [ws.cell(r, c) for r in range(2, nrows + 1)]
+        texts = [x for x in cells if isinstance(x.value, str) and x.value and not _is_header(x)
+                 and (x.alignment is None or x.alignment.horizontal in (None, "general", "left"))]
+        if not any(is_num(ws.cell(x.row, c - 1).value) for x in texts):
+            continue
+        for x in texts:
+            al = copy(x.alignment)
+            if not al.indent:
+                al.horizontal, al.indent = "left", 1          # an indent shows only on a left-aligned cell
+                x.alignment = al
+
+
+def fit_title(ws, maxc):
+    """Phase 4.2: the section title (row 1) merged across the section's columns and wrapped, so a title longer than the
+    section (the Summary title on page 1) is not cut at the print area."""
+    from copy import copy
+    from openpyxl.utils import get_column_letter
+    cell = ws.cell(1, 1)
+    if not isinstance(cell.value, str) or (1, 1) in _merged_at(ws)[0]:
+        return
+    bold, size, _ = font_of(cell)
+    cap = sum(col_pt(ws.column_dimensions[get_column_letter(c)].width or 10) for c in range(1, maxc + 1))
+    cap -= PAD_PT + GAP_PT
+    if text_pt(cell.value, bold, size) <= cap:
+        return
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=maxc)
+    al = copy(cell.alignment)
+    al.wrap_text, al.vertical = True, "top"
+    cell.alignment = al
+    ws.row_dimensions[1].height = LINE_PT * size / 9.0 * lines_pt(cell.value, cap, bold, size) + 2
+
+
 def _section_copy(src_ws, wb_out, shock_illustrative):
     """Copy Summary (values and formats) into one sheet per section of wb_out. Each section is laid out on its own:
     columns narrowed to their content, overflowing text wrapped with row heights that hold it, the header row and (for
     wide sections) columns A:B repeated on every page, printed landscape at MIN_SCALE or larger (R4-01, R4-02). The
-    working-values section (SKIP_PREFIX) is left out. Probability cells (format 0%) show 'under 5%' and 'over 95%'
+    sections titled with SKIP_PREFIX are left out. Probability cells (format 0%) show 'under 5%' and 'over 95%'
     while the shock is illustrative (the workbook does this with conditional formats, which a values-only copy cannot
-    carry). Returns [(sheet name, section title, scale, pages across)]."""
+    carry). Phase 4.2: the title's grey fill runs across the section; adjacent held columns (every table row reads
+    labels.HOLD_POSITION) collapse into one column headed labels.HELD_COLUMNS, so a held strip prints no wider than
+    the unheld one. Returns [(sheet name, section title, scale, pages across)]."""
     from copy import copy
     from openpyxl.styles import Alignment
     from . import labels
@@ -369,20 +548,34 @@ def _section_copy(src_ws, wb_out, shock_illustrative):
         if str(title).startswith(SKIP_PREFIX):
             continue
         ws = wb_out.create_sheet(f"S{si + 1:02d}")
+        src_head = next((r for r in range(r0 + 1, r1 + 1) if _is_header(src_ws.cell(r, 1))), None)
+        runs = held_runs(src_ws, src_head, r1, src_ws.max_column) if src_head else []
+        drop = {c for run in runs for c in run[1:]}
+        first = {run[0]: run for run in runs}
+        cmap, k = {}, 0
+        for c in range(1, src_ws.max_column + 2):
+            if c in drop:
+                continue
+            k += 1
+            cmap[c] = k
         maxc = 1
         header_row = None
         for r in range(r0, r1 + 1):
             for c in range(1, src_ws.max_column + 1):
+                if c in drop:
+                    continue
                 sc = src_ws.cell(r, c)
                 if sc.value is None and not sc.has_style:
                     continue
                 v = sc.value
+                if c in first and r == src_head:
+                    v = labels.HELD_COLUMNS
                 clamped = False
                 if (shock_illustrative and isinstance(v, (int, float)) and not isinstance(v, bool)
                         and sc.number_format == "0%"):
                     clamped = v < 0.05 or v > 0.95
                     v = labels.PROB_UNDER if v < 0.05 else labels.PROB_OVER if v > 0.95 else v
-                dc = ws.cell(r - r0 + 1, c, v)
+                dc = ws.cell(r - r0 + 1, cmap[c], v)
                 if sc.has_style:
                     dc.font, dc.fill, dc.border = copy(sc.font), copy(sc.fill), copy(sc.border)
                     dc.alignment, dc.number_format = copy(sc.alignment), sc.number_format
@@ -391,44 +584,63 @@ def _section_copy(src_ws, wb_out, shock_illustrative):
                     # render review)
                     dc.alignment = Alignment(horizontal="right", vertical=dc.alignment.vertical)
                 if sc.value not in (None, ""):
-                    maxc = max(maxc, c)
+                    maxc = max(maxc, cmap[c])
             if header_row is None and r > r0 and _is_header(src_ws.cell(r, 1)):
                 header_row = r - r0 + 1
             if src_ws.row_dimensions[r].height:
                 ws.row_dimensions[r - r0 + 1].height = src_ws.row_dimensions[r].height
         for m in merges:
             if r0 <= m.min_row <= r1:
-                ws.merge_cells(start_row=m.min_row - r0 + 1, start_column=m.min_col, end_row=m.max_row - r0 + 1,
-                               end_column=m.max_col)
-                maxc = max(maxc, m.max_col)
+                c0 = next(cmap[c] for c in range(m.min_col, src_ws.max_column + 2) if c in cmap)
+                c1 = max(cmap[c] for c in range(1, m.max_col + 1) if c in cmap)
+                if c1 > c0 or m.max_row > m.min_row:
+                    ws.merge_cells(start_row=m.min_row - r0 + 1, start_column=c0, end_row=m.max_row - r0 + 1,
+                                   end_column=c1)
+                maxc = max(maxc, c1)
         for key, dim in src_ws.column_dimensions.items():
             nd = ws.column_dimensions[key]
             nd.width, nd.min, nd.max = dim.width, dim.min, dim.max
         nrows = r1 - r0 + 1
-        _split_column_dims(ws, maxc)
+        _split_column_dims(ws, maxc, src_ws, cmap, first)
+        pad_after_numbers(ws, maxc, nrows)
         merge_held(ws, maxc, nrows)
         fit_columns(ws, maxc, nrows)
         wrap_overflow(ws, maxc, nrows)
+        settle_gaps(ws, maxc, nrows)
+        wrap_overflow(ws, maxc, nrows)
         ws.print_area = f"A1:{ws.cell(1, maxc).column_letter}{nrows}"
         scale, across = page_setup(ws, maxc, header_row)
+        if across > 1:
+            fit_heading_to_ab(ws, header_row)
+        else:
+            fit_title(ws, maxc)
+        t1 = ws.cell(1, 1)
+        for c in range(2, maxc + 1):                       # the title's grey fill across the section
+            ws.cell(1, c).fill = copy(t1.fill)
         ws.oddHeader.center.text = str(title)[:120]
         ws.oddFooter.center.text = "page &P of &N"
         layout.append((ws.title, str(title), scale, across))
     return layout
 
 
-def _split_column_dims(ws, maxc):
+def _split_column_dims(ws, maxc, src_ws=None, cmap=None, first=None):
     """Give each column up to maxc its own width entry (a copied range entry such as C:AO would otherwise be resized
-    as one)."""
+    as one). With cmap (source column -> section column), widths come from the source columns; a collapsed held run
+    (first: its first source column -> the run) takes the run's total width."""
     from openpyxl.utils import get_column_letter
     widths = {}
-    for key, dim in list(ws.column_dimensions.items()):
+    dims = src_ws.column_dimensions if src_ws is not None else ws.column_dimensions
+    for key, dim in list(dims.items()):
         lo_, hi_ = dim.min or 0, dim.max or 0
-        for c in range(max(lo_, 1), min(hi_, maxc) + 1):
+        for c in range(max(lo_, 1), hi_ + 1):
             widths[c] = dim.width
+    inv = {v: k for k, v in (cmap or {}).items()}
     for c in range(1, maxc + 1):
         key = get_column_letter(c)
-        w = widths.get(c) or ws.column_dimensions[key].width or 10
+        sc = inv.get(c, c)
+        w = widths.get(sc) or ws.column_dimensions[key].width or 10
+        if first and sc in first:
+            w = sum(widths.get(x) or 10 for x in first[sc])
         d = ws.column_dimensions[key]
         d.min, d.max, d.width = c, c, w
 

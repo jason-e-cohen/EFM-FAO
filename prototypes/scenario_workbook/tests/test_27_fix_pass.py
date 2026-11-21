@@ -10,8 +10,21 @@ R4-03 one margin per event: the percentile block, the Low/High rows and the clas
 the percentile margin is labelled with labels.PCT_MARGIN_SWAPS. R4-08: the tie rule is stated on the Summary and the
 README sheet. R4-12: the Summary shows ntr_target and the effective entering target, and the all_jd rows read "not used
 (entering_y1)" under entering_y1.
+
+Phase 4.2 (Review_Phase4_FixPass.md F-1 to F-4, section 7). F-1: a scan of the whole held Summary, inside and outside
+the print area, by value: no cell holds a held figure or a part of one (G+, G-, their variances; the count at or above
+a held t; the count below the floor when the floor is a held t; the GPA-hi count when it is the GPA median's G+). One
+documented exception: when score.pool_threshold is a held t, the pool strip's working values M and V of the part at or
+above the threshold equal that median's G+ and the binomial variance its sibling median uses; the strip's expected class
+reads them, so they stay (and two rows of the printed expected class give M_hi anyway). F-2: a ceiling break-even reads
+"at most m" in Excel (edited working values; the split by score cannot produce a ceiling from real cells). F-4: no q = 0.5
+percentile entry in the strips, the break-evens or the contract. Section 7: the client legend in plain words; the
+lowest band reads "below {next bound}".
 """
+import math
 import re
+
+import pytest
 
 from conftest import close, read_range
 from sw import contract as K, labels, risk
@@ -57,7 +70,8 @@ def test_hold_replaces_every_median_and_percentile_figure(hold_wb, main_wb):
     seen = 0
     for r, a in lab.items():
         if not a or a.startswith(("SUM_", "SEG_", "INC_", "Tie rule", "Percentile targets", "Pool growth",
-                                  labels.RESPONSE_LABEL, "Pool multiplier at which")):
+                                  labels.RESPONSE_LABEL, "Pool multiplier at which")) \
+                or a in labels.LEGEND_NAMES.values():                        # the legend's plain names
             continue
         is_pos = bool(re.search(r"median|percentile|Spread:", a, re.I))
         m = re.match(rf"(Share|Enrolled) at or above {meas} (\d+)", a)
@@ -112,6 +126,42 @@ def test_hold_render(hold_wb, lo_profile):
     assert not bad, bad[:10]
 
 
+def test_held_strip_prints_no_wider(hold_wb, main_wb, lo_profile):
+    """Section 7: in the held render the pool strip's held columns collapse into one column (labels.HELD_COLUMNS), so
+    the held strip prints no wider, and on no more pages across, than the unheld one; the yield strip, the class-size
+    table and the break-evens collapse the same way."""
+    import os
+    import openpyxl
+    from openpyxl.utils import get_column_letter
+    from test_10_render import PHASE4, render
+    from sw import lo
+    paths = {}
+    for stem, bundle in (("Summary_render", main_wb), ("Summary_render_hold", hold_wb)):
+        keep = os.path.join(PHASE4, f"{stem}_sections.xlsx")
+        if not os.path.exists(keep):
+            render(bundle, lo_profile, stem)
+        paths[stem] = keep
+
+    def strips(path):
+        out = {}
+        for ws in openpyxl.load_workbook(path).worksheets:
+            t = ws.oddHeader.center.text
+            maxc = max(c for c in range(1, ws.max_column + 1)
+                       if any(ws.cell(r, c).value not in (None, "") for r in range(1, ws.max_row + 1)))
+            width = sum(lo.col_pt(ws.column_dimensions[get_column_letter(c)].width or 8.43) for c in range(1, maxc + 1))
+            heads = [ws.cell(r, c).value for r in range(1, ws.max_row + 1) for c in range(1, maxc + 1)
+                     if lo._is_header(ws.cell(r, c))]
+            out.setdefault(t, (width, heads, ws.sheet_properties.pageSetUpPr.fitToPage))
+        return out
+    u, h = strips(paths["Summary_render"]), strips(paths["Summary_render_hold"])
+    for title in u:
+        if title.startswith(("Pool strip", "Yield what-if", "Class-size table", "Break-even")):
+            assert labels.HELD_COLUMNS in h[title][1] and labels.HELD_COLUMNS not in u[title][1], title
+            if title.startswith("Pool strip"):
+                assert h[title][0] <= u[title][0], (h[title][0], u[title][0])
+                assert h[title][2] or not u[title][2]
+
+
 def test_one_margin_per_event(main_wb):
     """R4-03: the percentile block and the Low/High rows leave out q = 0.5 targets; the class-size table has no q = 0.5
     percentile columns; the percentile margin carries the swaps label; the median margin keeps its own."""
@@ -129,6 +179,228 @@ def test_one_margin_per_event(main_wb):
     cols = K.strip_columns(run.cfg)["class_table"]
     assert not any(c.startswith(("margin_q0.5", "p_pct_q0.5")) for c in cols)
     assert sum(c.startswith("margin_q") for c in cols) == sum(q != 0.5 for q, _ in targets)
+    # F-4: the pool strip, the break-evens and the contract carry no q = 0.5 percentile entry; the medians carry them
+    meds = run.cfg["score"]["median_thresholds"]
+    npq = sum(q != 0.5 for q, _ in targets)
+    for which in ("pool_strip", "yield_strip", "class_table", "tuition_whatif"):
+        assert not any("q0.5" in c for c in K.strip_columns(run.cfg)[which]), which
+    ps_cols = K.strip_columns(run.cfg)["pool_strip"]
+    assert [c for c in ps_cols if c.startswith("p_median")] == [f"p_median_score_{t:g}" for t in meds]
+    assert sum(c.startswith("p_pct") for c in ps_cols) == npq
+    wb, dump = main_wb["values"], main_wb["info"]["dump"]
+    nS = len(run.scenarios)
+    for rn in ("SUM_MARGIN_Q_T", "SUM_P_PCT_Q_T", "SUM_P_PCT_Q_T_RHO05"):
+        assert len(read_range(wb, rn)) == 3 * npq == len(dump[rn]), rn
+    be = read_range(wb, "PS_POOL_BREAKEVEN_M")
+    assert len(be) == nS and all(len(r) == 1 + len(meds) + npq for r in be)
+    assert not any("q 0.5" in a for a in texts)
+
+
+def _held_values(run, vals):
+    """Every held figure and every part of one, from an unheld build's Python values: value -> what (for messages)."""
+    cfg = run.cfg
+    out = {}
+
+    def add(v, what):
+        # a value within 1e-6 of an integer (a probability saturated at 1, a margin of 0) is no figure to look for: it
+        # matches any count or grid value of the same size
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and abs(v) > 1e-9 and abs(v - round(v)) > 1e-6:
+            out.setdefault(float(v), what)
+    hts = K.held_ts(cfg)
+    for (s, k), d in vals["sk"].items():
+        for key, md in d["median"].items():
+            for x in ("margin_t", "margin_expected", "p_median_t", "p_median_t_rho05"):
+                add(md.get(x), (s, k, "median", key, x))
+        for key, pc in d["pct"].items():
+            for x in ("margin_q_t", "margin_expected", "p_pct_q_t", "p_pct_q_t_rho05", "expected_below"):
+                add(pc.get(x), (s, k, "pct", key, x))
+        kp = d["kpis"]
+        for t in kp["share_at_or_above_t"]:
+            if t in hts:
+                add(kp["share_at_or_above_t"][t], (s, k, "share at or above", t))
+                add(kp["enrolled_at_or_above"][t], (s, k, "enrolled at or above", t))
+        if K.is_held(dict(cfg, hold_position_rows=True), "enrolled_below_floor"):
+            add(kp["enrolled_below_floor"], (s, k, "enrolled below floor"))
+        if K.is_held(dict(cfg, hold_position_rows=True), "enrolled_gpa_hi"):
+            add(kp["enrolled_gpa_hi"], (s, k, "enrolled gpa hi"))
+    for sc in run.scenarios:
+        s = sc.name
+        ps = vals["strips"][s]["pool_strip"]
+        for kind, parts in (("median", ps["med_parts"]), ("pct", ps["pct_parts"])):
+            for key, pp in parts.items():
+                for x in pp["lo"]:
+                    add(pp["lo"][x], (s, "working values", kind, key, "lo", x))
+                    add(pp["hi"][x], (s, "working values", kind, key, "hi", x))
+                    add(pp["lo"][x] + pp["hi"][x], (s, "working values", kind, key, "lo + hi", x))
+        for row in ps["pool_strip"]:
+            for t, md in row["median"].items():
+                add(md["margin"], (s, "pool strip", t, "margin")); add(md["p"], (s, "pool strip", t, "p"))
+            for key, pc in row["pct"].items():
+                add(pc["p"], (s, "pool strip", key, "p"))
+        for row in vals["strips"][s]["yield_strip"]["yield_strip"]:
+            for key, md in row["median"].items():
+                add(md["margin"], (s, "yield strip", key)); add(md["p"], (s, "yield strip", key))
+        for row in vals["strips"][s]["class_table"]["class_table"]:
+            for key, md in row.get("median", {}).items():
+                add(md["margin"], (s, "class table", key)); add(md["p"], (s, "class table", key))
+            for key, pc in row.get("pct", {}).items():
+                add(pc["margin"], (s, "class table", key)); add(pc["p"], (s, "class table", key))
+        for x in vals["pool_be"][s][1:]:
+            add(x, (s, "break-even"))
+    return out
+
+
+_NUM = re.compile(r"(?<![\d.])-?\d[\d,]*\.\d(?![\d])")
+
+
+def _scan(ws, held, skip=()):
+    """Cells of ws (every used cell) holding a held value: numbers to 1e-9; in text, a one-decimal number equal to a
+    held value rounded to one decimal that no number cell on the sheet shows (rounded the same way)."""
+    hits = []
+    hk = sorted(held)
+    shown = {round(c.value, 1) for row in ws.iter_rows() for c in row
+             if isinstance(c.value, (int, float)) and not isinstance(c.value, bool)}
+    h1 = {round(h, 1): w for h, w in held.items() if abs(h) >= 1}
+    for row in ws.iter_rows():
+        for c in row:
+            v = c.value
+            if (c.row - 1, c.column - 1) in skip:
+                continue
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and abs(v) > 1e-9:
+                hit = [held[h] for h in hk if math.isclose(v, h, rel_tol=1e-9, abs_tol=1e-12)]
+                if hit:
+                    hits.append((c.coordinate, v, hit[0]))
+            elif isinstance(v, str):
+                for m in _NUM.findall(v):
+                    x = float(m.replace(",", ""))
+                    if x in h1 and x not in shown:
+                        hits.append((c.coordinate, m, h1[x]))
+    return hits
+
+
+def _rc(a1_ref):
+    """(row, col), 0-based, of an A1 reference such as $C$560."""
+    from openpyxl.utils.cell import coordinate_from_string, column_index_from_string
+    col, row = coordinate_from_string(a1_ref.replace("$", ""))
+    return row - 1, column_index_from_string(col) - 1
+
+
+def test_hold_scan_by_value(hold_wb, main_wb):
+    """F-1: scan the whole held Summary (inside and outside the print area) by value for any held figure or part of
+    one. The same scan on the unheld build finds them, inside and outside the print area (the scan works)."""
+    run0, vals0 = main_wb["info"]["run"], main_wb["info"]["vals"]
+    cfg = run0.cfg
+    held = _held_values(run0, vals0)
+    assert len(held) > 300
+    lay = hold_wb["info"]["layout"]
+    exempt = set()
+    if cfg["score"]["pool_threshold"] in K.held_ts(cfg):
+        # the documented exception (module docstring): M_hi is G+ at the pool threshold, V_hi a median's variance
+        for s in run0.scenarios:
+            for key in ("M", "V"):
+                exempt.add(_rc(lay["pool_parts"][(s.name, "hi", key)]))
+    ws = hold_wb["values"]["Summary"]
+    hits = _scan(ws, held, exempt)
+    assert not hits, hits[:10]
+    # the exemption is exactly the documented coincidence
+    for r, c in exempt:
+        v = ws.cell(r + 1, c + 1).value
+        assert any(math.isclose(v, h, rel_tol=1e-9) for h in held), (r, c, v)
+    wm = main_wb["values"]["Summary"]
+    on = _scan(wm, held, exempt)
+    print_rows = main_wb["info"]["layout"].get("summary_print_rows")
+    assert len(on) > 300
+    below = [h for h in on if int(re.sub(r"[A-Z]+", "", h[0])) > (print_rows or 0)]
+    assert print_rows and below, "the scan reaches past the print area"
+
+
+def test_breakeven_ceiling_in_excel(main_wb, lo_profile):
+    """F-2: with working values that make the expected margin fall as the top pool grows (e_lo > 0, e_hi < 0) and cross
+    zero at m = 1.2, the break-even reads 'at most 1.200' in Excel, as strip.breakeven_m returns. The split by score
+    cannot produce this from real cells (below the pool threshold G-_hi is 0, above it G+_lo is 0), so the copy edits
+    the working values directly."""
+    import os
+    import openpyxl
+    from conftest import PHASE2
+    from sw import lo, strip
+    run, lay = main_wb["info"]["run"], main_wb["info"]["layout"]
+    cfg = run.cfg
+    j, (q, t) = K.ct_ptargets(cfg)[0]
+    s = run.scenarios[0].name
+    x = q * 10.0 / ((1 - q) * 1.2)
+    edits = {(s, "lo", f"Gp{j}"): 10.0, (s, "lo", f"Gm{j}"): 0.0, (s, "hi", f"Gp{j}"): 0.0, (s, "hi", f"Gm{j}"): x}
+    wb = openpyxl.load_workbook(main_wb["path"])
+    for key, v in edits.items():
+        r, c = _rc(lay["pool_parts"][key])
+        wb["Summary"].cell(r + 1, c + 1).value = v
+    out = os.path.join(PHASE2, "ceiling")
+    os.makedirs(out, exist_ok=True)
+    p = os.path.join(out, "copy.xlsx")
+    wb.save(p)
+    got = openpyxl.load_workbook(lo.recalc(p, os.path.join(out, "recalculated"), profile=lo_profile), data_only=True)
+    be = read_range(got, "PS_POOL_BREAKEVEN_M")
+    col = 1 + len(cfg["score"]["median_thresholds"])
+    want = strip.breakeven_m(q * 10.0, -(1 - q) * x, cfg["risk"]["pool_grid"])
+    assert want == labels.POOL_BE_AT_MOST.format(m="1.200")
+    assert be[0][col] == want
+    assert read_range(main_wb["values"], "PS_POOL_BREAKEVEN_M")[0][col] != want
+
+
+def test_legend_in_plain_words(main_wb, hold_wb):
+    """Section 7: the client legend (Labels and range kinds) carries no review IDs (R4-n), config key names (snake_case,
+    dotted keys) or label constant names (CAPS_WITH_UNDERSCORES); it states whether this workbook is held."""
+    for bundle, state in ((main_wb, "not held"), (hold_wb, "held")):
+        ws, lab = _summary_rows(bundle["values"])
+        r0 = next(r for r, a in lab.items() if a == "Labels and range kinds")
+        rows = []
+        for r in range(r0 + 1, ws.max_row + 1):
+            a = lab[r]
+            if not a or str(ws.cell(r, 1).fill.fgColor.rgb).upper().endswith("E8E8E8"):
+                break
+            rows.append((a, str(ws.cell(r, 2).value or "")))
+        assert len(rows) >= 12
+        for a, b in rows:
+            for txt in (a, b):
+                assert not re.search(r"\bR\d-\d+", txt), txt
+                assert not re.search(r"\b[a-z0-9]+_[a-z0-9_]+\b", txt), txt
+                assert not re.search(r"\b[A-Z]+_[A-Z_]+\b", txt), txt
+                assert not re.search(r"\b[a-z]+\.[a-z_]+\b", txt), txt
+        assert rows[-1][0] == "Held figures" and rows[-1][1].endswith(f"This workbook: {state}")
+        assert rows[0][0] == labels.LEGEND_NAMES["SHOCK_LABEL"]
+
+
+def test_lowest_band_reads_below(main_wb):
+    """Section 7: the lowest score band (lower bound 0) reads 'below {next bound}' in the class-size table's headers and
+    'lowest band admitted' column and in the spread rows (a number format, so the contract value stays 0)."""
+    import openpyxl
+    run = main_wb["info"]["run"]
+    lows = sorted(float(b) for b in run.cfg["score"]["bands"])
+    assert lows[0] == 0
+    txt = labels.LOWEST_BAND.format(b=f"{lows[1]:g}")
+    ws = openpyxl.load_workbook(main_wb["path"])["Summary"]
+    heads = [c.value for row in ws.iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith("admits cut")]
+    assert f"admits cut, {txt}" in heads and "admits cut, 0" not in heads
+    fmt = f'[=0]"{txt}";General'
+    ct = read_range(main_wb["values"], "CT_CLASS_TABLE")
+    cols = K.strip_columns(run.cfg)["class_table"]
+    k = cols.index("lowest_band_admitted")
+    (sheet, coord), = list(main_wb["values"].defined_names["CT_CLASS_TABLE"].destinations)
+    first = coord.replace("$", "").split(":")[0]
+    from openpyxl.utils.cell import coordinate_from_string, column_index_from_string
+    col, row0 = coordinate_from_string(first)
+    c0 = column_index_from_string(col)
+    zeros = 0
+    for i, r in enumerate(ct):
+        cell = ws.cell(row0 + i, c0 + k)
+        if r[k] not in ("", None):
+            assert cell.number_format == fmt
+            zeros += r[k] == 0
+    assert zeros > 0
+    from sw import lo
+    assert lo.display_text(0, fmt) == txt and lo.display_text(158.0, fmt) == "158"
+    spread = [r for r in range(1, ws.max_row + 1)
+              if str(ws.cell(r, 1).value or "").startswith("Spread:") and "lower bound" in str(ws.cell(r, 1).value)]
+    assert spread and all(ws.cell(r, 3).number_format == fmt for r in spread)
 
 
 def test_tie_rule_stated(main_wb):
@@ -169,16 +441,30 @@ def test_hold_in_python(tmp_path):
     with open(os.path.join(ROOT, "config", "synthetic.yaml")) as f:
         raw = yaml.safe_load(f)
     H = labels.HOLD_POSITION
-    dumps = {}
+    dumps, paths = {}, {}
     for hold in (False, True):
         raw["hold_position_rows"] = hold
         cp = str(tmp_path / f"cfg_{hold}.yaml")
         with open(cp, "w") as f:
             yaml.safe_dump(raw, f)
-        _, info = build.build(cp, "synthetic", os.path.join(ROOT, "config", "scenarios_synthetic.yaml"),
-                              str(tmp_path / f"out_{hold}"))
+        path, info = build.build(cp, "synthetic", os.path.join(ROOT, "config", "scenarios_synthetic.yaml"),
+                                 str(tmp_path / f"out_{hold}"))
         dumps[hold] = (info["dump"], info["run"])
+        paths[hold] = path
     (d0, run0), (d1, run) = dumps[False], dumps[True]
+    # F-4: the unheld pool strip dump, read by column name, carries each strip figure in its own column
+    vals0 = K.compute(run0)
+    ps_cols = K.strip_columns(run0.cfg)["pool_strip"]
+    ps_rows = d0[K.range_name("pool_strip", next(p for w, p, _ in K.STRIPS if w == "pool_strip"))]
+    src = [r for s in run0.scenarios for r in vals0["strips"][s.name]["pool_strip"]["pool_strip"]]
+    assert len(ps_rows) == len(src)
+    for row, r in zip(ps_rows, src):
+        got = dict(zip(ps_cols, row))
+        for t in run0.cfg["score"]["median_thresholds"]:
+            assert got[f"margin_score_{t:g}"] == pytest.approx(r["median"][t]["margin"], abs=1e-12)
+            assert got[f"p_median_score_{t:g}"] == pytest.approx(r["median"][t]["p"], abs=1e-12)
+        assert got["class_mean"] == pytest.approx(r["class_mean"], abs=1e-12)
+        assert got["ntr_sd"] == pytest.approx(r["ntr_sd"], abs=1e-9)
     cfg = run.cfg
     ts = K.held_ts(cfg)
     assert ts == set(cfg["score"]["median_thresholds"]) | {t for _, t in risk.pct_targets(cfg)}
@@ -214,8 +500,31 @@ def test_hold_in_python(tmp_path):
     vals = K.compute(run)
     for s in run.scenarios:
         t = NAR.outcome(run, vals, s)
-        assert t.count(H) == len(cfg["score"]["median_thresholds"]) + 1 and "margin" not in t
+        floor_held = cfg["score"]["floor"] in K.held_ts(cfg)                  # F-1: the count below the floor
+        assert t.count(H) == len(cfg["score"]["median_thresholds"]) + 1 + floor_held and "margin" not in t
         assert "margin" in NAR.outcome(run0, K.compute(run0), s)
     cols = K.strip_columns(cfg)["class_table"]
     assert [c for c in cols if c.startswith("margin_q")] == [f"margin_q{q:g}_{t:g}" for q, t in
                                                              risk.pct_targets(cfg) if q != 0.5]
+    # F-1: the counts a held figure can be read off directly are held (synthetic: floor 154 is the 10th percentile's t;
+    # GPA hi starts at the GPA median threshold), and only under hold or when they coincide
+    assert K.is_held(cfg, "enrolled_below_floor") and K.is_held(cfg, "enrolled_gpa_hi")
+    assert not K.is_held(run0.cfg, "enrolled_below_floor") and not K.is_held(run0.cfg, "enrolled_gpa_hi")
+    assert not K.is_held(dict(cfg, score=dict(cfg["score"], floor=152)), "enrolled_below_floor")
+    assert not K.is_held(dict(cfg, gpa=dict(cfg["gpa"], hi_at_or_above=3.9)), "enrolled_gpa_hi")
+    # F-4: no q = 0.5 percentile entry in the dump; the medians carry them, every one of them in the pool strip
+    meds = cfg["score"]["median_thresholds"]
+    npq = sum(q != 0.5 for q, _ in risk.pct_targets(cfg))
+    for rn in ("SUM_MARGIN_Q_T", "SUM_P_PCT_Q_T", "SUM_P_PCT_Q_T_RHO05"):
+        assert len(d0[rn]) == 3 * npq, rn
+    assert all(len(r) == 1 + len(meds) + npq for r in d0["PS_POOL_BREAKEVEN_M"])
+    assert K.strip_columns(cfg)["pool_strip"] == (
+        ["growth", "class_mean", "p_class_over_cap", "ntr_mean", "ntr_sd"]
+        + [x for t in meds for x in (f"margin_score_{t:g}", f"p_median_score_{t:g}")]
+        + [f"p_pct_q{q:g}_{t:g}" for q, t in risk.pct_targets(cfg) if q != 0.5] + ["marker"])
+    assert all(len(r) == len(K.strip_columns(cfg)["pool_strip"]) for r in d0["PS_POOL_STRIP"])
+    # section 7: the hold text is padded (left-aligned, indent 1) wherever it stands
+    import openpyxl
+    ws = openpyxl.load_workbook(paths[True])["Summary"]
+    hc = [c for row in ws.iter_rows() for c in row if c.value == H]
+    assert len(hc) > 500 and all(c.alignment.indent == 1 and c.alignment.horizontal == "left" for c in hc)

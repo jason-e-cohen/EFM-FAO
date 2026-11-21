@@ -2,8 +2,8 @@
 
 On a copy of the main workbook, edit Inputs pool_ytd_growth (0.12 to 0.33) and recalculate in LibreOffice; a second copy
 is saved the same way without the edit. Only the marker cells change: the growth shown beside the pool strip, the
-nearest-row cell and the marker column (every other formula cell is identical), and the marker moves from the row of
-m = 1.1 to the row of m = 1.3 in every scenario's block.
+nearest-row cell (Phase 4.2: it shows that row's pool multiplier) and the marker column (every other formula cell is
+identical), and the marker moves from the row of m = 1.1 to the row of m = 1.3 in every scenario's block.
 
 R4-13: growth 0.15 (an exact midpoint) marks the 1.2 row in Excel. R4-10, R4-11: in an edited copy, a q = 0.5 target's t
 follows the median threshold, the implied tuition increase follows tuition_by_year_usd, and Checks reports all_jd with
@@ -49,8 +49,8 @@ def test_only_the_marker_cells_change(main_wb, lo_profile):
             vals = [wb[sh].cell(r + 1, c + 1).value or "" for sh, r, c in mcells[j * len(grid):(j + 1) * len(grid)]]
             assert vals == [text if i == row else "" for i in range(len(grid))]
     sh, r, c = info["layout"]["marker_cells"][1]
-    assert base[sh].cell(r + 1, c + 1).value == grid.index(1.1) + 1
-    assert edit[sh].cell(r + 1, c + 1).value == grid.index(1.3) + 1
+    assert base[sh].cell(r + 1, c + 1).value == 1.1                     # Phase 4.2: the multiplier, not the row
+    assert edit[sh].cell(r + 1, c + 1).value == 1.3
 
 
 def _edit(src, out, edits, profile):
@@ -75,13 +75,13 @@ def test_growth_tie_marks_the_upper_row_in_excel(main_wb, lo_profile):
     grid = info["run"].cfg["risk"]["pool_grid"]
     wb = _edit(main_wb["path"], os.path.join(PHASE2, "marker_tie"), {"in_pool_ytd_growth": 0.15}, lo_profile)
     sh, r, c = info["layout"]["marker_cells"][1]
-    assert wb[sh].cell(r + 1, c + 1).value == grid.index(1.2) + 1
+    assert wb[sh].cell(r + 1, c + 1).value == grid[grid.index(1.2)]
 
 
 def test_live_inputs_median_tuition_and_goal_basis(main_wb, lo_profile):
     """R4-10, R4-11. In one edited copy of the main workbook: (a) the first median threshold moved from 166 to 165:
-    the q = 0.5 percentile target that reads it follows (Inputs pct_t), and its P(percentile) equals P(median) at the
-    new threshold (the same event); (b) tuition_by_year_usd for the plan year set: the implied increase on Inputs is
+    the q = 0.5 percentile target that reads it follows (Inputs pct_t), and P(median) at the first threshold now equals
+    P(median) at the second, also 165 (F-4: q = 0.5 targets have no percentile range of their own); (b) tuition_by_year_usd for the plan year set: the implied increase on Inputs is
     100 x (dollars / tuition_base - 1) and Baseline's Ledger tuition is the dollar figure; (c) ntr_goal_basis set to
     all_jd with continuing_ntr_usd blank: the Checks row reports it."""
     from conftest import close, read_range
@@ -100,9 +100,11 @@ def test_live_inputs_median_tuition_and_goal_basis(main_wb, lo_profile):
     jq = [i for i, p in enumerate(cfg["score"]["percentile_targets"]) if p["q"] == 0.5][0]
     assert pt[jq] == 165
     nS, nc = len(run.scenarios), 3
-    pp = read_range(wb, "SUM_P_PCT_Q_T")[jq * nc:(jq + 1) * nc]
-    pm = read_range(wb, "SUM_P_MEDIAN_T")[0:nc]              # median target 0 (now 165)
-    assert all(close(a, b) for ra, rb in zip(pp, pm) for a, b in zip(ra, rb))
+    assert cfg["score"]["median_thresholds"][1] == 165
+    pm = read_range(wb, "SUM_P_MEDIAN_T")
+    assert all(close(a, b) for ra, rb in zip(pm[0:nc], pm[nc:2 * nc]) for a, b in zip(ra, rb))
+    assert not all(close(a, b) for ra, rb in zip(read_range(main_wb["values"], "SUM_P_MEDIAN_T")[0:nc],
+                                                 pm[0:nc]) for a, b in zip(ra, rb))      # the edit moved it
     # (b)
     tb = float(cfg["tuition_base"])
     imp = read_range(wb, "in_tuition_implied_pct")[0][yrs.index(plan)]

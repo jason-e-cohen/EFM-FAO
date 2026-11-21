@@ -136,9 +136,10 @@ def test_pool_strip(main_wb):
         py = strip.pool_strip(run.cells, run.cfg, s, run.base)["pool_strip"]
         for g, row in enumerate(py):
             got = ps[j * len(grid) + g]
-            want = [row["growth"], row["class_mean"], row["p_class_over_cap"], row["margin"], row["p_median"],
-                    row["ntr_mean"], row["ntr_sd"]] + [row["pct"][k]["p"] for k in risk.pct_targets(run.cfg)] \
-                + [row["marker"]]                                                   # [v0.6.3, BM-6]
+            want = ([row["growth"], row["class_mean"], row["p_class_over_cap"], row["ntr_mean"], row["ntr_sd"]]
+                    + [x for t in run.cfg["score"]["median_thresholds"]                     # F-4: every median,
+                       for x in (row["median"][t]["margin"], row["median"][t]["p"])]       # then q other than 0.5
+                    + [row["pct"][k]["p"] for k in risk.pct_targets(run.cfg) if k[0] != 0.5] + [row["marker"]])
             assert len(got) == len(want)
             for gv, wv in zip(got, want):
                 assert close(gv, wv), (s.name, row["pool_multiplier"])
@@ -250,7 +251,8 @@ def test_no_unfilled_template_text(main_wb, edge_wb):
                 for c in row:
                     assert not (isinstance(c.value, str) and pat.search(c.value)), (ws.title, c.coordinate, c.value)
     ws = main_wb["values"]["Summary"]
-    shock = [ws.cell(r, 2).value for r in range(1, ws.max_row + 1) if ws.cell(r, 1).value == "SHOCK_LABEL"]
+    shock = [ws.cell(r, 2).value for r in range(1, ws.max_row + 1)
+             if ws.cell(r, 1).value == labels.LEGEND_NAMES["SHOCK_LABEL"]]
     assert shock == [labels.shock_label(main_wb["info"]["run"].cfg["risk"]["common_shock_sd"])]
 
 

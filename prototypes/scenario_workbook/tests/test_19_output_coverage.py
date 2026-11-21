@@ -339,13 +339,13 @@ def test_pool_strip_rho05_and_ntr_sd():
     row1 = next(r for r in strip.pool_strip(cells, cfg, b, base)["pool_strip"] if r["pool_multiplier"] == 1.0)
     assert row1["ntr_sd"] == pytest.approx(math.sqrt(22_625_942_000 + S ** 2 * 897_400 ** 2), rel=1e-12)
     v05 = 20.717 + S ** 2 * (9.6 ** 2 + 19.5 ** 2 - 9.6 * 19.5)
-    assert row1["p_median"] == pytest.approx(1 - norm.cdf(9.4 / math.sqrt(v05)), abs=1e-12)
+    assert row1["median"][166]["p"] == pytest.approx(1 - norm.cdf(9.4 / math.sqrt(v05)), abs=1e-12)
     # every m against the ledger run with that multiplier
     s = L.derive(b, "S", cfg, cells, pool_multiplier=1.3, bonus_usd=5000.0, segment_pool_lift_pct=10.0,
                  yield_shift_pts=0.5, specialty_usd=2000.0)
     for row in strip.pool_strip(cells, cfg, s, base)["pool_strip"]:
         lc = L.evaluate(cells, cfg, replace(s, pool_multiplier=row["pool_multiplier"]), base, "middle")
-        assert row["p_median"] == pytest.approx(risk.median(lc, "score", 166)["p_median_t"], abs=1e-12)
+        assert row["median"][166]["p"] == pytest.approx(risk.median(lc, "score", 166)["p_median_t"], abs=1e-12)
         assert row["ntr_sd"] == pytest.approx(risk.ntr(lc)["ntr_sd"], rel=1e-12)
         assert row["ntr_mean"] == pytest.approx(risk.ntr(lc)["ntr_mean"], rel=1e-12)
 
@@ -360,7 +360,9 @@ def test_pool_strip_rho05_synthetic(syn_cfg, worlds):
     s = L.derive(L.baseline(cells, cfg), "S", cfg, cells, pool_multiplier=1.2, bonus_usd=4000.0)
     for row in strip.pool_strip(cells, cfg, s, base)["pool_strip"]:
         lc = L.evaluate(cells, cfg, replace(s, pool_multiplier=row["pool_multiplier"]), base, "middle")
-        assert row["p_median"] == pytest.approx(risk.median(lc, "score", 166)["p_median_t"], abs=1e-12)
+        for t in cfg["score"]["median_thresholds"]:                      # F-4: 166 and 165 (165 at the pool split)
+            assert row["median"][t]["p"] == pytest.approx(risk.median(lc, "score", t)["p_median_t"], abs=1e-12)
+            assert row["median"][t]["margin"] == pytest.approx(risk.median(lc, "score", t)["margin_t"], abs=1e-9)
         assert row["ntr_sd"] == pytest.approx(risk.ntr(lc)["ntr_sd"], rel=1e-12)
 
 

@@ -4,6 +4,17 @@
 
 ## 1. Decisions by date
 
+### November 20, 2026 (Jason): Phase 4.2 (fix pass 2) and the hold's scope
+
+| Decision | IDs |
+|---|---|
+| Phase 4.2 accepted on its report (build `877a03692ad9`; with the fixture 338 passed, 3 skipped; mutation 188 of 188 Python, 149 of 149 Excel), subject to the desktop Excel check and Jason's look at the two Summary PDFs. Phase 4 fix pass 1 (`f45c615`): desktop Excel for Mac parity on `6d46dbd8b55c`, 61,830 formula cells, 0 mismatches (`Review_Phase4_FixPass.md` section 8) | R4-15, F-1 to F-6 |
+| When the pool threshold equals a held median threshold (Richmond: 165), the pool strip's working values above the threshold stay visible on a held build. The strip's class figures, which are in the Scenario 4 deliverable, need them, and two printed strip rows give them anyway. The hold keeps unconfirmed figures off the page; it does not try to make them impossible to derive | R4-06 residual |
+| The hold should cover LSAT figures only: OD-14 is about the LSAT basis, and the Phase 3 check found Richmond's GPA quartiles, class size and blank-GPA counts agree with the 509. Not now (holding GPA is cautious, not wrong, and the GPA median is outside the Scenario 4 scope); done in the Richmond pre-delivery pass, so the GPA median, GPA margin and GPA-hi count show | R4-06 scope |
+| Methodology section 5 and Appendix F item 26, and spec section 3 item 7 and 0A-B5, now state the need-departure rule (R4-07) and the tie caveat (R4-08) | F-6 |
+
+**Richmond pre-delivery pass (before the first Richmond workbook).** Inputs first: 2026-27 tuition (OD-09), Brandon's answers (OD-10, 11, 13, 14, 15, 16), Richmond cell data with state counts, continuing NTR if `all_jd`. Build work: narrow `hold_position_rows` to LSAT figures (or lift it if OD-14 is answered); the remaining Summary cosmetics in `Review_Phase4_FixPass.md` section 7 and the Phase 4.2 report (narratives page prints small; "OK" sits low; long scenario names wrap; "Baseline" close to "incentive"); `mutation_check.py` rerun reports under their own names so they do not overwrite full-run reports; the live Scenario 4 build, an independent pre-delivery review, desktop Excel on Mac and Windows, and Jason's review before anything is sent.
+
 ### November 19, 2026 (Jason): Phase 4 review (`Review_Phase4_Build.md`)
 
 | Decision | IDs |

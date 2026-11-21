@@ -39,7 +39,8 @@ def _outputs(cells, cfg, scen, base):
     out["p_ntr"] = n["p_ntr_y1_ge_target"]
     ps = strip.pool_strip(cells, cfg, scen, base)
     for r in ps["pool_strip"]:
-        out[f"pool_{r['pool_multiplier']}"] = (r["class_mean"], r["p_median"], r["ntr_mean"])
+        out[f"pool_{r['pool_multiplier']}"] = ((r["class_mean"], r["ntr_mean"])
+                                               + tuple(r["median"][t]["p"] for t in cfg["score"]["median_thresholds"]))
     return out
 
 

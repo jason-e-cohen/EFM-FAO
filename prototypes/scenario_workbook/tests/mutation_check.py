@@ -40,6 +40,12 @@ Mutant sources:
   P4.1 mutants of the Phase 4 review fix pass (hold_position_rows, one margin per event, break-even notes, the need
        rule, tuition years, the DIST range, the all_jd Checks row, the growth-marker tie), IDs N86 to N94; Excel E117
        to E124
+  P4.2 mutants of Phase 4.2 (Review_Phase4_FixPass.md F-1 to F-4 and section 7: the held working values and counts,
+       q = 0.5 out of the strips, break-evens and contract, every median in the pool strip, the ceiling break-even,
+       the growth-to-date multiplier, the render's wrapping, gaps, collapsed held columns, headings, fills and
+       padding, the plain legend, the lowest band), IDs N95 to N117 (the render mutants run in Python mode through
+       test 10's LibreOffice-free layout test); Excel E125 to E142. P3, X38, E84 to E86 and E124 are retargeted to the
+       rewritten pool strip with the same intent
   XL, XL+, 2.1, P21, P3, P3.1, P2.2, P4 (Excel mode)  see EXCEL_MUTANTS, IDs E01 to E116
 
 --deselect PREFIX (repeatable) leaves tests out of every run, baseline included; not used by default (R3-5: the
@@ -61,6 +67,7 @@ from concurrent.futures import ThreadPoolExecutor
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SLOW_LAST = ["test_13_segment_incentive.py", "test_05_shape.py", "test_04_cf_vs_sim.py"]
 EXCEL_TESTS = ["test_03_excel_equals_python.py", "test_06_reproduce.py", "test_07_guardrails.py", "test_08_levers.py",
+               "test_10_render.py",
                "test_09_reconciliation.py", "test_18_v06_blocks.py", "test_23_above_floor.py",
                "test_26_marker_excel.py", "test_27_fix_pass.py"]
 DESELECT = []          # node-id prefixes passed to pytest --deselect (set from the command line)
@@ -129,8 +136,8 @@ MUTANTS = [
      "float(lc.cells.score_lo[scored].min())",
      "Lowest band admitted ignores admits"),
     ("P3", "A", "sw/strip.py",
-     "        Vm = P[\"Vm\"] + m * Q[\"Vm\"] + s * s * (Gp * Gp + Gm * Gm - 2 * rho * Gp * Gm)",
-     "        Vm = P[\"Vm\"] + m * Q[\"Vm\"] + s * s * (Gp * Gp + Gm * Gm - 2 * Gp * Gm)",
+     "    Vm = P_[\"Vm\"] + m * Q_[\"Vm\"] + s * s * (Gp * Gp + Gm * Gm - 2 * rho * Gp * Gm)",
+     "    Vm = P_[\"Vm\"] + m * Q_[\"Vm\"] + s * s * (Gp * Gp + Gm * Gm - 2 * Gp * Gm)",
      "Pool strip median ignores rho"),
     ("P4", "A", "sw/strip.py",
      "        Vn = P[\"Vn\"] + m * Q[\"Vn\"] + s * s * Wm * Wm",
@@ -315,8 +322,8 @@ MUTANTS = [
      "        if False:",
      "Above-cap rows not marked"),
     ("X38", "A+", "sw/strip.py",
-     "        Gm = P[\"Gm\"] + m * Q[\"Gm\"]",
-     "        Gm = P[\"Gm\"] + Q[\"Gm\"]",
+     "    Gm = P_[\"Gm\"] + m * Q_[\"Gm\"]",
+     "    Gm = P_[\"Gm\"] + Q_[\"Gm\"]",
      "Pool strip G_- does not scale with m"),
     ("X39", "A+", "sw/strip.py",
      "        V = P[\"V\"] + m * Q[\"V\"] + s * s * M * M",
@@ -673,6 +680,67 @@ MUTANTS = [
      "Live need departure scales with class (R4-07)"),
     ("N94", "P4.1", "sw/narrative.py", '        parts += [f": {labels.HOLD_POSITION}. "] if hold else',
      '        parts += [f": {labels.HOLD_POSITION}. "] if False else', "Narrative ignores the hold (R4-06)"),
+    # ---- P4.2: Phase 4.2 (Review_Phase4_FixPass.md F-1 to F-4, section 7) -----------------------------------------
+    ("N95", "P4.2", "sw/contract.py", '        return cfg["score"]["floor"] in held_ts(cfg)', "        return False",
+     "Hold leaves the count below the floor when the floor is a held t (F-1)"),
+    ("N96", "P4.2", "sw/contract.py",
+     '        return float(cfg["gpa"]["hi_at_or_above"]) == float(cfg["gpa"]["median_threshold"])', "        return False",
+     "Hold leaves the GPA-hi count, the GPA median's G+ (F-1)"),
+    ("N97", "P4.2", "sw/narrative.py",
+     '    parts += (["Enrolled below ", ("floor", "g"), f": {labels.HOLD_POSITION}. "] if floor_held else',
+     '    parts += (["Enrolled below ", ("floor", "g"), f": {labels.HOLD_POSITION}. "] if False else',
+     "Narrative prints the count below a held floor (F-1)"),
+    ("N98", "P4.2", "sw/strip.py",
+     '    for t in cfg["score"]["median_thresholds"]:\n        g = risk.median_signs(cells, cfg, "score", t)',
+     '    for t in cfg["score"]["median_thresholds"][:1]:\n        g = risk.median_signs(cells, cfg, "score", t)',
+     "Pool strip shows the first median only (F-4)"),
+    ("N99", "P4.2", "sw/strip.py", "        if q == 0.5:\n            continue\n        gq =",
+     "        if False:\n            continue\n        gq =", "Pool strip keeps q = 0.5 percentile entries (F-4)"),
+    ("N100", "P4.2", "sw/strip.py", 'mp["hi"]["Gp"] - mp["hi"]["Gm"], grid)', 'mp["hi"]["Gp"] + mp["hi"]["Gm"], grid)',
+     "Median break-even: hi part's G- added (F-4)"),
+    ("N101", "P4.2", "sw/strip.py", "    if e_hi < 0:\n        return labels.POOL_BE_AT_MOST",
+     "    if False:\n        return labels.POOL_BE_AT_MOST", "A ceiling break-even shown as a plain number (F-2)"),
+    ("N102", "P4.2", "sw/strip.py", '"nearest_m": None if nearest is None else grid[nearest - 1],',
+     '"nearest_m": None if nearest is None else float(nearest),', "Growth to date shows the row index (section 7)"),
+    ("N103", "P4.2", "sw/contract.py", "for _, tg in ct_ptargets(run.cfg) for k in CASES]",
+     "for tg in risk.pct_targets(run.cfg) for k in CASES]", "Percentile contract ranges keep q = 0.5 (F-4)"),
+    ("N104", "P4.2", "sw/contract.py",
+     '+ [ps["pool_breakeven_m"][("median", t)] for t in cfg["score"]["median_thresholds"]]',
+     '+ [ps["pool_breakeven_m"][("median", t)] for t in cfg["score"]["median_thresholds"][:1]]',
+     "Break-even dump carries the first median only (F-4)"),
+    ("N105", "P4.2", "sw/contract.py", 'for x in (f"margin_score_{t:g}", f"p_median_score_{t:g}")]',
+     'for x in (f"p_median_score_{t:g}", f"margin_score_{t:g}")]', "Pool strip median column names swapped (F-4)"),
+    ("N106", "P4.2", "sw/contract.py", 'for x in (r["median"][t]["margin"],', 'for x in (r["median"][t]["p"],',
+     "Pool strip dump: median margin replaced by its probability (F-4)"),
+    ("N107", "P4.2", "sw/lo.py",
+     "and not (cell.alignment is not None and cell.alignment.wrap_text) and c == 1:\n"
+     "                # column A may run on into an empty column B; a section title across its whole (empty) row\n"
+     "                last = maxc if is_title(cell) else 2",
+     "and not (cell.alignment is not None and cell.alignment.wrap_text):\n"
+     "                # column A may run on into an empty column B; a section title across its whole (empty) row\n"
+     "                last = maxc", "Render: unwrapped text runs on into empty columns, the Nov 20 rule (item 6)"),
+    ("N108", "P4.2", "sw/lo.py", "                if over > cap - GAP_PT:", "                if over > cap:",
+     "Render: no gap kept before a neighbouring text (colliding headers)"),
+    ("N109", "P4.2", "sw/lo.py", "    return [r for r in runs if len(r) >= 2]", "    return []",
+     "Render: held strip columns not collapsed (section 7)"),
+    ("N110", "P4.2", "sw/lo.py", "        if across > 1:\n            fit_heading_to_ab(ws, header_row)",
+     "        if False:\n            fit_heading_to_ab(ws, header_row)",
+     "Render: a wide section's title and notes cut on continued pages (section 7)"),
+    ("N111", "P4.2", "sw/lo.py", "    if text_pt(cell.value, bold, size) <= cap:\n        return\n    ws.merge_cells(",
+     "    if True:\n        return\n    ws.merge_cells(", "Render: page 1 title cut at the print area"),
+    ("N112", "P4.2", "sw/lo.py", "            ws.cell(1, c).fill = copy(t1.fill)", "            pass",
+     "Render: title fill on column A only (section 7)"),
+    ("N113", "P4.2", "sw/lo.py",
+     "        if not any(is_num(ws.cell(x.row, c - 1).value) for x in texts):\n            continue",
+     "        if True:\n            continue", "Render: text after a number not padded (section 7)"),
+    ("N114", "P4.2", "sw/lo.py", '            if x == float(cond[2:cond.index("]")]):', "            if False:",
+     "Render: the lowest band's format read as a number"),
+    ("N115", "P4.2", "sw/lo.py", "                if cell.value == labels.HOLD_POSITION:", "                if False:",
+     "Render: the collapsed hold column wraps (held strip taller)"),
+    ("N116", "P4.2", "sw/lo.py", "    w = _AFM[bool(bold)]", "    w = _AFM[False]",
+     "Render: bold text measured as regular"),
+    ("N117", "P4.2", "sw/lo.py", "                if c in first and r == src_head:\n                    v = labels.HELD_COLUMNS",
+     "                if False:\n                    v = labels.HELD_COLUMNS", "Render: collapsed column keeps a held figure's header"),
 ]
 
 # Excel-formula mutants [v0.6.2, P2-01] (spec section 11, test 20; run with --excel). Each changes one formula string in
@@ -864,12 +932,13 @@ EXCEL_MUTANTS = [
     ("E83", "P2.2", W, """be_x(f"({P('lo', 'M')}-{self.LV(s, 'class_target')})", P("hi", "M"))""",
      """be_x(f"({P('lo', 'M')}-{self.LV(s, 'class_cap')})", P("hi", "M"))""",
      "Break-even pool multiplier aims at the cap"),
-    ("E84", "P2.2", W, """self.s_fx(self.sr, 3 + j, be_x(elo, ehi), be[1 + j], "r3")""",
-     """self.s_fx(self.sr, 3 + j, be_x(f"(-{elo})", ehi), be[1 + j], "r3")""",
+    ("E84", "P2.2", W, """self.s_fx(self.sr, 2 + len(meds) + c, be_x(elo, ehi), be[1 + len(meds) + c], "r3")""",
+     """self.s_fx(self.sr, 2 + len(meds) + c, be_x(f"(-{elo})", ehi), be[1 + len(meds) + c], "r3")""",
      "Break-even percentile multiplier sign"),
-    ("E85", "P2.2", W, """/2-(1+in_pool_ytd_growth))'""", """/2-(in_pool_ytd_growth))'""",
+    ("E85", "P2.2", W, """f'-(1+in_pool_ytd_growth))<=0.000000001)*1)))')""",
+     """f'-(in_pool_ytd_growth))<=0.000000001)*1)))')""",
      "Growth marker compares with growth, not 1 + growth"),
-    ("E86", "P2.2", W, "IF({self.pool_nearest}={gi + 1},", "IF({self.pool_nearest}={gi},",
+    ("E86", "P2.2", W, "IF({self.pool_nearest}={m},", "IF({self.pool_nearest}={m}+0.1,",
      "Growth marker one row off"),
     ("E87", "P2.2", W, """IF(in_ntr_goal_basis="all_jd",in_ntr_target-in_continuing_ntr_usd,'""",
      """IF(in_ntr_goal_basis="all_jd",in_ntr_target,'""", "Effective target ignores continuing revenue"),
@@ -969,8 +1038,59 @@ EXCEL_MUTANTS = [
      "Hold: strip columns keep their figures (R4-06)"),
     ("E123", "P4.1", W, "            self.s_hold_cells(self.sr, 2, len(S), merge)",
      '            self.s_txt(self.sr, 2, "")', "Hold: display rows left blank (R4-06)"),
-    ("E124", "P4.1", W, "<=0.000000001)*1))')", "<-0.000000001)*1))')",
+    ("E124", "P4.1", W, "<=0.000000001)*1)))')", "<-0.000000001)*1)))')",
      "Excel growth marker: a tie goes to the lower row (R4-13)"),
+    # ---- P4.2: Phase 4.2 (Review_Phase4_FixPass.md F-1 to F-4, section 7) -----------------------------------------
+    ("E125", "P4.2", W, "                    if self.hold:                                                     # F-1\n"
+     "                        self.s_hold_cells(self.sr, c0 + c, 1, merge=False)\n                    else:\n"
+     "                        v = ps[\"med_parts\"]",
+     "                    if False:                                                     # F-1\n"
+     "                        self.s_hold_cells(self.sr, c0 + c, 1, merge=False)\n                    else:\n"
+     "                        v = ps[\"med_parts\"]", "Hold: working values keep the median parts (F-1)"),
+    ("E126", "P4.2", W, "                    if self.hold:                                                     # F-1\n"
+     "                        self.s_hold_cells(self.sr, c0 + c, 1, merge=False)\n                    else:\n"
+     "                        v = ps[\"pct_parts\"]",
+     "                    if False:                                                     # F-1\n"
+     "                        self.s_hold_cells(self.sr, c0 + c, 1, merge=False)\n                    else:\n"
+     "                        v = ps[\"pct_parts\"]", "Hold: working values keep the percentile parts (F-1)"),
+    ("E127", "P4.2", W, 'f"-2*in_shock_corr*{Gp}*{Gm}))")', 'f"-2*{Gp}*{Gm}))")',
+     "Pool strip medians ignore rho (F-4 columns)"),
+    ("E128", "P4.2", W, "Gp = f\"({P('lo', f'Gp_m{i}')}+{m}*{P('hi', f'Gp_m{i}')})\"",
+     "Gp = f\"({P('lo', 'Gp_m0')}+{m}*{P('hi', 'Gp_m0')})\"", "Pool strip: every median reads the first's G+ (F-4)"),
+    ("E129", "P4.2", W, "INDEX(in_pool_grid,1+SUMPRODUCT(", "(0+1+SUMPRODUCT(",
+     "Growth to date shows the row index, not the multiplier (section 7)"),
+    ("E130", "P4.2", W, """f'IF({ehi}<0,{xs(pre)}&TEXT({m},"0.000")&{xs(post)},{m})))))')""",
+     """f'IF(0,{xs(pre)}&TEXT({m},"0.000")&{xs(post)},{m})))))')""",
+     "Excel ceiling break-even shown as a plain number (F-2)"),
+    ("E131", "P4.2", W, "ehi = f\"({P('hi', f'Gp_m{i}')}-{P('hi', f'Gm_m{i}')})\"",
+     "ehi = f\"({P('hi', f'Gp_m{i}')}+{P('hi', f'Gm_m{i}')})\"", "Excel median break-even: hi part's G- added (F-4)"),
+    ("E132", "P4.2", W, "                if self.hold:                                                   # R4-06\n"
+     "                    self.s_hold_cells(self.sr, 2, nb - 1, merge=False)",
+     "                if False:                                                   # R4-06\n"
+     "                    self.s_hold_cells(self.sr, 2, nb - 1, merge=False)",
+     "Hold: break-evens for medians and percentiles printed (R4-06, F-4)"),
+    ("E133", "P4.2", W, "self._contract_block(S, name, prefix, [j for j, _ in K.ct_ptargets(self.cfg)])",
+     "self._contract_block(S, name, prefix, list(range(len(self.ptargets))))",
+     "Percentile contract ranges keep q = 0.5 rows (F-4)"),
+    ("E134", "P4.2", W, "        r_print, c_print = self.sr, self.sum_maxc\n        self.sw_contract(S)",
+     "        self.sw_contract(S)\n        r_print, c_print = self.sr, self.sum_maxc",
+     "Contract ranges inside the Summary print area (item 3)"),
+    ("E135", "P4.2", W, '        self.f["band"] = F(dict(base, num_format=bf))',
+     '        self.f["band"] = F(dict(base, num_format="General"))', "Lowest band printed as 0 (section 7)"),
+    ("E136", "P4.2", W, 'heads += [f"admits cut, {self.band_text(b)}" for b in bands]',
+     'heads += [f"admits cut, {b}" for b in bands]', "Class-table header 'admits cut, 0' (section 7)"),
+    ("E137", "P4.2", W, "items = [(N[k], getattr(labels, k)) for k in", "items = [(k, getattr(labels, k)) for k in",
+     "Legend shows the label constant names (section 7)"),
+    ("E138", "P4.2", W, 'self.f["hold"] = F(dict(base, text_wrap=True, valign="top", align="left", indent=1))',
+     'self.f["hold"] = F(dict(base, text_wrap=True, valign="top"))', "Hold text not padded (section 7)"),
+    ("E139", "P4.2", W, '                self.ws["Summary"].write_blank(self.sr, c, None, self.f["sec"])',
+     "                pass", "Workbook title fill on column A only (section 7)"),
+    ("E140", "P4.2", W, 'NAR.outcome_parts(nt, self.hold, self._held("enrolled_below_floor"))',
+     "NAR.outcome_parts(nt, self.hold, False)", "Excel narrative prints the count below a held floor (F-1)"),
+    ("E141", "P4.2", W, '            self.ws["Summary"].merge_range(r, 2, r, 1 + max(len(self.S), 6), "", self.f["t"])',
+     "            pass", "Summary header's shock label not merged (cut in the render)"),
+    ("E142", "P4.2", W, 'state="held" if self.hold else "not held"))]', 'state="not held"))]',
+     "Legend says 'not held' on a held build"),
 ]
 
 # Survivors accepted because they cannot change any result on valid input: id -> reason. Empty unless a run shows

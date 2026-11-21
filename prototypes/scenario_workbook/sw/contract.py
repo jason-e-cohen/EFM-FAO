@@ -6,9 +6,12 @@ workbook and the tests:
 
   grain s x k      rows: cases (low, middle, high); columns: scenarios (Baseline first)
   grain s x k x t  rows: for each threshold t (median targets, or score thresholds for shares), the three cases
-  grain s x k x target  rows: for each percentile target (q, t) in config order, the three cases [v0.6.3, BM-1]
+  grain s x k x target  rows: for each percentile target (q, t) other than q = 0.5, in config order, the three cases
+                   [v0.6.3, BM-1; F-4: a q = 0.5 target is the median at t, carried by the median names]
   PCT_BAND_Q       rows: q = 0.25, 0.75; columns: scenarios; the spread band's lower bound (Middle case)
-  POOL_BREAKEVEN_M rows: scenarios; columns: m_class, then m_q for each percentile target [v0.6.3, BM-6]
+  POOL_BREAKEVEN_M rows: scenarios; columns: m_class, then m_median for each score median threshold, then m_q for each
+                   percentile target other than q = 0.5 [v0.6.3, BM-6; F-4]; a number, "at most m" (a ceiling, F-2)
+                   or a note
   strips (s x p, s x d, s x m, s x N)  rows: for each scenario, the grid values; columns: the fields in STRIP_COLUMNS
   per-scenario lines and break-evens   rows: scenarios; one column
   AWARD_MATRIX     rows: cells (workbook order); columns: scenarios; the resolved award (plan-year dollars)
@@ -16,10 +19,13 @@ workbook and the tests:
                    columns: scenarios; the award at the higher band minus the award at the lower band (Distribution)
   DIST_TOP_QUARTILE_MERIT_SHARE  grain s x k on the Distribution sheet (rows cases, columns scenarios) [R4-05]
 
-Class-size table (R4-03): its percentile columns leave out q = 0.5 targets (the median columns carry them), so the
-Summary shows one margin per event. Break-even pool multipliers (R4-04) are numbers or a note (strip.breakeven_m).
+One margin per event (R4-03, F-4): the percentile rows, the percentile contract ranges, the class-size table, the pool
+strip and the break-even table leave out q = 0.5 targets; the median rows and columns carry them (one range per figure,
+no aliases, Q-1). The pool strip shows the median at every score median threshold. Break-even pool multipliers (R4-04) are numbers or a note (strip.breakeven_m).
 Hold (config hold_position_rows, R4-06): every median and percentile figure (HELD_NAMES, the share and count at or above
-a median or percentile t, the spread bands, the median and percentile strip columns and m_q) is labels.HOLD_POSITION.
+a median or percentile t, the spread bands, the median and percentile strip columns, m_median and m_q) is
+labels.HOLD_POSITION. F-1: so are the counts from which a held figure can be read off directly: enrolled below the score
+floor when the floor is a held t, and enrolled with GPA class hi when its boundary is the GPA median threshold.
 
 Names are canonical: one range per figure, no aliases [v0.6.2, Q-1]; a short form in the spec's Source column (for
 example SUM_PCAP) is read as the prefix only. `p_segment_goal` in the workbook is the normal form (spec section 3);
@@ -103,6 +109,10 @@ def is_held(cfg, name, t=None):
         return True
     if name in ("share_at_or_above_t", "enrolled_at_or_above"):
         return t in held_ts(cfg)
+    if name == "enrolled_below_floor":                       # F-1: G- at the floor when the floor is a held t
+        return cfg["score"]["floor"] in held_ts(cfg)
+    if name == "enrolled_gpa_hi":                            # F-1: G+ of the GPA median when hi starts at its threshold
+        return float(cfg["gpa"]["hi_at_or_above"]) == float(cfg["gpa"]["median_threshold"])
     return False
 
 
@@ -112,7 +122,8 @@ def held_strip_col(col):
 
 
 def ct_ptargets(cfg):
-    """(index, (q, t)) of the percentile targets the class-size table shows: q = 0.5 left out (R4-03)."""
+    """(index, (q, t)) of the percentile targets shown apart from the medians: q = 0.5 left out (R4-03, F-4). Used by
+    the percentile rows and contract ranges, the class-size table, the pool strip and the break-even table."""
     return [(j, qt) for j, qt in enumerate(risk.pct_targets(cfg)) if qt[0] != 0.5]
 
 
@@ -126,15 +137,16 @@ def strip_columns(cfg):
     med = []
     for meas, t in targets:
         med += [f"margin_{meas}_{t:g}", f"p_median_{meas}_{t:g}"]
-    pq = [(q, t) for q, t in risk.pct_targets(cfg)]
     pct_cols = []
     for _, (q, t) in ct_ptargets(cfg):
         pct_cols += [f"margin_q{q:g}_{t:g}", f"p_pct_q{q:g}_{t:g}"]
     return {
         "tuition_whatif": ["tuition", "ntr_y1", "net_tuition_per_student", "discount_entering_y1"],
         "yield_strip": ["class_mean", "p_class_over_cap", "p_class_in_band", "ntr_mean", "p_ntr_y1_ge_target"] + med,
-        "pool_strip": (["growth", "class_mean", "p_class_over_cap", "margin", "p_median", "ntr_mean", "ntr_sd"]
-                       + [f"p_pct_q{q:g}_{t:g}" for q, t in pq] + ["marker"]),          # [v0.6.3, BM-6]
+        "pool_strip": (["growth", "class_mean", "p_class_over_cap", "ntr_mean", "ntr_sd"]          # [v0.6.3, BM-6]
+                       + [x for t in cfg["score"]["median_thresholds"]                             # F-4: every median,
+                          for x in (f"margin_score_{t:g}", f"p_median_score_{t:g}")]               # then q other than
+                       + [f"p_pct_q{q:g}_{t:g}" for _, (q, t) in ct_ptargets(cfg)] + ["marker"]),  # 0.5
         "class_table": (["f", "class_mean", "p_class_over_cap"] + med + pct_cols          # [v0.6.3, BM-3, BM-1]
                         + ["ntr_y1", "discount_entering_y1", "segment_enrolled", "lowest_band_admitted"]
                         + [f"cut_{'unscored' if b == 'unscored' else format(b, 'g')}" for b in band_keys(cfg)]
@@ -228,7 +240,9 @@ def compute(run):
                                 "breakeven_shift_class": ys["breakeven_shift_class"],
                                 "breakeven_shift_ntr": ys["breakeven_shift_ntr"]}
         out["parts"][s.name] = ps["parts"]
-        out["pool_be"][s.name] = [ps["pool_breakeven_m"]["class"]] + [ps["pool_breakeven_m"][k] for k in ptargets]
+        out["pool_be"][s.name] = ([ps["pool_breakeven_m"]["class"]]                         # F-4: medians, then q
+                                  + [ps["pool_breakeven_m"][("median", t)] for t in cfg["score"]["median_thresholds"]]
+                                  + [ps["pool_breakeven_m"][k] for _, k in ct_ptargets(cfg)])          # other than 0.5
         out["conflicts"][s.name] = L.full_tuition_conflicts(cells, cfg, s, p)
         out.setdefault("award_changes", {})[s.name] = L.award_changes(cells, cfg, s, p)
         out["price_of_target"] = out.get("price_of_target", {})
@@ -257,10 +271,11 @@ def strip_rows(run, vals, which):
                 rows.append((s.name, r["shift_pts"], v))
         elif which == "pool_strip":
             for r in st["pool_strip"]:
+                med = [x for t in cfg["score"]["median_thresholds"] for x in (r["median"][t]["margin"],
+                                                                             r["median"][t]["p"])]
                 rows.append((s.name, r["pool_multiplier"],
-                             [r["growth"], r["class_mean"], r["p_class_over_cap"], r["margin"], r["p_median"],
-                              r["ntr_mean"], r["ntr_sd"]] + [r["pct"][k]["p"] for k in vals["ptargets"]]
-                             + [r["marker"]]))
+                             [r["growth"], r["class_mean"], r["p_class_over_cap"], r["ntr_mean"], r["ntr_sd"]] + med
+                             + [r["pct"][k]["p"] for _, k in ct_ptargets(cfg)] + [r["marker"]]))
         else:
             for r in st["class_table"]:
                 if "class_mean" not in r:
@@ -293,9 +308,9 @@ def dump(run, vals=None):
                                          for tg in vals["targets"] for k in CASES]
     out["SUM_SHARE_AT_OR_ABOVE_T"] = [[_num(vals["sk"][(s, k)]["kpis"]["share_at_or_above_t"][t]) for s in names]
                                       for t in vals["score_ts"] for k in CASES]
-    for name, prefix, _ in SKQ:
+    for name, prefix, _ in SKQ:                                     # F-4: q = 0.5 targets are the median ranges
         out[range_name(name, prefix)] = [[_num(vals["sk"][(s, k)]["pct"][tg][name]) for s in names]
-                                         for tg in vals["ptargets"] for k in CASES]
+                                         for _, tg in ct_ptargets(run.cfg) for k in CASES]
     out["SUM_PCT_BAND_Q"] = [[_num(vals["pct_band"][s][q]) for s in names] for q in risk.SPREAD_QS]
     out["PS_POOL_BREAKEVEN_M"] = [[_num(x) for x in vals["pool_be"][s]] for s in names]
     for name, prefix, _ in PER_SCENARIO:

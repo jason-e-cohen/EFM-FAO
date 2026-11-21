@@ -11,6 +11,11 @@ target holds with no top-pool growth, "not reached by growth", "above the pool g
 number and every grid note is checked through the ledger at the unclipped multiplier; low targets (q 0.25 at 154, q 0.10
 at 152) fall below the grid on worlds 101 to 105, where the unclipped multiplier is often negative ("holds at any pool
 size").
+
+Phase 4.2 (Review_Phase4_FixPass.md): F-4, the pool strip and the break-evens carry the median at every score median
+threshold under their own keys and leave out q = 0.5 percentile targets; F-2, a break-even on the grid where growth
+lowers the margin (e_hi < 0) is a ceiling and reads labels.POOL_BE_AT_MOST ("at most m"); the growth-to-date cell shows
+the nearest row's pool multiplier.
 """
 import copy
 from dataclasses import replace
@@ -46,6 +51,8 @@ def _check_note(got, e_lo, e_hi, grid):
         assert got == labels.POOL_BE_ABOVE_GRID
     elif m < min(grid):
         assert got == labels.POOL_BE_BELOW_GRID
+    elif e_hi < 0:                                                     # F-2: a ceiling
+        assert got == labels.POOL_BE_AT_MOST.format(m=f"{m:.3f}")
     else:
         assert isinstance(got, float) and got == m
     return m
@@ -67,7 +74,17 @@ def test_breakeven_multipliers_through_the_ledger(syn_cfg, worlds):
         if m is not None:
             lc = L.evaluate(cells, cfg, replace(sc, pool_multiplier=m), base, "middle")
             assert lc.mu.sum() == pytest.approx(sc.class_target, abs=1e-9), seed
-        for q, t in risk.pct_targets(cfg):
+        assert not any(k[0] == 0.5 for k in be if k != "class")        # F-4: no q = 0.5 percentile entry
+        assert not any(k[0] == 0.5 for k in ps["pct_parts"])
+        for t in cfg["score"]["median_thresholds"]:                     # F-4: the medians under their own key
+            mp = ps["med_parts"][t]
+            m = _check_note(be[("median", t)], mp["lo"]["Gp"] - mp["lo"]["Gm"], mp["hi"]["Gp"] - mp["hi"]["Gm"], grid)
+            kinds.add(be[("median", t)] if isinstance(be[("median", t)], str) else "number")
+            if m is not None:
+                lc = L.evaluate(cells, cfg, replace(sc, pool_multiplier=m), base, "middle")
+                g = risk.median_signs(cells, cfg, "score", t)
+                assert risk.cf_median(lc.admits, lc.yld, g, s, rho)["margin_expected"] == pytest.approx(0.0, abs=1e-9)
+        for q, t in [k for k in risk.pct_targets(cfg) if k[0] != 0.5]:
             pp = ps["pct_parts"][(q, t)]
             e_lo = q * pp["lo"]["Gp"] - (1 - q) * pp["lo"]["Gm"]
             e_hi = q * pp["hi"]["Gp"] - (1 - q) * pp["hi"]["Gm"]
@@ -109,7 +126,9 @@ def test_low_targets_hold_at_any_pool_size(syn_cfg, worlds):
     assert strip.breakeven_m(-1.0, 0.0, g) == labels.POOL_BE_NOT_REACHED
     assert strip.breakeven_m(0.0, 0.0, g) == labels.POOL_BE_ANY
     assert strip.breakeven_m(-1.0, -2.0, g) == labels.POOL_BE_NOT_REACHED
-    assert strip.breakeven_m(2.4, -2.0, g) == 1.2                   # growth lowers the margin to zero at 1.2
+    assert strip.breakeven_m(2.4, -2.0, g) == "at most 1.200"       # F-2: growth lowers the margin to zero at 1.2
+    assert strip.breakeven_m(1.0, -1.0, g) == "at most 1.000"
+    assert strip.breakeven_m(-2.4, 2.0, g) == 1.2                   # a floor stays a number
     assert strip.breakeven_m(-4.0, 2.0, g) == labels.POOL_BE_ABOVE_GRID
     assert strip.breakeven_m(-1.0, 2.0, g) == labels.POOL_BE_BELOW_GRID
     assert strip.breakeven_m(-1.6, 1.0, g) == 1.6 and strip.breakeven_m(-0.8, 1.0, g) == 0.8
@@ -124,7 +143,12 @@ def test_percentile_columns_equal_ledger_evaluations(syn_cfg, worlds):
             ps = strip.pool_strip(cells, cfg, sc, base)
             for row in ps["pool_strip"]:
                 lc = L.evaluate(cells, cfg, replace(sc, pool_multiplier=row["pool_multiplier"]), base, "middle")
-                for q, t in risk.pct_targets(cfg):
+                for t in cfg["score"]["median_thresholds"]:            # F-4: every median
+                    md = risk.median(lc, "score", t)
+                    assert row["median"][t]["p"] == pytest.approx(md["p_median_t"], abs=1e-9), (seed, rho, t)
+                    assert row["median"][t]["margin"] == pytest.approx(md["margin_t"], abs=1e-9)
+                assert sorted(row["pct"]) == sorted(k for k in risk.pct_targets(cfg) if k[0] != 0.5)
+                for q, t in row["pct"]:
                     pc = risk.pct(lc, q, t)
                     assert row["pct"][(q, t)]["p"] == pytest.approx(pc["p_pct_q_t"], abs=1e-9), (seed, rho, q, t)
                     assert row["pct"][(q, t)]["margin"] == pytest.approx(pc["margin_expected"], abs=1e-9)
@@ -144,6 +168,7 @@ def test_marker_row(syn_cfg, worlds, growth, row):
     base = response.base_yield(cells, cfg)
     ps = strip.pool_strip(cells, cfg, L.baseline(cells, cfg), base)
     assert ps["nearest_row"] == row
+    assert ps["nearest_m"] == (None if row is None else cfg["risk"]["pool_grid"][row - 1])
     marks = [i + 1 for i, r in enumerate(ps["pool_strip"]) if r["marker"]]
     assert marks == ([] if row is None else [row])
     if row is not None:

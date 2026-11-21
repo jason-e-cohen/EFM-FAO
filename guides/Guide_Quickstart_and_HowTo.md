@@ -1,7 +1,7 @@
 # EFA + FAO scenario workbook: quickstart and how-to guide
 
 **For:** an analyst picking this project up cold, a year from now or for a new client. You should be comfortable with Excel, a terminal and basic statistics; you do not need to have read anything else first.
-**State described:** November 19, 2026 (Phase 4 built; the Phase 4 fix pass decided but not yet run). Section 11 says how to keep this guide current.
+**State described:** November 20, 2026 (Phase 4 accepted after two fix passes; the Richmond pre-delivery pass in `DECISIONS.md`, Nov 20, is next). Section 11 says how to keep this guide current.
 **Companion:** `guides/Methods_Reference.md` explains the equations and tests in depth. This guide tells you what to do; that one tells you why it is right.
 
 ---
@@ -93,7 +93,7 @@ You need: a Mac (the project environment `.venv` is a macOS build), Python 3.12,
    cd prototypes/scenario_workbook
    ../../.venv/bin/python -m pytest tests -q
    ```
-   Without the client fixture, about 235 tests pass and about 72 skip (the fixture tests). That is the expected result.
+   Without the client fixture, about 270 tests pass and 72 skip (the fixture tests). With it, about 340 pass and 3 skip (Baseline criteria the client file cannot supply). Those are the expected results.
 
 **Shell tip.** When pasting command blocks into zsh, do not include `# comments` after commands; zsh passes them as arguments.
 
@@ -152,7 +152,7 @@ Copy `config/richmond.yaml` to `config/<client>.yaml` and edit every value; ther
 | `risk.common_shock_sd` | Year-to-year variation; 0.10 is an illustrative placeholder | Presenting probabilities as calibrated |
 | `segments` | Optional priority segment (one per scenario) | Defining a segment the cell data does not carry |
 | `aba_509_by_cohort` | Public ABA 509 figures (law) for the History reconciliation | Leaving it out: you lose the cheapest data check |
-| `hold_position_rows` | True while the score basis is unconfirmed | |
+| `hold_position_rows` | True while the score basis is unconfirmed: every median and percentile figure reads "held pending confirmation" | Forgetting to set it back to false once the basis is confirmed |
 
 ### 5.4 Prepare the cell data
 The build reads a long table, one row per cell x cohort:

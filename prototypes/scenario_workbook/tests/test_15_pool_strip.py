@@ -23,7 +23,6 @@ def test_pool_strip_equals_ledger(syn_cfg, worlds):
     cfg = syn_cfg
     s = cfg["risk"]["common_shock_sd"]
     rho = cfg["risk"]["shock_corr_above_below"]
-    t = cfg["score"]["median_thresholds"][0]
     for seed in cfg["generator"]["seeds"][:5]:
         cells = worlds[seed]
         base = response.base_yield(cells, cfg)
@@ -34,16 +33,19 @@ def test_pool_strip_equals_ledger(syn_cfg, worlds):
             m = row["pool_multiplier"]
             lc = L.evaluate(cells, cfg, replace(sc, pool_multiplier=m), base, "middle")
             cf = risk.cf_class(lc.admits, lc.yld, s, sc.class_cap, sc.class_target, cfg["class"]["band"])
-            g = risk.median_signs(cells, cfg, "score", t)
-            md = risk.cf_median(lc.admits, lc.yld, g, s, rho)
             assert row["class_mean"] == pytest.approx(float(lc.mu.sum()), rel=1e-12)
             assert row["p_class_over_cap"] == pytest.approx(cf["p_class_over_cap"], abs=1e-12)
-            assert row["margin"] == pytest.approx(md["margin_expected"], abs=1e-9)
-            assert row["p_median"] == pytest.approx(md["p"], abs=1e-12)
+            # F-4: the median at every score median threshold
+            assert sorted(row["median"]) == sorted(cfg["score"]["median_thresholds"])
+            for t in cfg["score"]["median_thresholds"]:
+                g = risk.median_signs(cells, cfg, "score", t)
+                md = risk.cf_median(lc.admits, lc.yld, g, s, rho)
+                assert row["median"][t]["margin"] == pytest.approx(md["margin_expected"], abs=1e-9)
+                assert row["median"][t]["p"] == pytest.approx(md["p"], abs=1e-12)
+                assert 0.0 <= row["median"][t]["p"] <= 1.0
             assert row["ntr_mean"] == pytest.approx(L.money(lc)["ntr_y1"], rel=1e-12)
             assert row["growth"] == pytest.approx(m - 1)
-            for k in ("p_class_over_cap", "p_median"):
-                assert 0.0 <= row[k] <= 1.0
+            assert 0.0 <= row["p_class_over_cap"] <= 1.0
 
 
 def test_yield_strip_equals_ledger_when_no_clip(syn_cfg, worlds):

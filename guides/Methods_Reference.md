@@ -1,7 +1,7 @@
 # EFA + FAO scenario evaluator: methods reference
 
 **For:** a statistician, econometrician or data scientist who needs to understand, audit or defend what the scenario workbook computes. It assumes probability, regression and some causal inference; it assumes nothing about admissions.
-**State described:** November 19, 2026: spec `Prototype_Spec_Scenario_Workbook_v0.6.md` v0.6.3 (section 0A governs), methodology `02_methodology_v2.8.md`, decisions to Nov 19 in `DECISIONS.md`. Items the Phase 4 fix pass will change are marked **[fix pass]**.
+**State described:** November 20, 2026: spec `Prototype_Spec_Scenario_Workbook_v0.6.md` v0.6.3 (section 0A governs), methodology `02_methodology_v2.8.md`, decisions to Nov 20 in `DECISIONS.md`, Phase 4 accepted after two fix passes (build `877a03692ad9`).
 **Companion:** `guides/Guide_Quickstart_and_HowTo.md` (how to run it). This document says what is computed, under what assumptions, and how we know the code computes it.
 
 **Authority.** This reference explains; it does not define. Where it and the spec or methodology differ, the spec (section 0A first) and methodology Appendix F win, and this reference has a bug.
@@ -147,7 +147,7 @@ y_sck = clip( clip(response(c, a_sc, k)) + shift_sc/100 , floor, cap ) with floo
 For threshold t:
 - **Margin at t:** expected enrolled with score ≥ t minus expected enrolled with score < t. Unscored enrollees are in neither term (the ABA 509 rule; O41 closed) and are reported as a count.
 - **Share at or above t:** expected at or above t ÷ expected enrolled with a score.
-- **Percentile target {q, t}:** "at most a share q of scored enrollees score below t". Margin in swaps: margin_q_t = q × N_scored − G₋ (the number of below-t enrollees that could replace at-or-above-t enrollees at the same class size; one swap moves it by 1). For q = 0.5 the Summary shows the at-or-above-minus-below margin instead, so each event has one margin on the page (R4-03) **[fix pass]**.
+- **Percentile target {q, t}:** "at most a share q of scored enrollees score below t". Margin in swaps: margin_q_t = q × N_scored − G₋ (the number of below-t enrollees that could replace at-or-above-t enrollees at the same class size; one swap moves it by 1). For q = 0.5 the Summary shows the at-or-above-minus-below margin instead, so each event has one margin on the page (R4-03). The q = 0.5 percentile entries are removed everywhere, including the pool strip and the interface contract, so each figure has one name (Phase 4.2).
 
 *Transition.* Every quantity above is linear in e_c, which is linear in y_c. Section 5 says where y_c comes from; section 6 uses the linearity to get closed-form probabilities.
 
@@ -208,7 +208,7 @@ P(median ≥ t) = 1 − Φ((−0.5 − m)/√V_m).
 
 At ρ = 1 the shock term is s² m²: a common shock scales both groups, so the margin moves in proportion. At ρ < 1 the groups move differently and variance rises, which is the Summary's ρ = 0.5 sensitivity line ("if high-score and other admits' yields move differently year to year").
 
-**Tie rule.** The median holds when at least half of the scored class is at or above t (inclusive). The ABA averages the two middle scores, so at an exact tie the published median can fall between bands. Near a tie, our probability can read a few points high (up to about 4 points on synthetic data). Kept deliberately and stated on the Summary, README and methodology (R4-08) **[fix pass for the wording]**.
+**Tie rule.** The median holds when at least half of the scored class is at or above t (inclusive). The ABA averages the two middle scores, so at an exact tie the published median can fall between bands. Near a tie, our probability can read a few points high (up to about 4 points on synthetic data). Kept deliberately and stated on the Summary, README and methodology (R4-08).
 
 ### 6.4 Percentiles (generalizes 6.3)
 For target {q, t}, with g = +q at or above t, −(1 − q) below, 0 unscored:
@@ -283,7 +283,7 @@ Identity checked in test 13: dSpend = Σ e_s(a_s − a_p) + Σ (e_s − e_p) a_p
 | History 509 reconciliation | Data check (report only) | Spec 0A-B7 | No | No |
 | Labels, held rows, "under 5%" | Display | Spec 4; R4-06 | — | — |
 
-**Held figures.** For Richmond, `hold_position_rows: true` replaces every median and percentile figure with "held pending confirmation of the LSAT basis (OD-14)" **[fix pass]**, because the History 509 reconciliation found the client workbook's lower LSAT bands disagree with the published 509 percentiles.
+**Held figures.** For Richmond, `hold_position_rows: true` replaces every median and percentile figure with "held pending confirmation of the LSAT basis (OD-14)", on the printed Summary and in the working values below it, because the History 509 reconciliation found the client workbook's lower LSAT bands disagree with the published 509 percentiles. GPA figures are held too for now; the hold is to narrow to LSAT figures in the Richmond pre-delivery pass, since Richmond's GPA quartiles agree with the 509 (DECISIONS, Nov 20). One exception is deliberate: the pool strip's expected class above the pool threshold stays visible even when that threshold is a held median threshold, because the strip's class figures need it.
 
 ---
 
@@ -314,9 +314,9 @@ Full one-line descriptions: `prototypes/scenario_workbook/README.md`, "What each
 | Guardrails | 7 | No protected-attribute or student-level fields; no hidden content or external links; required labels present |
 | Calibration of synthetic data | 5 | The generator meets its asserted shape targets in ≥ 90% of 20 seeds (calibration, not realism) |
 | Reproduce | 6 | 57 of 57 derivable criteria against the client workbook (Phase 3, Nov 18) |
-| Rendering | 10 | Summary to PDF for human review (not asserted) |
+| Display rules and rendering | 10, 27 | Summary layout checks (scale, repeated headers, no text overrunning its cell) and the PDF for human review; the hold replaces every median and percentile figure, printed or in the working values, and changes nothing else |
 
-Current count (Phase 4 review, Nov 19): 307 collected; 234 passed and 72 skipped without the fixture.
+Current count (Phase 4.2, Nov 20): with the fixture 338 passed and 3 skipped; without it 269 passed and 72 skipped. Test 27 covers the hold, the one-margin rule, the tie-rule text and the revenue-target rows; test 10 checks the Summary layout (scale, repeated headers, text that overruns its cell).
 
 ### 9.2 Excel parity, and why the sentinel matters
 A workbook written by Python stores cached values. A naïve test that opens it and reads values would read Python's own numbers back. So:
@@ -327,7 +327,7 @@ A workbook written by Python stores cached values. A naïve test that opens it a
 Last desktop result: reproduce sentinel build `08c50a6fabaf`, Excel for Mac 16: 29,063 formula cells, 0 mismatches (DECISIONS, Nov 18). A Windows Excel check precedes the first client delivery. One deliberate rounding probe (`ROUND(0.35/0.14, 0)`) shows engine dependence: 3 in Python, Excel for Mac and LibreOffice 26.8; 2 in LibreOffice 24.2 (R4-17).
 
 ### 9.3 Mutation checking
-`tests/mutation_check.py` applies each listed mutant (a deliberate formula error) to a scratch copy and runs the suite. Acceptance: every mutant caught, except those recorded as unable to change any result on valid input. Phase 3: 115 of 115 Python mutants and 75 of 75 Excel-formula mutants caught. This is the main evidence that the tests in 9.1 have power, not just coverage.
+`tests/mutation_check.py` applies each listed mutant (a deliberate formula error) to a scratch copy and runs the suite. Acceptance: every mutant caught, except those recorded as unable to change any result on valid input. Phase 3: 115 of 115 Python and 75 of 75 Excel-formula mutants caught; Phase 4.2: 188 of 188 and 149 of 149. This is the main evidence that the tests in 9.1 have power, not just coverage.
 
 ### 9.4 Reproduce mode as external validation
 The client's consultant built an independent scenario workbook. Loading its admit rates, awards and yields into our ledger, with its counting conventions, reproduces its class, merit, NTR (to the dollar after need rounding), threshold counts, full-tuition and no-award counts, and margins: 57 of 57 derivable criteria; 2 cells not reproducible from the file, excluded and counted (Phase 3). Reproduce mode validates **arithmetic and conventions**, not the response or the risk model; the client workbook has no probabilities.
