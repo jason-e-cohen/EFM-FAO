@@ -38,6 +38,13 @@ The second line builds the synthetic reproduce workbook (no fixture; the one tes
 
 The live build writes `output/<client>/<plan_cycle>/<build_id>/workbook.xlsx` and, with `--pdf`, `workbook_Summary.pdf`; with `--sentinel`, `workbook_sentinel.xlsx`, whose every cached value is -999 (the copy for the desktop Excel check). The build id is a hash of the config, cell data, scenario file, `requirements.lock` and the generator code (`sw/*.py`, P21-03); two builds share it only if they are the same apart from RunLog's timestamp. RunLog lists the code hash, uncommitted files and whether the cached values are sentinels.
 
+Data dictionary (`docs/data_dictionary/`): `dictionary.csv` is the single source, one row per variable in four layers (inputs, Ledger columns, outputs, internals). Edit the CSV, then render `Data_Dictionary.md` (committed) and `output/data_dictionary/Data_Dictionary.xlsx` (git-ignored); never edit either by hand. `--check` reports whether the markdown is current. Test 28 fails when the CSV and the code, the configs or a fresh synthetic build disagree.
+
+```bash
+../../.venv/bin/python docs/data_dictionary/build_dictionary.py
+../../.venv/bin/python docs/data_dictionary/build_dictionary.py --check
+```
+
 Mutation check (test 20; on demand, not collected by pytest):
 
 ```bash
@@ -132,6 +139,7 @@ Number formats (P2-05): counts `#,##0`, dollars `$#,##0`, scores and flags `0`, 
 | 25 | `test_25_ntr_basis.py` | [v0.6.3] Revenue goal: entering_y1 is v0.6; all_jd with continuing 0 equals entering_y1; all_jd at goal G equals entering_y1 at G - C for the Summary probability, the yield-strip probabilities and the NTR break-even |
 | 26 | `test_26_marker_excel.py` | [v0.6.3] Editing `pool_ytd_growth` and recalculating in LibreOffice changes only the marker cells (growth shown, the nearest row's pool multiplier, marker column); R4-13: growth 0.15 marks the 1.2 row; R4-10, R4-11: in an edited copy a q = 0.5 target's t follows the median threshold, the implied tuition increase follows `tuition_by_year_usd`, and Checks reports all_jd with a blank `continuing_ntr_usd` |
 | 27 | `test_27_fix_pass.py` | R4-06: a build with `hold_position_rows` true equals Python on every formula cell; every median and percentile figure (rows, strip columns, m_q, narratives, contract ranges) reads the hold text and every other figure equals the unheld build; the dump (Python only) holds exactly those figures; the held Summary renders legibly (`output/phase4/Summary_render_hold.pdf`). R4-03: no q = 0.5 percentile rows or class-table columns; the swaps label. R4-08: the tie rule on the Summary and README sheet. R4-12: the target rows and "not used (entering_y1)". Phase 4.2: a by-value scan of the whole held Summary, inside and outside the print area, finds no held figure or part of one (one documented exception, below); a ceiling break-even reads "at most m" in Excel; no q = 0.5 entry in the strips, break-evens or contract; the held strips print no wider than the unheld; the legend in plain words; the lowest band reads "below 152"; the hold text padded |
+| 28 | `test_28_dictionary.py` | The data dictionary (`docs/data_dictionary/dictionary.csv`) against the code, the configs and a fresh synthetic live and reproduce build (no LibreOffice): every config key the loader names or the configs carry, scenario lever, cell-data column, Ledger header, Inputs name, Summary figure label and strip header, Checks row, contract range and label constant (with its current text) has a row; no row names something that no longer exists (config keys, levers, headers, strip columns, named ranges, Python names); fed_by and feeds ids exist and agree; required columns are filled and on their vocabularies; test numbers are real; client-safe rows carry no review ID, config key or number outside the product-rule allowlist, and, with `YA_FIXTURE_PATH`, no number found in the fixture appears anywhere; `Data_Dictionary.md` equals a fresh render |
 | (support) | `test_00_config_labels.py` | Rule 7 on `richmond.yaml`; exact label text; Python texts and the ledger's rounding match Excel's (half away from zero after 15 significant digits; Phase 3) |
 
 ## Metric names (methodology Appendix F)

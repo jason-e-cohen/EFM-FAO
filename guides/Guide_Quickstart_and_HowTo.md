@@ -60,6 +60,7 @@ Inside `prototypes/scenario_workbook/`:
 | Path | What it is |
 |---|---|
 | `README.md` | Commands, module table, test notes. The most current operating notes |
+| `docs/data_dictionary/` | Every variable: analyst name, workbook label, plain name, purpose, formula, what it feeds. Edit `dictionary.csv` only; `build_dictionary.py` writes `Data_Dictionary.md` and an .xlsx; test 28 fails when the code and the dictionary drift apart |
 | `config/<client>.yaml` | One file per client: score bands, thresholds, class cap, need aid, risk settings, segments |
 | `config/scenarios_<name>.yaml` | The scenarios to evaluate (Baseline first, then children that change a few levers) |
 | `config/synthetic.yaml`, `scenarios_synthetic.yaml` | A synthetic client used by tests and demos |
@@ -93,7 +94,7 @@ You need: a Mac (the project environment `.venv` is a macOS build), Python 3.12,
    cd prototypes/scenario_workbook
    ../../.venv/bin/python -m pytest tests -q
    ```
-   Without the client fixture, about 270 tests pass and 72 skip (the fixture tests). With it, about 340 pass and 3 skip (Baseline criteria the client file cannot supply). Those are the expected results.
+   Without the client fixture, about 285 tests pass and 73 skip (the fixture tests). With it, about 355 pass and 3 skip (Baseline criteria the client file cannot supply). Those are the expected results; the README has the current counts.
 
 **Shell tip.** When pasting command blocks into zsh, do not include `# comments` after commands; zsh passes them as arguments.
 

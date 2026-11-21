@@ -101,7 +101,7 @@ Per cell and historical cohort the data are applications, admits, award (dollars
 | t, q | Score threshold; percentile share (median q = 0.5) |
 | G₊, G₋ | Expected scored enrolled at or above / below t |
 
-Full index: Appendix A.
+Full index: Appendix A. Every variable in the build, with its workbook label, purpose and what it feeds, is in `prototypes/scenario_workbook/docs/data_dictionary/Data_Dictionary.md`.
 
 ### 3.3 Inputs at three levels
 | Level | Examples | Where |
@@ -312,6 +312,7 @@ Full one-line descriptions: `prototypes/scenario_workbook/README.md`, "What each
 | Robustness | 11, 17, 21 | Splitting cells into segment / non-segment changes no total; empty segment produces no division error; loader rejects malformed configs |
 | Parity | 3, 9, 18, 26 | Every formula cell, every sheet, after forced LibreOffice recalculation (integers exact, floats 1e-6 relative), on main, edge and reproduce workbooks; every contract range equals the Python dump |
 | Guardrails | 7 | No protected-attribute or student-level fields; no hidden content or external links; required labels present |
+| Data dictionary | 28 | Every config key, lever, Ledger column, contract name and label has a dictionary row; links between rows agree; client-safe rows carry no review IDs, config keys or fixture numbers |
 | Calibration of synthetic data | 5 | The generator meets its asserted shape targets in ≥ 90% of 20 seeds (calibration, not realism) |
 | Reproduce | 6 | 57 of 57 derivable criteria against the client workbook (Phase 3, Nov 18) |
 | Display rules and rendering | 10, 27 | Summary layout checks (scale, repeated headers, no text overrunning its cell) and the PDF for human review; the hold replaces every median and percentile figure, printed or in the working values, and changes nothing else |
