@@ -4,6 +4,14 @@
 
 ## 1. Decisions by date
 
+### November 21, 2026 (Jason): client presentation and shock calibration
+
+| Decision | IDs |
+|---|---|
+| Client-visible text in plain words, taken from the data dictionary (`client_label`, `client_definition`); code names stay in named ranges, Ledger headers and a grey setting column. Confirms the Nov 21 pre-delivery recommendation | CP-1, CP-2 |
+| Order by what matters to the client (class, revenue, academic profile, priority segment, incentive, what-ifs, award distribution, technical detail), with a one-to-two-page Overview first and eight native Excel charts. No computed figure changes. Spec v0.6.4 section 0B; built as Phase 5, before the Richmond pre-delivery pass | CP-3 to CP-6 |
+| Calibrate the year-to-year variation s from public ABA 509 data (law; IPEDS as a cross-check for undergraduate) as methodology section 6 specifies. Analysis only; the config value and the label change after Jason reviews the report | O37 |
+
 ### November 21, 2026 (advisor, on the data dictionary report): documents aligned with the build
 
 | Change | Source |
@@ -12,7 +20,7 @@
 | Methods reference: step sizes do not depend on the response slope; the evidence share does, through its enrolled weights; test counts updated | Mismatches 3, 4, 9 |
 | `client.vertical` (law or ug) and a scenario's `plan_year` are labels in the prototype: shown on Inputs and in the incentive validity list, read by no calculation | Dictionary, purposes not found |
 
-**Added to the Richmond pre-delivery pass:** no review or decision IDs in client-visible text (the hold text drops "(OD-14)"; the Checks labels "(P1.1-1)" and "(R3-3)" go), finishing Phase 4.2 item 5; and, recommended Nov 21 for Jason to confirm, client labels on the Inputs and Summary sheets in plain words taken from the dictionary's `plain_name`, with the code names kept in named ranges and the dictionary (the Inputs sheet now shows config keys, and about 18 client-safe Summary labels contain `ntr_y1`, `gross_y1` or `all_jd`).
+**Moved to Phase 5 (spec 0B, confirmed by Jason Nov 21):** no review or decision IDs in client-visible text (the hold text drops "(OD-14)"; the Checks labels "(P1.1-1)" and "(R3-3)" go), finishing Phase 4.2 item 5; and client labels on the Inputs and Summary sheets in plain words taken from the dictionary's `plain_name`, with the code names kept in named ranges and the dictionary (the Inputs sheet now shows config keys, and about 18 client-safe Summary labels contain `ntr_y1`, `gross_y1` or `all_jd`).
 
 ### November 20, 2026 (Jason): Phase 4.2 (fix pass 2) and the hold's scope
 

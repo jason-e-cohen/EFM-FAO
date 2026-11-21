@@ -1,6 +1,6 @@
 # Prototype spec v0.6: formula-driven scenario workbook (for Claude Code)
 
-**Date:** November 16, 2026 (v0.6 applies the Session B design audit, `Audit_Session_B_Design_Report.md`, accepted by Jason on Nov 16: Blocking and other fixes, generic names, the metric definitions, and three simplifications; supersedes v0.5) | **Owner:** Jason Cohen | **Status:** v0.6.1 (Nov 17, 2026): Phase 1 built and reviewed (`Review_Phase1_Build.md`); amendments tagged **[v0.6.1, R-n]** or **[v0.6.1, OP-n]** (the builder's open points); ready for the Phase 1.1 fix pass and Phase 2. **v0.6.3 (Nov 18): Brandon's points and the Phase 3 reproduce rules; see section 0A, which governs where it differs from later text.** Phase 2 review follow-ups (Nov 17) are tagged **[v0.6.2, P2-n]** and **[v0.6.2, Q-n]** (the Phase 2 builder's questions, `Review_Phase2_Build.md` section 4) | **Reads with:** `CLAUDE.md`, `02_methodology_v2.8.md` (section 5 and Appendix F, metric definitions), `DECISIONS.md`, `Richmond_YA_Scenario_Workbook_Assessment.md` (sections 3, 4, 11; git-ignored)
+**Date:** November 16, 2026 (v0.6 applies the Session B design audit, `Audit_Session_B_Design_Report.md`, accepted by Jason on Nov 16: Blocking and other fixes, generic names, the metric definitions, and three simplifications; supersedes v0.5) | **Owner:** Jason Cohen | **Status:** v0.6.1 (Nov 17, 2026): Phase 1 built and reviewed (`Review_Phase1_Build.md`); amendments tagged **[v0.6.1, R-n]** or **[v0.6.1, OP-n]** (the builder's open points); ready for the Phase 1.1 fix pass and Phase 2. **v0.6.3 (Nov 18): Brandon's points and the Phase 3 reproduce rules; see section 0A, which governs where it differs from later text. v0.6.4 (Nov 21): client presentation (Phase 5), section 0B.** Phase 2 review follow-ups (Nov 17) are tagged **[v0.6.2, P2-n]** and **[v0.6.2, Q-n]** (the Phase 2 builder's questions, `Review_Phase2_Build.md` section 4) | **Reads with:** `CLAUDE.md`, `02_methodology_v2.8.md` (section 5 and Appendix F, metric definitions), `DECISIONS.md`, `Richmond_YA_Scenario_Workbook_Assessment.md` (sections 3, 4, 11; git-ignored)
 
 Change tags: **[v0.6, Bn-m]** cites the Session B finding that caused a change. Untagged text is carried from v0.5.
 
@@ -53,6 +53,42 @@ Sources: `Review_Points_Brandon_Nov17.md` (BM-1 to BM-10), `Review_Phase2_2_Plan
 ### C. Deliverable scope (DECISIONS, Nov 18)
 
 The first Richmond deliverable is Scenario 4 on Richmond's own cell data (the narrow fixture exception in `CLAUDE.md`), carrying class size, NTR, the pool strip and P(class > cap). Its median and percentile rows are held until Brandon says which LSAT the Yellow Arrows grid bands by (OD-14), because the History 509 check shows the fixture's lower bands disagree with the 509 (25th percentile in 2024 and 2025; median in 2024).
+
+## 0B. Amendment v0.6.4 (November 21, 2026): client presentation (Phase 5)
+
+Source: Jason, Nov 21 (review of `output/phase4/Summary_render_hold.pdf`): every client-visible figure in plain, clear language; order by what matters to the client, not by calculation order; charts that help a reader interpret the results. Tag **[v0.6.4, CP-n]**. **No computed figure changes.** Where this section and later sections differ, this section governs.
+
+**CP-1. One source for client text.** `docs/data_dictionary/dictionary.csv` gains five columns: `client_label` (now the plain label the workbook prints, replacing the as-built text), `client_definition` (one plain sentence a dean or enrollment officer would understand), `client_section` (A to H below), `client_order` (sort key within the section) and `client_tier` (`headline`, `standard` or `technical`). The workbook reads every client-visible label, definition and order from the dictionary at build time; the build id hashes `dictionary.csv`. Code names stay where analysts need them: named ranges, Ledger headers, `sw/` and a narrow grey "setting" column beside each plain label on Inputs and Levers. The builder drafts the labels and definitions and writes `output/client_labels_review.xlsx` (old text, new label, definition, section, tier) for Jason's review; wording changes after that are CSV edits and a rebuild.
+
+**CP-2. Label rules.** Plain words; the measure named (LSAT, GPA, first-year net tuition revenue); units in the label; probabilities as "Chance that ..."; 90% outcome ranges as "Likely range (90%)"; Low and High cases as "If admitted students respond less (more) to aid". No code names (`ntr_y1`, `gross_y1`, `all_jd`, `q`, `t`, `rho`, `C_any`, `dE`), no review or decision IDs (the hold text becomes "held until the LSAT basis is confirmed"; the Checks labels drop "(P1.1-1)" and "(R3-3)"), no config keys. Technical terms appear only in the technical tier, each with a definition. Examples:
+
+| As built | Client label |
+|---|---|
+| ntr_y1 (first-year net tuition revenue, entering class) | First-year net tuition revenue (entering class) |
+| gross_y1 | First-year tuition before aid (entering class) |
+| Price of the target (Baseline ntr_y1 minus scenario ntr_y1) | Revenue given up compared with Baseline |
+| Paid-anyway share (C_any / C) | Share of incentive dollars paid to students who would have enrolled anyway |
+| Additional enrollees (dE) | Additional students enrolled because of the incentive |
+| Enrolled with GPA class hi | Enrolled with a GPA of 3.83 or higher |
+| Spread: 25th percentile band (band, not a score) | LSAT band where the 25th percentile is likely to fall |
+| P(median holds), score 166, rho 0.5: ... | Chance the median LSAT is 166 or higher, if high- and lower-scoring admits' yields move differently (sensitivity) |
+
+**CP-3. Order by client questions.** Sections, in this order, on the new Overview sheet and on Summary: **A** Class size; **B** Revenue and aid; **C** Academic profile (LSAT and GPA); **D** Priority segment (named from config, e.g. "New York and Pennsylvania"); **E** Incentive; **F** What-if tables (pool growth, yield, tuition, class size); **G** Award distribution; **H** Technical detail (approximation flags, sensitivity at rho 0.5, expected enrolled below a threshold, band lower bounds, clip counts, the response and evidence detail). Within a section: headline rows first, then standard, then technical rows moved to H. Then Definitions (every printed label with its `client_definition`) and Notes on method (the section 4 labels). The interface-contract ranges and working values stay below the print area, unprinted.
+
+**CP-4. Overview sheet (first in the PDF; after README in the workbook).** One column per scenario, at most 2 printed pages: the `headline` rows of sections A to E (about 12 to 15: expected class with its likely range, chance the class exceeds the cap, chance it lands within the target band; first-year net tuition revenue with its likely range, chance it meets the goal, discount rate, revenue change against Baseline; chance each median target holds and the 25th percentile target; segment enrolled and chance of the segment goal; additional students and cost per additional student when an incentive exists), each with a short "what this means" column, then the charts (CP-5). Every Overview cell is a formula on Summary, so test 3 and the desktop Excel check cover it. Held figures read the hold text.
+
+**CP-5. Charts.** Native Excel charts (XlsxWriter), linked to Summary and strip cells so they update when a client changes a lever, and printed in the PDF. Each title states the question it answers.
+1. "How large will the class be?": expected class by scenario, likely range (90%) as error bars; class cap and class target as labeled reference lines.
+2. "How much first-year net tuition revenue?": by scenario, likely range as error bars; the revenue goal as a reference line.
+3. "How likely is each outcome?": chances by scenario (class above cap, revenue meets goal, segment goal, each median target), 0 to 100%; data labels follow the "under 5%" / "over 95%" rule; held measures omitted.
+4. "What if applications grow more or less?": expected class against pool multiplier for each scenario, with the cap line and the growth-to-date marker; a companion chart of the chance the class exceeds the cap.
+5. "What does a smaller class cost?": first-year net tuition revenue against class size (class-size table), selected scenario.
+6. "What if tuition rises more or less?": first-year net tuition revenue against tuition increase (tuition what-if).
+7. "What if more or fewer admits enroll?": expected class against yield shift (yield strip), with the cap line.
+8. "Where do merit dollars go?": merit dollars by LSAT band, by scenario (Distribution).
+Design rules: one color per scenario, the same in every chart, Baseline in neutral grey; a color-blind-safe palette; no red and green coding of good and bad, no 3D, no pie charts; bars start at zero; reference lines labeled directly; a note under each chart carries the section 4 labels that apply (response, year-to-year variation, segment share); a 90% outcome range and the Low and High cases are never drawn as one range; under `hold_position_rows` no median or percentile series is drawn; Middle case throughout. Readable at 75% or larger in the PDF.
+
+**CP-6. Tests.** Test 28: every client-visible label and definition in the workbook equals the dictionary; every `client_safe` row has a `client_label` and `client_definition` with no code name, ID or config key; `client_section`, `client_order` and `client_tier` filled. Test 7: chart titles and notes carry the required labels; no guardrail vocabulary; no held series under the hold. A new chart test reads each chart's XML and checks every series references the intended range. Test 10: the Overview prints on at most 2 pages; chart pages at 75% or larger. Test 3 and the desktop Excel check cover the Overview formulas. Mutation: mutants for Overview links and chart references. Reproduce builds keep the plain labels but carry no Overview or charts (validation only).
 
 ## 1. Layout
 
