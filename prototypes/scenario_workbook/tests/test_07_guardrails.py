@@ -19,6 +19,11 @@ repro_syn_wb), on every config file and on the cell schema:
    ASSUMPTION_LABEL in the projected-outcome narrative of exactly the scenarios with a non-zero shift or lift;
    SEGMENT_SHARE_LABEL in the segment block while the share is assumed; the two range kinds in the README and in every
    range row label. Every label constant is used by the generator code.
+7. Spec v0.6.4 (CP-5, CP-6): every chart's title is its question and its note carries the section 4 labels that apply
+   (RESPONSE_LABEL always; SHOCK_LABEL for a chart of a probability or a range; ASSUMPTION_LABEL for the yield chart;
+   SEGMENT_SHARE_LABEL where a segment chance is drawn while the share is assumed); no guardrail vocabulary in a
+   title or note; the Overview and the Charts sheet carry RESPONSE_LABEL; under hold_position_rows the note says the
+   medians are not drawn (test 29 checks that no series reads a held row).
 """
 import glob
 import os
@@ -28,7 +33,7 @@ import pytest
 import yaml
 
 from conftest import ROOT
-from sw import cells as C, labels, ledger as L
+from sw import cells as C, dictionary as DD, labels, ledger as L
 
 PROTECTED = re.compile(r"\b(race|races|racial|ethnicity|ethnic|gender|sex)\b", re.I)
 STUDENT = re.compile(r"\b(student_id|student id|first_name|last_name|full_name|e-?mail|date_of_birth|birth ?date|"
@@ -36,7 +41,8 @@ STUDENT = re.compile(r"\b(student_id|student id|first_name|last_name|full_name|e
 GUARDRAIL = re.compile(r"exceptional|anomal|out[ -]of[ -]bounds|beyond (a|the) limit|outlier|unusual|excessive|"
                        r"abnormal|extreme|too high|too low|suspicious|red flag|over the limit|above the limit",
                        re.I)
-RESPONSE_SHEETS = ("Response", "Ledger_Low", "Ledger_Middle", "Ledger_High", "Summary", "Trim", "Distribution")
+RESPONSE_SHEETS = ("Response", "Ledger_Low", "Ledger_Middle", "Ledger_High", "Summary", "Trim", "Distribution",
+                   "Overview", "Charts")
 
 
 @pytest.fixture(scope="module")
@@ -227,9 +233,9 @@ def test_labels_where_section_4_requires(books):
         assert len(secs) >= 10
         for sec in secs:
             txt = " | ".join(sec["text"])
-            if sec["title"] == "Labels and range kinds":
+            if sec["title"] in (DD.lab("notes_title"), DD.lab("definitions_title")):
                 continue
-            if not sec["nums"] and not sec["title"].startswith("Narratives"):
+            if not sec["nums"] and not sec["title"] == DD.lab("narratives_title"):
                 continue            # no figures (the reproduce build's class-size placeholder)
             assert labels.RESPONSE_LABEL in txt, (bk["name"], sec["title"])
             if sec["prob"] or sec["range_rows"]:
@@ -238,10 +244,11 @@ def test_labels_where_section_4_requires(books):
                 # a range row names its kind; rows labeled by a contract range name (..._LO90, ..._HI90) take it
                 # from the section note
                 if re.search(r"LO90|HI90", lab):
-                    assert labels.RANGE_OUTCOME in txt, (bk["name"], lab)
+                    assert labels.RANGE_OUTCOME.lower() in txt.lower(), (bk["name"], lab)
                 else:
-                    assert labels.RANGE_OUTCOME in lab or labels.RANGE_CASES in lab, (bk["name"], lab)
-            if sec["title"].startswith("Segment block") and cfg["segments"] \
+                    # CP-2: the range kind may sit mid-label ("Expected class, likely range (90%): low end")
+                    assert labels.RANGE_OUTCOME.lower() in lab.lower() or labels.RANGE_CASES in lab, (bk["name"], lab)
+            if sec["title"].startswith("D. ") and cfg["segments"] \
                     and cfg["segments"][0]["share_source"] == "assumed":
                 assert labels.SEGMENT_SHARE_LABEL in txt
         # the 'under 5%' / 'over 95%' display covers every probability cell on every sheet
@@ -291,3 +298,35 @@ def test_every_label_constant_is_used():
                   if not f.endswith("labels.py"))
     unused = [k for k, v in vars(labels).items() if k.isupper() and isinstance(v, str) and f"labels.{k}" not in src]
     assert not unused, unused
+
+
+# 7 ---------------------------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("which", ["main", "hold"])
+def test_chart_titles_and_notes(main_wb, hold_wb, which):
+    """CP-5: each chart's title is its question; its note carries the section 4 labels that apply; no guardrail
+    vocabulary; under hold the chance chart's note says the medians are not drawn."""
+    b = main_wb if which == "main" else hold_wb
+    cfg = b["info"]["run"].cfg
+    meta = b["info"]["layout"]["chart_meta"]
+    shock = labels.shock_label(cfg["risk"]["common_shock_sd"])
+    illustrative = cfg["risk"]["shock_source"] == "illustrative"
+    want = {DD.lab(k): k for k in ("chart_class", "chart_ntr", "chart_chances", "chart_pool", "chart_pool_cap",
+                                   "chart_class_size", "chart_tuition", "chart_yield", "chart_merit")}
+    assert sorted(m["title"] for m in meta) == sorted(want)
+    for m in meta:
+        k, note = want[m["title"]], m["note"]
+        assert labels.RESPONSE_LABEL in note, k
+        if k in ("chart_class", "chart_ntr", "chart_chances", "chart_pool", "chart_pool_cap") and illustrative:
+            assert shock in note, k
+        if k == "chart_yield":
+            assert labels.ASSUMPTION_LABEL in note
+        if k == "chart_chances" and cfg["segments"] and cfg["segments"][0]["share_source"] == "assumed":
+            assert labels.SEGMENT_SHARE_LABEL in note
+        if k == "chart_chances":
+            assert (labels.HOLD_POSITION in note) == bool(cfg.get("hold_position_rows"))
+        assert not GUARDRAIL.search(m["title"] + " " + note), k
+        assert "middle case" in note.lower(), k
+        # a 90% range and the Low and High cases are never drawn as one range: the note says the cases are not drawn
+        if k in ("chart_class", "chart_ntr"):
+            assert "not drawn" in note and labels.RANGE_OUTCOME in note

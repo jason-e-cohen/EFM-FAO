@@ -41,7 +41,11 @@ def test_only_the_marker_cells_change(main_wb, lo_profile):
     for (sheet, r, c) in info["expected"]:
         if base[sheet].cell(r + 1, c + 1).value != edit[sheet].cell(r + 1, c + 1).value:
             changed.add((sheet, r, c))
-    assert changed and changed <= marker, sorted(changed - marker)[:5]
+    chart = set(info["layout"]["chart_marker_cells"])            # Phase 5: the growth line on the applications chart
+    assert len(chart) == 2
+    assert changed and changed <= marker | chart, sorted(changed - marker - chart)[:5]
+    for sh_, r_, c_ in chart:
+        assert base[sh_].cell(r_ + 1, c_ + 1).value == 1.1 and edit[sh_].cell(r_ + 1, c_ + 1).value == 1.3
     text = labels.POOL_YTD_MARKER.format(as_of="2026-11-15")
     mcells = [m for m in info["layout"]["marker_cells"][2:]]
     for wb, row in ((base, grid.index(1.1)), (edit, grid.index(1.3))):

@@ -7,7 +7,7 @@ the same formats, so the workbook's narrative cells equal the Python text after 
 Formats: raw (text as is), g (number, general), d1 (one decimal), usd (whole dollars), musd ($ millions, two
 decimals), pct0 and pct1 (ratio shown as percent), pp1 (a value already in percent, one decimal), prob (probability;
 "under 5%" and "over 95%" while the shock is illustrative), seg_d1 (one decimal, or the segment's text when the segment
-has no cells).
+has no cells), scope (the incentive scope in plain words; CP-2).
 """
 import string
 
@@ -24,7 +24,12 @@ def xs(text):
 # ---------------------------------------------------------------------------------------------------------------
 # Formats
 
+SCOPE_WORDS = {"residency_out": "out-of-state admits", "segment": "the priority segment", "none": "no one"}   # CP-2
+
+
 def _py(v, fmt, ctx):
+    if fmt == "scope":
+        return SCOPE_WORDS.get(v, "" if v is None else str(v))
     if fmt == "raw":
         return "" if v is None else str(v)
     if fmt == "g":
@@ -52,6 +57,11 @@ def _py(v, fmt, ctx):
 
 
 def _xl(r, fmt, ctx):
+    if fmt == "scope":
+        f = f"{r}&\"\""
+        for k, w in reversed(list(SCOPE_WORDS.items())):
+            f = f"IF({r}={xs(k)},{xs(w)},{f})"
+        return f
     if fmt == "raw":
         return f"{r}"
     if fmt == "g":
@@ -102,31 +112,34 @@ def changes_parts(has_parent):
     under a full-tuition flag are not changes and are reported after the counts when there are any."""
     if not has_parent:
         return ["Baseline: no parent scenario.", ("awards_ignored", "ignored")]
-    return ["Pool multiplier ", ("pool_multiplier", "g"), ". Awards changed in ", ("awards_changed", "g"),
-            " cells; admit rates changed in ", ("rates_changed", "g"), " cells.", ("awards_ignored", "ignored")]
+    return ["Top-score applications: ", ("pool_multiplier", "g"), " x last year's. Awards changed in ",
+            ("awards_changed", "g"), " applicant groups; admit rates changed in ", ("rates_changed", "g"),
+            " groups.", ("awards_ignored", "ignored")]
 
 
 def outcome_parts(n_score_thresholds, hold=False, floor_held=False):
     """hold (config hold_position_rows, R4-06): each median's margin and probability are replaced by
     labels.HOLD_POSITION. floor_held (F-1): the count below the score floor is too, when the floor is a held t."""
-    parts = ["Class ", ("class_mean", "d1"), " (90% outcome range ", ("class_lo90", "d1"), " to ",
+    rng = labels.RANGE_OUTCOME[0].lower() + labels.RANGE_OUTCOME[1:]            # CP-2: "likely range (90%)"
+    parts = ["Expected class ", ("class_mean", "d1"), f" ({rng}: ", ("class_lo90", "d1"), " to ",
              ("class_hi90", "d1"), "). "]
     for i in range(n_score_thresholds):
-        parts += [("score_measure", "raw"), " median ", (f"t{i}", "g")]
-        parts += [f": {labels.HOLD_POSITION}. "] if hold else [": margin ", (f"margin{i}", "d1"), ", probability ",
+        parts += ["Median ", ("score_measure", "raw"), " ", (f"t{i}", "g"), " or higher"]
+        parts += [f": {labels.HOLD_POSITION}. "] if hold else [": cushion ", (f"margin{i}", "d1"), ", chance ",
                                                               (f"p{i}", "prob"), ". "]
-    parts += ["GPA median ", ("gpa_t", "g")]
-    parts += [f": {labels.HOLD_POSITION}. "] if hold else [": margin ", ("gpa_margin", "d1"), ", probability ",
+    parts += ["Median GPA ", ("gpa_t", "g"), " or higher"]
+    parts += [f": {labels.HOLD_POSITION}. "] if hold else [": cushion ", ("gpa_margin", "d1"), ", chance ",
                                                           ("gpa_p", "prob"), ". "]
-    parts += (["Enrolled below ", ("floor", "g"), f": {labels.HOLD_POSITION}. "] if floor_held else
-              [("below_floor", "d1"), " enrolled below ", ("floor", "g"), ". "])
-    parts += ["Full-tuition ", ("ft", "d1"),
-              ", no merit award ", ("nm", "d1"), ". First-year NTR ", ("ntr", "musd"), " (90% outcome range ",
+    parts += (["Students below ", ("floor", "g"), f": {labels.HOLD_POSITION}. "] if floor_held else
+              [("below_floor", "d1"), " students below ", ("floor", "g"), ". "])
+    parts += [("ft", "d1"), " students on a full-tuition award, ", ("nm", "d1"),
+              " with no merit award. First-year net tuition revenue ", ("ntr", "musd"), f" ({rng}: ",
               ("ntr_lo", "musd"), " to ", ("ntr_hi", "musd"), "), discount rate (entering class, first year) ",
               ("discount", "pct1"), ". Tuition ", ("tuition", "usd"), " (+", ("p", "pp1"), "%); class target ",
-              ("target", "g"), " (cap ", ("cap", "g"), "); incentive ", ("bonus", "usd"), " (", ("scope", "raw"),
-              "); ", ("segment_name", "raw"), " enrolled ", ("segment_enrolled", "seg_d1"), ". Evidence: ",
-              ("evidence", "pct0"), " of enrolled in cells where the yield is extrapolated."]
+              ("target", "g"), " (cap ", ("cap", "g"), "); incentive ", ("bonus", "usd"), " to ", ("scope", "scope"),
+              "; priority segment ", ("segment_name", "raw"), ": ", ("segment_enrolled", "seg_d1"),
+              " students. ", ("evidence", "pct0"), " of expected students are in groups whose yield is "
+              "extrapolated beyond past awards."]
     return parts
 
 

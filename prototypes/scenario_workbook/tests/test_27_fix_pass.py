@@ -27,7 +27,7 @@ import re
 import pytest
 
 from conftest import close, read_range
-from sw import contract as K, labels, risk
+from sw import contract as K, dictionary as DD, labels, risk
 
 POSITION = re.compile(r"median|percentile|Spread:|Share at or above|Enrolled at or above", re.I)
 
@@ -68,15 +68,15 @@ def test_hold_replaces_every_median_and_percentile_figure(hold_wb, main_wb):
     meas = run.cfg["score"]["measure"]
     held_ts = {f"{t:g}" for t in K.held_ts(run.cfg)}
     seen = 0
+    stop = next(r for r, a in lab.items() if a == DD.lab("definitions_title"))     # Phase 5: Definitions repeat labels
     for r, a in lab.items():
-        if not a or a.startswith(("SUM_", "SEG_", "INC_", "Tie rule", "Percentile targets", "Pool growth",
-                                  labels.RESPONSE_LABEL, "Pool multiplier at which")) \
-                or a in labels.LEGEND_NAMES.values():                        # the legend's plain names
+        if r >= stop or not a or ws.cell(r, 1).font.i or a.startswith(("From ", labels.RESPONSE_LABEL)) \
+                or a in labels.LEGEND_NAMES.values():                        # notes, sub-headings, the legend
             continue
-        is_pos = bool(re.search(r"median|percentile|Spread:", a, re.I))
-        m = re.match(rf"(Share|Enrolled) at or above {meas} (\d+)", a)
+        is_pos = bool(re.search(r"median|percentile|band where", a, re.I))
+        m = re.match(rf"(?:Share at|Students enrolled with) {meas} (\d+) or higher", a)
         if m:
-            is_pos = m.group(2) in held_ts
+            is_pos = m.group(1) in held_ts
         if not is_pos:
             continue
         vals = [ws.cell(r, 3 + j).value for j in range(nS)]
@@ -97,10 +97,10 @@ def test_hold_replaces_every_median_and_percentile_figure(hold_wb, main_wb):
     assert all(row[0] != H and all(v == H for v in row[1:]) for row in be)
     # narratives: no median margin or probability
     narr = [ws.cell(r, 3).value for r, a in lab.items() if a in [s.name for s in run.scenarios] or a == ""]
-    outcome = [t for t in narr if isinstance(t, str) and t.startswith("Class ")]
+    outcome = [t for t in narr if isinstance(t, str) and t.startswith("Expected class ")]
     assert len(outcome) == nS
     for t in outcome:
-        assert H in t and "margin" not in t
+        assert H in t and "cushion" not in t
     # everything not held equals the unheld build: the layouts match row for row (a held figure is replaced, never
     # removed), so compare every number in the rows both builds label alike
     assert len(lab) == len(labm)
@@ -172,10 +172,13 @@ def test_one_margin_per_event(main_wb):
     texts = list(lab.values())
     assert not any("50th percentile" in a for a in texts if not a.startswith(("SUM_", "P(50th")))
     assert not any(re.match(r"P\(50th percentile", a) for a in texts)
+    from sw.workbook import ordinal
     for q, t in targets:
-        if q != 0.5:
-            assert any(a.endswith(f"margin ({labels.PCT_MARGIN_SWAPS})") and f"(q {q:g})" in a for a in texts)
-    assert any(a.startswith("Median margin") for a in texts)
+        if q != 0.5:                       # Phase 5: the percentile cushion, counted in swaps (Notes on method)
+            assert any(a.startswith(f"{ordinal(q)} percentile cushion at") and f" {t:g}:" in a for a in texts)
+    notes = " ".join(str(ws.cell(r, 2).value) for r in range(1, ws.max_row + 1) if lab[r] == "Cushion")
+    assert labels.PCT_MARGIN_SWAPS in notes
+    assert any(a.startswith("Median cushion at") for a in texts)
     cols = K.strip_columns(run.cfg)["class_table"]
     assert not any(c.startswith(("margin_q0.5", "p_pct_q0.5")) for c in cols)
     assert sum(c.startswith("margin_q") for c in cols) == sum(q != 0.5 for q, _ in targets)
@@ -351,7 +354,7 @@ def test_legend_in_plain_words(main_wb, hold_wb):
     dotted keys) or label constant names (CAPS_WITH_UNDERSCORES); it states whether this workbook is held."""
     for bundle, state in ((main_wb, "not held"), (hold_wb, "held")):
         ws, lab = _summary_rows(bundle["values"])
-        r0 = next(r for r, a in lab.items() if a == "Labels and range kinds")
+        r0 = next(r for r, a in lab.items() if a == DD.lab("notes_title"))
         rows = []
         for r in range(r0 + 1, ws.max_row + 1):
             a = lab[r]
@@ -378,8 +381,9 @@ def test_lowest_band_reads_below(main_wb):
     assert lows[0] == 0
     txt = labels.LOWEST_BAND.format(b=f"{lows[1]:g}")
     ws = openpyxl.load_workbook(main_wb["path"])["Summary"]
-    heads = [c.value for row in ws.iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith("admits cut")]
-    assert f"admits cut, {txt}" in heads and "admits cut, 0" not in heads
+    cut = DD.label("OUT-127", band="")
+    heads = [c.value for row in ws.iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith(cut)]
+    assert DD.label("OUT-127", band=txt) in heads and DD.label("OUT-127", band="0") not in heads
     fmt = f'[=0]"{txt}";General'
     ct = read_range(main_wb["values"], "CT_CLASS_TABLE")
     cols = K.strip_columns(run.cfg)["class_table"]
@@ -398,8 +402,10 @@ def test_lowest_band_reads_below(main_wb):
     assert zeros > 0
     from sw import lo
     assert lo.display_text(0, fmt) == txt and lo.display_text(158.0, fmt) == "158"
-    spread = [r for r in range(1, ws.max_row + 1)
-              if str(ws.cell(r, 1).value or "").startswith("Spread:") and "lower bound" in str(ws.cell(r, 1).value)]
+    stop = next(r for r in range(1, ws.max_row + 1) if ws.cell(r, 1).value == DD.lab("definitions_title"))
+    lb = DD.row("OUT-027")["client_label"].split("{")[0]
+    spread = [r for r in range(1, stop)
+              if str(ws.cell(r, 1).value or "").startswith(lb) and str(ws.cell(r, 1).value).endswith("lower bound")]
     assert spread and all(ws.cell(r, 3).number_format == fmt for r in spread)
 
 
@@ -419,12 +425,14 @@ def test_entering_rows_and_targets(main_wb, edge_wb):
         run = bundle["info"]["run"]
         cfg = run.cfg
         ws, lab = _summary_rows(bundle["values"])
-        row = {a: r for r, a in lab.items() if a}
-        assert ws.cell(row["ntr_target (Inputs; under all_jd the total JD goal)"], 3).value == cfg["ntr_target"]
-        eff = ws.cell(row["Effective entering target (ntr_target, less continuing revenue under all_jd)"], 3).value
+        row = {}
+        for r, a in lab.items():                         # first occurrence (Definitions repeat the labels below)
+            if a:
+                row.setdefault(a, r)
+        assert ws.cell(row[DD.label("OUT-041")], 3).value == cfg["ntr_target"]
+        eff = ws.cell(row[DD.label("OUT-042")], 3).value
         assert close(eff, cfg["ntr_target"] - (cfg["continuing_ntr_usd"] if all_jd else 0))
-        for a in ("Projected JD net tuition = continuing (client-supplied) + ntr_y1",
-                  "P(continuing + ntr_y1 at or above ntr_target), all_jd"):
+        for a in (DD.label("OUT-045"), DD.label("OUT-046")):
             v = ws.cell(row[a], 3).value
             assert (v == labels.NOT_USED_ENTERING) != all_jd, (a, v)
 
@@ -501,8 +509,8 @@ def test_hold_in_python(tmp_path):
     for s in run.scenarios:
         t = NAR.outcome(run, vals, s)
         floor_held = cfg["score"]["floor"] in K.held_ts(cfg)                  # F-1: the count below the floor
-        assert t.count(H) == len(cfg["score"]["median_thresholds"]) + 1 + floor_held and "margin" not in t
-        assert "margin" in NAR.outcome(run0, K.compute(run0), s)
+        assert t.count(H) == len(cfg["score"]["median_thresholds"]) + 1 + floor_held and "cushion" not in t
+        assert "cushion" in NAR.outcome(run0, K.compute(run0), s)
     cols = K.strip_columns(cfg)["class_table"]
     assert [c for c in cols if c.startswith("margin_q")] == [f"margin_q{q:g}_{t:g}" for q, t in
                                                              risk.pct_targets(cfg) if q != 0.5]

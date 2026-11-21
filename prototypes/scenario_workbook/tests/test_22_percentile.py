@@ -100,7 +100,7 @@ def test_approximate_flag(toy):
     assert risk.pct(lc, 0.25, 166)["approximate"] == labels.PCT_APPROX_LABEL          # 19.5 expected below
     big = replace(lc, admits=lc.admits * 2, mu=lc.mu * 2, enrolled=lc.enrolled * 2)  # 39 expected below
     assert risk.pct(big, 0.25, 166)["approximate"] == ""
-    assert labels.PCT_APPROX_LABEL == "approximate (fewer than 20 expected below t)"
+    assert labels.PCT_APPROX_LABEL == "approximate (fewer than 20 students expected below the target score)"  # CP-2
 
 
 def test_spread_band_hand_case(toy):

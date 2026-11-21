@@ -12,7 +12,7 @@ import os
 import numpy as np
 import pytest
 
-from sw import labels, ledger as L, response, trim
+from sw import dictionary as DD, labels, ledger as L, response, trim
 from sw.config import validate
 
 GPA_TRIM = {"blank": 0, "lo": 1, "hi": 2}
@@ -130,8 +130,8 @@ def test_floor_joins_the_rebuild_check(edge_wb, lo_profile):
         (sheet, coord), = list(wb.defined_names[name].destinations)
         wb[sheet][coord.replace("$", "")][0][k].value = v
     r0 = rows(edge_wb["values"]["Checks"])
-    assert r0["Percentile target 3: t is a band bound (score.bands)"] == "OK"
-    assert r0["Percentile target 4: q equals its value at build"] == "OK"
+    assert r0[DD.label("CK-042", j=3)] == "OK"
+    assert r0[DD.label("CK-043", j=4)] == "OK"
     out = os.path.join(PHASE2, "edge_floor_edit")
     os.makedirs(out, exist_ok=True)
     src = os.path.join(out, "edited.xlsx")
@@ -140,6 +140,6 @@ def test_floor_joins_the_rebuild_check(edge_wb, lo_profile):
                                   data_only=True)
     r1 = rows(vals["Checks"])
     assert r1[chk] == labels.REBUILD_NEEDED.format(build="154")
-    assert r1["Percentile target 3: t is a band bound (score.bands)"] == "t 163 is not a band lower bound"
-    assert r1["Percentile target 4: q equals its value at build"] == labels.REBUILD_NEEDED.format(build="0.1")
-    assert r1["Percentile target 1: t is a band bound (score.bands)"] == "OK"
+    assert r1[DD.label("CK-042", j=3)] == "target score 163 is not a band lower bound"
+    assert r1[DD.label("CK-043", j=4)] == labels.REBUILD_NEEDED.format(build="0.1")
+    assert r1[DD.label("CK-042", j=1)] == "OK"

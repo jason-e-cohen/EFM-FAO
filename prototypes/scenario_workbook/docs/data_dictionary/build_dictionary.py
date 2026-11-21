@@ -6,6 +6,7 @@ dictionary.csv and rerun:
 
     ../../.venv/bin/python docs/data_dictionary/build_dictionary.py           (from prototypes/scenario_workbook)
     ../../.venv/bin/python docs/data_dictionary/build_dictionary.py --check   (exit 1 if the markdown is stale)
+    ../../.venv/bin/python docs/data_dictionary/build_dictionary.py --review  (also output/client_labels_review.xlsx)
 
 The helpers below (vocabularies, required columns, the client-safe text checks) are shared with
 tests/test_28_dictionary.py.
@@ -23,11 +24,17 @@ CSV_PATH = os.path.join(HERE, "dictionary.csv")
 MD_PATH = os.path.join(HERE, "Data_Dictionary.md")
 XLSX_PATH = os.path.join(ROOT, "output", "data_dictionary", "Data_Dictionary.xlsx")
 
-COLUMNS = ["id", "layer", "analyst_name", "excel_location", "client_label", "client_label_status", "plain_name",
-           "description", "unit", "dimensions", "formula", "fed_by", "feeds", "role", "depends_on_response",
-           "depends_on_shock", "detail_level", "client_safe", "status", "references", "tests"]
-# Blank allowed: excel_location (Python only), fed_by (inputs, fixed text, build metadata), feeds (terminal figures).
-REQUIRED = [c for c in COLUMNS if c not in ("excel_location", "fed_by", "feeds")]
+COLUMNS = ["id", "layer", "analyst_name", "excel_location", "client_label", "client_definition", "client_section",
+           "client_order", "client_tier", "client_label_status", "plain_name", "description", "unit", "dimensions",
+           "formula", "fed_by", "feeds", "role", "depends_on_response", "depends_on_shock", "detail_level",
+           "client_safe", "status", "references", "tests"]
+# Spec v0.6.4 section 0B (CP-1): client_label is the plain label the workbook prints; client_definition one plain
+# sentence; client_section A to H (CP-3), client_order the sort key within the section, client_tier headline, standard
+# or technical. The workbook reads them through sw/dictionary.py.
+CLIENT_COLUMNS = ["client_label", "client_definition", "client_section", "client_order", "client_tier"]
+# Blank allowed: excel_location (Python only), fed_by (inputs, fixed text, build metadata), feeds (terminal figures),
+# client_definition (rows that are not client-safe).
+REQUIRED = [c for c in COLUMNS if c not in ("excel_location", "fed_by", "feeds", "client_definition")]
 
 LAYERS = [("input_config", "Inputs: client config", "Keys of config/<client>.yaml that the loader names or the "
                                                      "configs carry."),
@@ -47,7 +54,9 @@ LAYER_IDS = {"input_config": "IN", "input_scenario": "IN", "input_data": "IN", "
              "output": "OUT", "check": "CK", "internal": "INT"}
 VOCAB = {
     "layer": [x[0] for x in LAYERS],
-    "client_label_status": ["as_built", "proposed"],
+    "client_label_status": ["as_built", "drafted", "proposed"],
+    "client_section": ["A", "B", "C", "D", "E", "F", "G", "H"],
+    "client_tier": ["headline", "standard", "technical"],
     "unit": ["count", "rate", "ratio", "USD", "percent", "points", "points per $1,000", "probability", "score", "GPA",
              "multiplier", "year", "date", "text", "flag", "list"],
     "role": ["primary", "derived", "display", "input", "internal"],
@@ -60,7 +69,13 @@ VOCAB = {
 ID_RE = re.compile(r"^(IN|LG|OUT|CK|INT)-\d{3}$")
 
 # --- client-safe text checks (client_label, plain_name, description) -------------------------------------------
-SAFE_FIELDS = ("client_label", "plain_name", "description")
+SAFE_FIELDS = ("client_label", "client_definition", "plain_name", "description")
+PLAIN_FIELDS = ("client_label", "client_definition")
+# CP-2: code names a client label or definition must not carry (any name with '_' is one too). Single letters are the
+# model's symbols (q share, t threshold, m pool multiplier, N class size, M expected class, f, p increase, T tuition);
+# section letters (A. to H.) are not checked because they are never followed by a space and a lower-case word alone.
+CODE_TOKENS = {"q", "t", "m", "f", "p", "N", "M", "T", "rho", "dE", "dSpend", "dNTR", "ntr", "gross", "jd", "Gp",
+               "Gm", "Vm", "Vp", "Vn"}
 # Review, decision and finding IDs: R4-06, P2-03, P1.1-1, Q-8e, BM-1, OD-14, B3-1, V27-01, R-01, F-4, R3-4; O37; D13
 RID_RE = re.compile(r"\b(?:[A-Z]{1,3}\d*(?:\.\d+)?-\d+[a-z]?|O\d{2}|D\d{1,2})\b")
 NUM_RE = re.compile(r"(?<![A-Za-z0-9_.])\d[\d,]*(?:\.\d+)?(?![A-Za-z0-9])")
@@ -99,9 +114,22 @@ def number_hits(text):
     return [n for n in NUM_RE.findall(text) if n.rstrip(".") not in ALLOWED_NUMBERS]
 
 
+def code_hits(text):
+    """CP-2: code names in a client text ({placeholders} are filled at build and are not checked)."""
+    t = re.sub(r"\{[^{}]*\}", " ", text)
+    words = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", t)
+    return sorted({w for w in words if "_" in w or w in CODE_TOKENS})
+
+
 def safe_problems(row, tokens):
     """Reasons a row marked client_safe = Y fails the client-safe rule (empty when it passes)."""
     out = []
+    for f in PLAIN_FIELDS:
+        if code_hits(row[f]):
+            out.append(f"{f}: code name {code_hits(row[f])}")
+    for f in ("client_label", "client_definition", "client_section", "client_order", "client_tier"):
+        if not row[f].strip():
+            out.append(f"{f}: blank")
     for f in SAFE_FIELDS:
         t = row[f]
         if rid_hits(t):
@@ -134,7 +162,9 @@ def render_markdown(rows):
     lines = ["# Scenario-workbook data dictionary", "",
              "Generated from `dictionary.csv` by `build_dictionary.py`; do not edit by hand. One entry per variable, "
              "grouped by layer. Client labels with `{braces}` are templates: the workbook fills in the score measure, "
-             "a threshold t, a share q, a case or a year from the config. A label marked *proposed* is not shown in "
+             "a threshold t, a share q, a case or a year from the config. Spec v0.6.4 section 0B: the client label is "
+             "the plain text the workbook prints, with a one-sentence client definition, a section (A to H), an order "
+             "and a tier; *drafted* marks a label written in Phase 5 for review. A label marked *proposed* is not shown in "
              "the workbook. Test 28 checks this file against the code, the configs and a fresh synthetic build.", "",
              "Columns: `role` follows Methods_Reference section 8 (primary, derived, display; plus input and "
              "internal). `response` and `shock` say whether the figure depends on the placeholder response slopes and "
@@ -170,10 +200,13 @@ def _links(v):
 
 
 def _entry(r):
-    lab = f'"{_md(r["client_label"])}"' + (" (proposed)" if r["client_label_status"] == "proposed" else "")
+    lab = f'"{_md(r["client_label"])}"' + (" (proposed)" if r["client_label_status"] == "proposed" else
+                                           " (drafted, for review)" if r["client_label_status"] == "drafted" else "")
     return [f'<a id="{r["id"]}"></a>', "", f'#### {r["id"]} `{_md(r["analyst_name"])}`: {_md(r["plain_name"])}', "",
             _md(r["description"]), "",
             f'- Client label: {lab}',
+            f'- Client definition: {_md(r["client_definition"]) or "none"}',
+            f'- Section {r["client_section"]}, order {r["client_order"]}, tier {r["client_tier"]}',
             f'- Excel: {_md(r["excel_location"]) or "Python only"}',
             f'- Unit: {r["unit"]}; dimensions: {r["dimensions"]}',
             f'- Formula: {_md(r["formula"])}',
@@ -194,6 +227,7 @@ def write_xlsx(rows, path=XLSX_PATH):
                           "font_name": "Arial", "font_size": 9})
     body = wb.add_format({"text_wrap": True, "valign": "top", "font_name": "Arial", "font_size": 9})
     widths = {"id": 9, "layer": 13, "analyst_name": 26, "excel_location": 34, "client_label": 40,
+              "client_definition": 50, "client_section": 8, "client_order": 8, "client_tier": 10,
               "client_label_status": 10, "plain_name": 26, "description": 60, "unit": 10, "dimensions": 18,
               "formula": 40, "fed_by": 22, "feeds": 22, "role": 9, "depends_on_response": 9, "depends_on_shock": 9,
               "detail_level": 10, "client_safe": 8, "status": 14, "references": 34, "tests": 12}
@@ -208,11 +242,69 @@ def write_xlsx(rows, path=XLSX_PATH):
     wb.close()
 
 
+REVIEW_PATH = os.path.join(ROOT, "output", "client_labels_review.xlsx")
+
+
+def old_labels(ref="HEAD"):
+    """The as-built client labels at a git ref (the text before the Phase 5 plain-label pass), by id."""
+    import io
+    import subprocess
+    rel = os.path.relpath(CSV_PATH, os.path.dirname(os.path.dirname(ROOT)))
+    try:
+        txt = subprocess.run(["git", "show", f"{ref}:prototypes/scenario_workbook/docs/data_dictionary/dictionary.csv"],
+                             cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return {}
+    return {r["id"]: r["client_label"] for r in csv.DictReader(io.StringIO(txt))} if rel else {}
+
+
+def write_review(rows, path=REVIEW_PATH, ref="HEAD"):
+    """CP-1: output/client_labels_review.xlsx for Jason's review: per client-visible row the old text (the label at
+    `ref`), the new label, its definition, section, tier and order, sorted as the workbook prints them."""
+    import xlsxwriter
+    old = old_labels(ref)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    wb = xlsxwriter.Workbook(path)
+    wb.set_properties({"title": "Client labels for review", "created": datetime.datetime(2026, 1, 1)})
+    ws = wb.add_worksheet("Labels")
+    head = wb.add_format({"bold": True, "bg_color": "#D9E1F2", "border": 1, "text_wrap": True, "valign": "top",
+                          "font_name": "Arial", "font_size": 9})
+    body = wb.add_format({"text_wrap": True, "valign": "top", "font_name": "Arial", "font_size": 9})
+    chg = wb.add_format({"text_wrap": True, "valign": "top", "font_name": "Arial", "font_size": 9,
+                         "bg_color": "#FFF2CC"})
+    cols = [("id", 9), ("section", 7), ("tier", 10), ("order", 7), ("old text", 40), ("new label", 44),
+            ("definition", 60), ("changed", 8), ("setting (code name)", 26), ("where shown", 34), ("status", 10)]
+    for j, (c, w) in enumerate(cols):
+        ws.write(0, j, c, head)
+        ws.set_column(j, j, w)
+    shown = [r for r in rows if r["client_safe"] == "Y" or r["client_label_status"] == "drafted"
+             or r["excel_location"].startswith(("Inputs", "Levers", "Summary", "Overview", "Charts"))]
+    tr = {"headline": 0, "standard": 1, "technical": 2}
+    shown.sort(key=lambda r: (r["client_section"], tr.get(r["client_tier"], 9), float(r["client_order"] or 1e9),
+                              r["id"]))
+    for i, r in enumerate(shown, start=1):
+        o = old.get(r["id"], "(new row)")
+        changed = "Y" if o != r["client_label"] else "N"
+        vals = [r["id"], r["client_section"], r["client_tier"], r["client_order"], o, r["client_label"],
+                r["client_definition"], changed, r["analyst_name"], r["excel_location"], r["client_label_status"]]
+        for j, v in enumerate(vals):
+            ws.write_string(i, j, v, chg if (changed == "Y" and j == 5) else body)
+    ws.freeze_panes(1, 1)
+    ws.autofilter(0, 0, len(shown), len(cols) - 1)
+    wb.close()
+    return path, len(shown)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--check", action="store_true", help="exit 1 if Data_Dictionary.md differs from a fresh render")
+    ap.add_argument("--review", action="store_true",
+                    help="also write output/client_labels_review.xlsx (old text from git HEAD; spec 0B CP-1)")
     a = ap.parse_args(argv)
     rows = load()
+    if a.review:
+        path, n = write_review(rows)
+        print(f"{n} client-visible rows -> {os.path.relpath(path, ROOT)}")
     md = render_markdown(rows)
     if a.check:
         with open(MD_PATH) as fh:

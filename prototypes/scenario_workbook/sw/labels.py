@@ -7,7 +7,7 @@ SHOCK_LABEL = "Year-to-year variation assumed (s = {s}), not yet calibrated"
 SEGMENT_SHARE_LABEL = "Segment share assumed, not from client data"
 
 # Range kinds [v0.6, B4-9]; never combined
-RANGE_OUTCOME = "90% outcome range"
+RANGE_OUTCOME = "Likely range (90%)"                       # CP-2: was "90% outcome range"
 RANGE_CASES = "Low and High price-response cases"
 RANGE_OUTCOME_NOTE = "enrollment noise and year-level variation, Middle case"
 RANGE_CASES_NOTE = "placeholder slopes now"
@@ -31,7 +31,7 @@ LINEAR_APPROX = "linear approximation"
 RHO_SENSITIVITY = "if high-score and other admits' yields move differently year to year"
 
 # Percentile targets, revenue goal and pool growth [v0.6.3, BM-1, BM-4, BM-6]
-PCT_APPROX_LABEL = "approximate (fewer than 20 expected below t)"
+PCT_APPROX_LABEL = "approximate (fewer than 20 students expected below the target score)"
 BAND_NOT_SCORE_LABEL = "band, not a score"
 CONTINUING_LABEL = "continuing-student revenue as supplied by the client; attrition and renewals not modeled"
 CONTINUING_HELD = "continuing revenue held at the supplied figure"
@@ -39,21 +39,21 @@ POOL_BREAKEVEN_LABEL = ("pool multiplier at which the expected class meets the t
                         "not a probability")
 POOL_YTD_MARKER = "growth to date ({as_of}) is about here"
 POOL_YTD_NO_DATE = "date not given"
-PCT_MARGIN_UNIT = ("margin: swaps of an enrollee below t for one at or above t, at the same class size; adding k "
-                   "enrollees below t uses k(1 - q)")
+PCT_MARGIN_UNIT = ("cushion counted in swaps: replacing a student at or above the target score with one below it "
+                   "uses one; adding a student below it, without removing one, uses less than one")
 GPA_PCT_NOTE = "GPA percentiles are not supported (the cell schema has one GPA boundary)."
 
 # Phase 4 review fix pass (Review_Phase4_Build.md; DECISIONS Nov 19)
-PCT_MARGIN_SWAPS = "swaps: students below t who could replace students at or above t"            # R4-03
-PCT_TIE_RULE = ("holds when exactly a share q is below t; the ABA averages the two middle scores, so near a tie this "
-                "can read a few points high")                                                     # R4-08
-HOLD_POSITION = "held pending confirmation of the LSAT basis (OD-14)"                             # R4-06
+PCT_MARGIN_SWAPS = "swaps: students below the target score who could replace students at or above it"            # R4-03
+PCT_TIE_RULE = ("counts as met when exactly the target share is below the score; the ABA averages the two middle "
+                "scores, so near a tie this can read a few points high")                                                     # R4-08
+HOLD_POSITION = "held until the LSAT basis is confirmed"                                       # CP-2                             # R4-06
 POOL_BE_ANY = "holds at any pool size"                                                            # R4-04
 POOL_BE_NOT_REACHED = "not reached by growth"
 POOL_BE_ABOVE_GRID = "above the pool grid"
 POOL_BE_BELOW_GRID = "below the pool grid"
 POOL_YTD_TIE = "a tie between two grid rows goes to the upper row"                                # R4-13
-NOT_USED_ENTERING = "not used (entering_y1)"                                                       # R4-12
+NOT_USED_ENTERING = "not used (the goal covers the entering class only)"                       # CP-2                                                       # R4-12
 ALL_JD_NEEDS_CONTINUING = "ntr_goal_basis all_jd needs continuing_ntr_usd"                         # R4-11
 NEED_DEPARTURE_NOTE = ("a scenario's need_total departure from need.total is a fixed dollar amount (it does not scale "
                        "with class); need.total itself scales with class")                       # R4-07
@@ -87,9 +87,9 @@ UNDER_HALF = "change under half a student"
 
 # Class-size table [v0.6, B1-19]
 CT_OK = "OK"
-CT_NOT_APPLICABLE = "not applicable (N at or above expected class)"
+CT_NOT_APPLICABLE = "not applicable (class size at or above the expected class)"
 CT_ABOVE_CAP = "above cap"
-CT_SHORTFALL = "N not reachable: shortfall {shortfall}"
+CT_SHORTFALL = "class size not reachable: shortfall {shortfall}"
 
 # Award entries ignored under a full-tuition flag [v0.6.2, P2-03]
 AWARD_IGNORED = "award entry ignored: full-tuition flag set"

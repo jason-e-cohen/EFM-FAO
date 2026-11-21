@@ -5,7 +5,8 @@
 
 Writes output/<client>/<plan_cycle>/<build_id>/workbook.xlsx (and, with --pdf, the Summary render; with --sentinel,
 workbook_sentinel.xlsx, every cached value -999, for the desktop Excel check). The build id is a hash of the inputs
-(config, cell data, scenarios, requirements.lock) and the generator code (sw/*.py) [v0.6.2, P21-03], so two builds
+(config, cell data, scenarios, requirements.lock), the generator code (sw/*.py) [v0.6.2, P21-03] and the client text
+(docs/data_dictionary/dictionary.csv) [v0.6.4, CP-1], so two builds
 share it only if they are the same apart from RunLog's timestamp. Live mode; reproduce-mode workbooks are built by
 sw/reproduce.py (spec section 9), which reuses make_run and the workbook generator.
 """
@@ -127,9 +128,11 @@ def hashes_from_bytes(cfg_bytes, data_bytes, scen_bytes):
         lock_h = _sha(f.read())
     scen_h = _sha(scen_bytes)
     code_h = code_hash()
-    build_id = _sha("|".join([cfg_h, data_h, scen_h, lock_h, code_h]).encode())[:12]
+    from . import dictionary
+    dict_h = dictionary.csv_hash()             # spec v0.6.4 CP-1: the client text is part of the build
+    build_id = _sha("|".join([cfg_h, data_h, scen_h, lock_h, code_h, dict_h]).encode())[:12]
     return {"config_hash": cfg_h, "data_hash": data_h, "scenarios_hash": scen_h, "requirements_lock_hash": lock_h,
-            "code_hash": code_h, "build_id": build_id}
+            "code_hash": code_h, "dictionary_hash": dict_h, "build_id": build_id}
 
 
 def code_hash():

@@ -515,7 +515,10 @@ def fit_title(ws, maxc):
     bold, size, _ = font_of(cell)
     cap = sum(col_pt(ws.column_dimensions[get_column_letter(c)].width or 10) for c in range(1, maxc + 1))
     cap -= PAD_PT + GAP_PT
-    if text_pt(cell.value, bold, size) <= cap:
+    ab = sum(col_pt(ws.column_dimensions[get_column_letter(c)].width or 10) for c in (1, 2)) - PAD_PT - GAP_PT
+    # Phase 5: a title without the grey fill (the workbook title) may run on only into column B, so it is merged
+    # across the section once it is wider than A:B; a grey section title runs across its empty row
+    if text_pt(cell.value, bold, size) <= (cap if is_title(cell) else ab):
         return
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=maxc)
     al = copy(cell.alignment)
@@ -645,11 +648,199 @@ def _split_column_dims(ws, maxc, src_ws=None, cmap=None, first=None):
         d.min, d.max, d.width = c, c, w
 
 
-def render_summary_pdf(xlsx, out_dir, profile=None, keep_sections=None):
+# ---------------------------------------------------------------------------------------------------------------
+# Spec v0.6.4 section 0B (CP-4, CP-5): the PDF opens with the Overview and the charts, then the Summary sections. Without
+# a PDF library the parts cannot be joined after conversion, so one XlsxWriter workbook carries them all: the Overview
+# and the Charts sheet copied from the recalculated workbook (values and formats), the charts drawn again from the
+# build's chart specification (sw/charts.py) on those values, and the Summary sections copied from the section
+# workbook below. Summary and Distribution values sit in hidden sheets that the charts read; LibreOffice does not print
+# hidden sheets.
+
+def _rgb(color):
+    if color is None or color.type != "rgb" or not isinstance(color.rgb, str):
+        return None
+    v = color.rgb[-6:]
+    return None if color.rgb.upper() in ("00000000",) else "#" + v
+
+
+def _xw_format(wb, cache, cell, num_format=None, align=None):
+    """An XlsxWriter format equal to an openpyxl cell's font, fill, bottom border, alignment and number format."""
+    f, fl, al, bd = cell.font, cell.fill, cell.alignment, cell.border
+    d = {}
+    if f is not None:
+        d.update({"font_name": f.name or "Arial", "font_size": f.sz or 9, "bold": bool(f.b), "italic": bool(f.i),
+                  "font_strikeout": bool(f.strike)})
+        c = _rgb(f.color)
+        if c and c.upper() != "#000000":
+            d["font_color"] = c
+    if fl is not None and fl.fill_type == "solid":
+        c = _rgb(fl.fgColor)
+        if c:
+            d["bg_color"] = c
+    if bd is not None and bd.bottom is not None and bd.bottom.style:
+        d["bottom"] = 1
+    al = align or al
+    if al is not None:
+        if al.horizontal and al.horizontal != "general":
+            d["align"] = {"centerContinuous": "center_across"}.get(al.horizontal, al.horizontal)
+        if al.vertical:
+            d["valign"] = {"center": "vcenter"}.get(al.vertical, al.vertical)
+        if al.wrap_text:
+            d["text_wrap"] = True
+        if al.indent:
+            d["indent"] = int(al.indent)
+    nf = num_format if num_format is not None else cell.number_format
+    if nf and nf != "General":
+        d["num_format"] = nf
+    key = tuple(sorted((k, str(v)) for k, v in d.items()))
+    if key not in cache:
+        cache[key] = wb.add_format(d)
+    return cache[key]
+
+
+def _col_widths(src_ws):
+    from openpyxl.utils import column_index_from_string
+    widths = {}
+    for key, dim in src_ws.column_dimensions.items():
+        lo_, hi_ = dim.min, dim.max
+        if not lo_:
+            lo_ = hi_ = column_index_from_string(key)
+        for c in range(lo_, (hi_ or lo_) + 1):
+            if dim.width:
+                widths[c] = dim.width
+    return widths
+
+
+def _transcribe(src_ws, wb, name, cache, clamp=False, rows=None, cols=None, values_only=False):
+    """Copy src_ws (openpyxl) into a new XlsxWriter sheet: values, formats, merges, widths and heights. clamp: show
+    probability cells (format 0%) as 'under 5%' / 'over 95%' beyond those bounds, right-aligned (as _section_copy)."""
+    from openpyxl.styles import Alignment
+    from . import labels
+    ws = wb.add_worksheet(name)
+    r_max = rows or src_ws.max_row
+    c_max = cols or src_ws.max_column
+    merged = {}
+    covered = set()
+    if not values_only:
+        for m in src_ws.merged_cells.ranges:
+            if m.min_row > r_max:
+                continue
+            merged[(m.min_row, m.min_col)] = m
+            for r in range(m.min_row, m.max_row + 1):
+                for c in range(m.min_col, m.max_col + 1):
+                    covered.add((r, c))
+        for c, w in _col_widths(src_ws).items():
+            if c <= c_max + 1:
+                ws.set_column(c - 1, c - 1, w)
+        for r in range(1, r_max + 1):
+            h = src_ws.row_dimensions[r].height
+            if h:
+                ws.set_row(r - 1, h)
+    for row in src_ws.iter_rows(min_row=1, max_row=r_max, max_col=c_max):
+        for cell in row:
+            r, c = cell.row, cell.column
+            if (r, c) in covered and (r, c) not in merged:
+                continue
+            v = cell.value
+            fmt = None
+            if not values_only and cell.has_style:
+                nf, al = None, None
+                if (clamp and isinstance(v, (int, float)) and not isinstance(v, bool) and cell.number_format == "0%"
+                        and (v < 0.05 or v > 0.95)):
+                    v = labels.PROB_UNDER if v < 0.05 else labels.PROB_OVER
+                    al = Alignment(horizontal="right", vertical=cell.alignment.vertical if cell.alignment else None)
+                fmt = _xw_format(wb, cache, cell, nf, al)
+            if (r, c) in merged:
+                m = merged[(r, c)]
+                if m.max_row > m.min_row or m.max_col > m.min_col:
+                    ws.merge_range(m.min_row - 1, m.min_col - 1, m.max_row - 1, m.max_col - 1,
+                                   "" if v is None else v, fmt)
+                    continue
+            if v is None:
+                if fmt is not None:
+                    ws.write_blank(r - 1, c - 1, None, fmt)
+            elif isinstance(v, bool):
+                ws.write_boolean(r - 1, c - 1, v, fmt)
+            elif isinstance(v, (int, float)):
+                ws.write_number(r - 1, c - 1, v, fmt)
+            else:
+                ws.write_string(r - 1, c - 1, str(v), fmt)
+    return ws
+
+
+def _header_text(t):
+    return (t or "").replace("&", "&&")
+
+
+def _page_from(src_ws, ws):
+    """Carry an openpyxl section sheet's print setup to the XlsxWriter copy."""
+    import re
+    ws.set_landscape()
+    ws.set_paper(1)
+    pm = src_ws.page_margins
+    ws.set_margins(left=pm.left, right=pm.right, top=pm.top, bottom=pm.bottom)
+    if src_ws.print_area:
+        pa = src_ws.print_area if isinstance(src_ws.print_area, str) else src_ws.print_area[0]
+        ws.print_area(pa.split("!")[-1].replace("$", ""))
+    if src_ws.print_title_rows:
+        nums = [int(x) for x in re.findall(r"\d+", src_ws.print_title_rows)]
+        ws.repeat_rows(nums[0] - 1, nums[-1] - 1)
+    if src_ws.print_title_cols:
+        ws.repeat_columns("A:B")
+    if src_ws.sheet_properties.pageSetUpPr is not None and src_ws.sheet_properties.pageSetUpPr.fitToPage:
+        ws.fit_to_pages(src_ws.page_setup.fitToWidth or 1, src_ws.page_setup.fitToHeight or 0)
+    elif src_ws.page_setup.scale:
+        ws.set_print_scale(int(src_ws.page_setup.scale))
+    if src_ws.page_setup.pageOrder == "overThenDown":
+        ws.print_across()
+    ws.set_header("&C" + _header_text(src_ws.oddHeader.center.text), {"margin": pm.header})
+    ws.set_footer("&C" + (src_ws.oddFooter.center.text or ""), {"margin": pm.footer})
+
+
+def _render_book(path, rc_wb, sections_wb, spec, illustrative):
+    """The combined render workbook: Overview, Charts, the Summary sections, then hidden value sheets."""
+    import xlsxwriter
+    from . import charts as CH
+    wb = xlsxwriter.Workbook(path, {"strings_to_numbers": False, "strings_to_formulas": False,
+                                    "strings_to_urls": False})
+    cache = {}
+    ov_rows, ov_cols = spec["overview_print_rows"], spec["overview_cols"]
+    ws = _transcribe(rc_wb["Overview"], wb, "Overview", cache, clamp=illustrative, rows=ov_rows, cols=ov_cols)
+    for c, w in enumerate(spec["overview_widths"]):      # the build's widths (LibreOffice saves its own units)
+        ws.set_column(c, c, w)
+    ws.set_landscape()
+    ws.set_paper(1)
+    ws.fit_to_pages(1, 0)
+    ws.repeat_rows(3)
+    ws.print_area(0, 0, ov_rows - 1, ov_cols - 1)
+    ws.set_footer("&COverview: page &P of &N")
+    pr = spec["print"]
+    ws = _transcribe(rc_wb["Charts"], wb, "Charts", cache)
+    ws.set_column(0, pr["cols"] - 1, pr["col_width"])    # the build's widths, so the charts keep their size
+    CH.draw(wb, ws, spec["inserts"])
+    ws.set_landscape()
+    ws.set_paper(1)
+    ws.print_area(0, 0, pr["rows"] - 1, pr["cols"] - 1)
+    ws.set_h_pagebreaks(pr["breaks"])
+    ws.set_print_scale(pr["scale"])
+    ws.set_footer("&CCharts: page &P of &N")
+    for sw_ in sections_wb.worksheets:
+        ws = _transcribe(sw_, wb, sw_.title, cache)
+        _page_from(sw_, ws)
+    for name in ("Summary", "Distribution"):              # the values the charts read; hidden, not printed
+        ws = _transcribe(rc_wb[name], wb, name, cache, values_only=True)
+        ws.hide()
+    wb.close()
+
+
+def render_summary_pdf(xlsx, out_dir, profile=None, keep_sections=None, keep_render=None):
     """Spec test 10: recalculate, copy Summary's values and formats into one page group per section, convert to PDF.
-    The workbook itself is unchanged. keep_sections: a path where the section workbook (the PDF's source) is saved, for
-    test 10's layout checks. Returns the PDF path."""
+    A live build (one with an Overview sheet and a chart specification beside it) opens the PDF with the Overview and
+    the charts (spec v0.6.4, CP-4 and CP-5). The workbook itself is unchanged. keep_sections: a path where the section
+    workbook is saved, for test 10's layout checks; keep_render: a path for the combined render workbook. Returns the
+    PDF path."""
     import openpyxl
+    from . import charts as CH
     tmp = tempfile.mkdtemp(prefix="sw_pdf_")
     try:
         prof = profile or make_profile(tmp)
@@ -665,6 +856,17 @@ def render_summary_pdf(xlsx, out_dir, profile=None, keep_sections=None):
         out.save(only)
         if keep_sections:
             shutil.copyfile(only, keep_sections)
+        spec = CH.load(xlsx)
+        if spec is not None and "Overview" in wb.sheetnames:
+            src = os.path.join(tmp, f"{stem}_render.xlsx")
+            sections = openpyxl.load_workbook(only)
+            _render_book(src, wb, sections, spec, illustrative)
+            if keep_render:
+                shutil.copyfile(src, keep_render)
+            pdf = _convert(src, out_dir, "pdf:calc_pdf_Export", profile=prof)
+            final = os.path.join(out_dir, f"{stem}_Summary.pdf")
+            shutil.move(pdf, final)
+            return final
         return _convert(only, out_dir, "pdf:calc_pdf_Export", profile=prof)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

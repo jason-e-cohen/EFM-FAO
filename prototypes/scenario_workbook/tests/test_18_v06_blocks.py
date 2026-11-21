@@ -15,7 +15,7 @@ import os
 import pytest
 
 from conftest import PHASE2, close, read_range
-from sw import CASES, labels, ledger as L, narrative, risk, strip, trim
+from sw import CASES, dictionary as DD, labels, ledger as L, narrative, risk, strip, trim
 
 
 def _summary_row(wb, label, n):
@@ -50,17 +50,17 @@ def test_segment_block(main_wb):
     assert gaps, "the synthetic scenarios set a segment goal"
     n = len(S)
     mid = {s.name: L.segment(run.lcs[s.name]["middle"]) for s in S}
-    for label, key in [("Segment applications", "segment_apps"), ("Segment admits", "segment_admits"),
-                       ("Segment merit dollars", "segment_merit"), ("Segment goal (rounded up)", "segment_goal")]:
+    for label, key in [(DD.label("OUT-053"), "segment_apps"), (DD.label("OUT-054"), "segment_admits"),
+                       (DD.label("OUT-057"), "segment_merit"), (DD.label("OUT-060"), "segment_goal")]:
         got = _summary_row(wb, label, n)
         for j, s in enumerate(S):
             assert close(got[j], "" if mid[s.name][key] is None else mid[s.name][key]), (label, s.name)
-    exact = _summary_row(wb, "P(segment enrolled at or above goal), exact (static, from the build)", n)
+    exact = _summary_row(wb, DD.label("OUT-062"), n)
     for j, s in enumerate(S):
         if s.segment_goal is not None:
             assert exact[j] == pytest.approx(risk.segment_exact(run.lcs[s.name]["middle"], mid[s.name]["segment_goal"]),
                                              abs=1e-12)
-    flag = _summary_row(wb, "Approximation flag", n)
+    flag = _summary_row(wb, DD.label("OUT-064"), n)
     for j, s in enumerate(S):
         assert flag[j] in ("", None) if mid[s.name]["segment_enrolled"] >= 30 else flag[j] == labels.SEGMENT_APPROX
 
@@ -86,8 +86,7 @@ def test_incentive_block(main_wb):
             seen_valid.add(inc["incentive_valid"])
     assert seen_valid == {labels.INCENTIVE_VALID, labels.INCENTIVE_NOT_VALID}
     n = len(S)
-    for label, key in [("Change in merit dollars (dSpend)", "merit_change"),
-                       ("Change in ntr_y1 over the same cells (dNTR)", "ntr_change")]:
+    for label, key in [(DD.label("OUT-068"), "merit_change"), (DD.label("OUT-069"), "ntr_change")]:
         got = _summary_row(wb, label, n)
         for j, s in enumerate(S):
             p = run.parents[s.name]
@@ -193,7 +192,7 @@ def test_full_tuition_conflict_listed(main_wb):
     listed, result = {}, {}
     for r in range(1, ws.max_row + 1):
         a, b, c = ws.cell(r, 1).value, ws.cell(r, 2).value, ws.cell(r, 3).value
-        if a == "Full-tuition award conflicts (P1.1-1)":
+        if a == DD.label("CK-045"):
             result[b] = c
         if isinstance(a, str) and a.strip().startswith("conflict ") and c:
             listed.setdefault(b, []).append(c)
@@ -225,8 +224,8 @@ def test_ignored_award_entries_counted_separately(main_wb):
     lay = info["layout"]
     ws = wb["Levers"]
     labels_col = {ws.cell(r, 1).value: r for r in range(1, lay["r0v"] + 1)}
-    changed = _levers_row(main_wb, labels_col["awards changed from parent (cells)"] - 1)
-    ignored = _levers_row(main_wb, labels_col["award entries ignored (full-tuition flag set)"] - 1)
+    changed = _levers_row(main_wb, labels_col[DD.label("OUT-132")] - 1)
+    ignored = _levers_row(main_wb, labels_col[DD.label("OUT-135")] - 1)
     for s in run.scenarios:
         ch, ig = L.award_changes(run.cells, run.cfg, s, run.parents[s.name])
         assert ignored[s.name] == int(ig.sum())
@@ -291,7 +290,7 @@ def test_new_checks_rows_ok_on_the_built_workbook(main_wb, edge_wb):
     for bundle in (main_wb, edge_wb):
         rows = _check_rows(bundle["values"]["Checks"])
         for (chk, scope), v in rows.items():
-            if isinstance(chk, str) and (chk.startswith("Trim") or chk.startswith("Static exact")
+            if isinstance(chk, str) and (chk.startswith("Trim") or chk == DD.label("CK-044")
                                          or chk.startswith("Bonus scope")):
                 assert v == "OK", (chk, scope, v)
     rows = _check_rows(edge_wb["values"]["Checks"])
@@ -336,9 +335,8 @@ def test_checks_flag_rebuild_stale_and_scope_error(main_wb, lo_profile):
     assert rows[("Trim order: active segment equals its value at build", "Out-of-state incentive")] == rb.format(
         build="priority")
     assert rows[("Trim order: active segment equals its value at build", "Baseline")] == "OK"
-    assert rows[("Static exact segment probability is current (Summary segment block)", "Segment incentive")] \
-        == labels.EXACT_STALE
-    assert rows[("Static exact segment probability is current (Summary segment block)", "Baseline")] == "OK"
+    assert rows[(DD.label("CK-044"), "Segment incentive")] == labels.EXACT_STALE
+    assert rows[(DD.label("CK-044"), "Baseline")] == "OK"
     chk = "Bonus scope 'segment' has segment cells when a bonus, lift or goal is set"
     assert rows[(chk, "Out-of-state incentive")] == labels.SCOPE_ERROR
     assert rows[(chk, "Segment incentive")] == "OK"

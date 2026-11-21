@@ -110,7 +110,8 @@ def test_edge_inputs_reach_every_branch(edge_wb):
     assert cfg["risk"]["shock_corr_above_below"] == 0.5
     assert cfg["trim"]["floor_rate"] > 0 and cfg["trim"]["exempt_cells"]
     st = {r["status"] for s_ in run.scenarios for r in trim.class_table(cells, cfg, s_, base)["class_table"]}
-    assert any(x.startswith("N not reachable") for x in st) and labels.CT_ABOVE_CAP in st and labels.CT_OK in st
+    short = labels.CT_SHORTFALL.split("{shortfall}")[0]
+    assert any(x.startswith(short) for x in st) and labels.CT_ABOVE_CAP in st and labels.CT_OK in st
     tr = trim.trim_rates(lc["Baseline"]["middle"], 80)
     assert (np.isclose(tr["rates"], cfg["trim"]["floor_rate"]) & (tr["removed_share"] == 1)).any()
     # yield-strip clip count above 0
@@ -172,8 +173,12 @@ def test_below_and_lowest_band_branches_reached(edge_wb, edge_below_wb):
         assert risk.pct_band(lc, 0.25) == lows[0] and risk.pct_band(lc, 0.75) == lows[0]
         ws = bundle["values"]["Summary"]
         j = [s.name for s in run.scenarios].index("Lowest band")
-        texts = [ws.cell(r, 3 + j).value for r in range(1, ws.max_row + 1)
-                 if str(ws.cell(r, 1).value or "").startswith("Spread: ") and "lower bound" not in ws.cell(r, 1).value]
+        import re
+        from sw import dictionary as DD
+        band_txt = re.compile("^" + re.sub(r"\\\{[^}]*\\\}", ".+", re.escape(DD.row("OUT-028")["client_label"])) + "$")
+        stop = next(r for r in range(1, ws.max_row + 1) if ws.cell(r, 1).value == DD.lab("definitions_title"))
+        texts = [ws.cell(r, 3 + j).value for r in range(1, stop)
+                 if band_txt.match(str(ws.cell(r, 1).value or ""))]
         assert texts == [f"below {lows[1]:g}"] * 2, texts
 
 
@@ -210,6 +215,8 @@ def _vocabulary(path):
     banned = re.compile(r"\b(INDIRECT|OFFSET|NOW|TODAY|RAND|RANDBETWEEN|LET|LAMBDA|FILTER|SORT|UNIQUE|SEQUENCE|"
                         r"XLOOKUP|TEXTJOIN|AND|OR|CELL|INFO)\(", re.I)
     allowed = {"ROUND", "SUM", "SUMPRODUCT", "INDEX", "MATCH", "MIN", "MAX", "IF", "SQRT", "NORMSDIST", "TEXT"}
+    # spec v0.6.4 CP-5: the chart-data block may use ISNUMBER and NA() (a gap, not a zero, where a figure is text)
+    chart_only = {"ISNUMBER", "NA"}
     seen = set()
     for ws in wb.worksheets:
         for row in ws.iter_rows():
@@ -219,8 +226,10 @@ def _vocabulary(path):
                     f = re.sub(r'"[^"]*"', '""', f)          # string literals out
                     assert "[" not in f, f"external reference in {ws.title}!{c.coordinate}"
                     assert not banned.search(f), f"{ws.title}!{c.coordinate}: {f[:120]}"
-                    seen |= set(re.findall(r"([A-Z][A-Z0-9.]*)\(", f))
-    extra = {s for s in seen if s.replace("LEGACY.", "").replace("_XLFN.", "") not in allowed}
+                    fs = set(re.findall(r"([A-Z][A-Z0-9.]*)\(", f))
+                    assert ws.title == "Charts" or not (fs & chart_only), f"{ws.title}!{c.coordinate}: {fs & chart_only}"
+                    seen |= fs
+    extra = {s for s in seen if s.replace("LEGACY.", "").replace("_XLFN.", "") not in allowed | chart_only}
     assert not extra, sorted(extra)
 
 
@@ -341,11 +350,15 @@ def test_build_id_hashes_the_generator_code(tmp_path):
                              os.path.join(ROOT, "config", "scenarios_synthetic.yaml"), str(tmp_path), sentinel=True)
     m = info["run"].meta
     assert m["code_hash"] == h.hexdigest()
-    parts = [m["config_hash"], m["data_hash"], m["scenarios_hash"], m["requirements_lock_hash"], m["code_hash"]]
+    with open(os.path.join(ROOT, "docs", "data_dictionary", "dictionary.csv"), "rb") as f:
+        assert m["dictionary_hash"] == hashlib.sha256(f.read()).hexdigest()           # spec v0.6.4 CP-1
+    parts = [m["config_hash"], m["data_hash"], m["scenarios_hash"], m["requirements_lock_hash"], m["code_hash"],
+             m["dictionary_hash"]]
     assert info["build_id"] == hashlib.sha256("|".join(parts).encode()).hexdigest()[:12]
     ws = openpyxl.load_workbook(path)["RunLog"]
     log = {ws.cell(r, 1).value: ws.cell(r, 2).value for r in range(1, ws.max_row + 1)}
     assert log["code hash (sha256 of sw/*.py)"] == m["code_hash"]
+    assert log["dictionary hash (sha256 of dictionary.csv)"] == m["dictionary_hash"]
     assert log["uncommitted files"] == m["uncommitted_files"] and log["uncommitted files"]
     assert log["cached values"].startswith("sentinel")
 

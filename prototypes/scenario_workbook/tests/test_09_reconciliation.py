@@ -10,6 +10,7 @@ is Python only and the Summary carries a static copy [v0.6.2, Q-2].
 import numpy as np
 
 from conftest import close, read_range
+from sw import dictionary as DD
 from sw import CASES, contract as K
 
 
@@ -70,8 +71,8 @@ def test_p_segment_goal_exact_python_only(main_wb):
     assert "p_segment_goal_exact" not in wb.defined_names
     got = dump["p_segment_goal_exact"]
     ws = wb["Summary"]
-    row = next(r for r in range(1, ws.max_row + 1)
-               if ws.cell(r, 1).value == "P(segment enrolled at or above goal), exact (static, from the build)")
+    from sw import dictionary as DD
+    row = next(r for r in range(1, ws.max_row + 1) if ws.cell(r, 1).value == DD.label("OUT-062"))
     seen = 0
     for ki, k in enumerate(CASES):
         for j, s in enumerate(run.scenarios):
@@ -150,8 +151,8 @@ def _dist_rows(wb):
     out = {}
     for r in range(1, ws.max_row + 1):
         a, c = ws.cell(r, 1).value, ws.cell(r, 2).value
-        if isinstance(a, str) and c in ("Low", "Middle", "High") and "[" in a:
-            out[(a.split(" [")[0], c.lower())] = [ws.cell(r, 3 + j).value for j in range(ws.max_column - 2)]
+        if isinstance(a, str) and c in ("Low", "Middle", "High"):
+            out[(a, c.lower())] = [ws.cell(r, 3 + j).value for j in range(ws.max_column - 2)]
     return out
 
 
@@ -182,10 +183,8 @@ def test_distribution_agrees_with_summary_and_ledger(main_wb, edge_wb):
         run, wb = bundle["info"]["run"], bundle["values"]
         S = [s.name for s in run.scenarios]
         rows = _dist_rows(wb)
-        pairs = {"Full-tuition enrolled (award at or above tuition)": "SUM_FULL_TUITION_N",
-                 "No-merit-award enrolled (award zero)": "SUM_NO_MERIT_AWARD_N",
-                 "Barbell index ((full-tuition + no-merit-award) / class)": "SUM_BARBELL",
-                 "Merit dollars": "SUM_MERIT"}
+        pairs = {DD.label("OUT-029"): "SUM_FULL_TUITION_N", DD.label("OUT-030"): "SUM_NO_MERIT_AWARD_N",
+                 DD.label("OUT-031"): "SUM_BARBELL", DD.label("OUT-152"): "SUM_MERIT"}
         score = _static(bundle, "middle", "score_lo")
         scored = _static(bundle, "middle", "scored").astype(float)
         gpa = _static(bundle, "middle", "gpa_class")
@@ -199,7 +198,7 @@ def test_distribution_agrees_with_summary_and_ledger(main_wb, edge_wb):
             for j, s in enumerate(S):
                 e = _ledger(bundle, k, s, "enrolled").astype(float)
                 aw = _ledger(bundle, k, s, "award").astype(float)
-                got = rows[("Share of merit dollars to the top quartile of enrolled", k)][j]
+                got = rows[(DD.label("OUT-153"), k)][j]
                 assert abs(got - _top_quartile(e, aw, score, scored, gpa)) < 1e-9, (k, s)
                 assert dist[ki][j] == got
         am = np.array(read_range(wb, "AWARD_MATRIX"), dtype=float)

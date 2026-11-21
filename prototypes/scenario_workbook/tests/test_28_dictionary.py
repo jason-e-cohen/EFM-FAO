@@ -22,7 +22,7 @@ DD = os.path.join(ROOT, "docs", "data_dictionary")
 sys.path.insert(0, DD)
 
 import build_dictionary as B  # noqa: E402
-from sw import build, cells as cells_mod, config, contract, labels  # noqa: E402
+from sw import build, cells as cells_mod, config, contract, dictionary as DD, labels  # noqa: E402
 from sw import workbook as wbmod  # noqa: E402
 
 MAP_KEYS = {"tuition_by_cohort", "tuition_increase_by_year", "tuition_by_year_usd", "merit_actual_by_cohort",
@@ -47,10 +47,11 @@ def builds(tmp_path_factory):
     """A fresh live synthetic build and a synthetic reproduce build (Python only; cached values are read)."""
     from sw import reproduce
     out = tmp_path_factory.mktemp("dd_builds")
-    live, _ = build.build(os.path.join(ROOT, "config", "synthetic.yaml"), "synthetic",
-                          os.path.join(ROOT, "config", "scenarios_synthetic.yaml"), str(out / "live"), seed=101)
+    live, info = build.build(os.path.join(ROOT, "config", "synthetic.yaml"), "synthetic",
+                             os.path.join(ROOT, "config", "scenarios_synthetic.yaml"), str(out / "live"), seed=101)
     rep, _ = reproduce.build_synthetic(str(out / "repro"), 101)
-    return {"live": openpyxl.load_workbook(live, data_only=False), "repro": openpyxl.load_workbook(rep, data_only=False)}
+    return {"live": openpyxl.load_workbook(live, data_only=False), "repro": openpyxl.load_workbook(rep, data_only=False),
+            "live_info": info}
 
 
 def texts(ws, col=None, row=None):
@@ -185,7 +186,7 @@ def test_cell_data_columns(rows):
 
 
 def test_inputs_names(rows, builds):
-    names = {n for b in builds.values() for n in b.defined_names if n.startswith("in_")}
+    names = {n for b in (builds['live'], builds['repro']) for n in b.defined_names if n.startswith("in_")}
     mentioned = set(re.findall(r"\bin_[a-z0-9_]+", " ".join(r["excel_location"] + " " + r["analyst_name"]
                                                              for r in rows)))
     assert not names - mentioned, f"Inputs names without a row: {sorted(names - mentioned)}"
@@ -211,36 +212,109 @@ def test_ledger_headers(rows, builds):
     assert not stale, f"ledger rows whose header is not in the build: {stale}"
 
 
+def _print_stop(ws, title):
+    return next(r for r in range(1, ws.max_row + 1) if ws.cell(r, 1).value == title)
+
+
 def summary_labels(wb):
-    """Figure labels (column A of the figure tables) and strip column headers on the Summary."""
+    """Spec v0.6.4 (CP-3): the labels printed on the Summary above Definitions: column-A labels of the figure rows,
+    section titles (an 'F. ' or 'H. ' block title without its letter), sub-headings and the strip column headers.
+    Notes (italic), header words, scenario names and narratives are left out."""
     ws = wb["Summary"]
-    a = {c.row: c.value for c in ws["A"] if isinstance(c.value, str)}
+    stop = _print_stop(ws, DD.lab("definitions_title"))
+    scen = set(texts(wb["Levers"], row=4))
     out = set()
-    stop = next(r for r, v in a.items() if v.startswith("Interface contract ranges"))
-    in_table = False
-    for r in range(1, stop):
-        v = a.get(r)
-        if v in ("figure",):
-            in_table = True
+    for r in range(2, stop):
+        a = ws.cell(r, 1)
+        v = a.value
+        if not isinstance(v, str) or not v or (a.font is not None and a.font.i):
             continue
-        if v is None or v == "":
-            in_table = False if v is None else in_table
+        if v in ("figure", "scenario"):
+            out |= set(t for t in texts(ws, row=r) if t not in ("figure", "scenario", ""))
             continue
-        if v in ("scenario", "scenario: split at m = 1"):
-            out |= set(t for t in texts(ws, row=r) if t != v)
-            in_table = False
+        if v in scen or v == labels.RESPONSE_LABEL:
             continue
-        if in_table and len(v) <= 200:
-            out.add(v)
+        out.add(re.sub(r"^[FH]\. ", "", v) if re.match(r"^[FH]\. (What|Yield|Application|Groups)", v) else v)
     return out
 
 
 def test_summary_labels(rows, builds):
     outs = rows                                         # echoes of levers sit on their input rows
-    scen = {s for b in builds.values() for s in texts(b["Levers"], row=4)}
+    scen = {s for b in (builds['live'], builds['repro']) for s in texts(b["Levers"], row=4)}
     labs = (summary_labels(builds["live"]) | summary_labels(builds["repro"])) - scen - {"case", "unit", "part"}
     missing = sorted(t for t in labs if not matches(t, outs))
     assert not missing, f"Summary labels without a row: {missing}"
+
+
+def _matching(text, rs):
+    return [r for r in rs if template_re(r["client_label"]).match(text)]
+
+
+def test_client_text_equals_the_dictionary(rows, builds):
+    """CP-1, CP-6: every client-visible label in the workbook comes from the dictionary and carries no code name, review
+    ID or config key (CP-2): the Summary's printed labels and headers, each Definitions row (label and definition),
+    the Overview (label and 'what this means'), the chart titles, the plain labels on Inputs and Levers (each beside
+    its code name in the grey setting column), and the Distribution rows. Every client-safe row has a label,
+    definition, section, order and tier (test_client_safe_rows)."""
+    wb = builds["live"]
+    # CP-6: a reproduce build (validation only) keeps the plain labels but carries no Overview or charts
+    assert {"Overview", "Charts"} <= set(wb.sheetnames)
+    assert not {"Overview", "Charts"} & set(builds["repro"].sheetnames)
+    assert wb.sheetnames.index("Overview") == wb.sheetnames.index("README") + 1
+    tokens = B.key_tokens(rows)
+    printed = summary_labels(wb)
+    # (the reproduce build's Summary labels are checked against the dictionary in test_summary_labels)
+    ws = wb["Summary"]
+    d0 = _print_stop(ws, DD.lab("definitions_title"))
+    d1 = _print_stop(ws, DD.lab("notes_title"))
+    defs = {}
+    for r in range(d0 + 1, d1):
+        a, c = ws.cell(r, 1).value, ws.cell(r, 3).value
+        if isinstance(a, str) and isinstance(c, str):
+            defs[a] = c
+    assert len(defs) >= 120, len(defs)
+    for lab, df in defs.items():
+        ms = _matching(lab, rows)
+        assert ms and any(m["client_definition"] == df for m in ms), (lab, df)
+    # every printed figure label has a definition in the Definitions list
+    titles = [x for x in rows if x["analyst_name"].startswith("sec_title_") or x["analyst_name"] in
+              ("narratives_title", "h_from", "h_response")]
+    scen = set(texts(wb["Levers"], row=4))
+    undefined = sorted(t for t in printed if t not in defs and t not in scen and not _matching(t, titles))
+    assert not undefined, undefined[:10]
+    ov = wb["Overview"]
+    n = 0
+    for r in range(4, ov.max_row + 1):
+        a, b = ov.cell(r, 1).value, ov.cell(r, 2).value
+        if isinstance(a, str) and isinstance(b, str):
+            ms = _matching(a, rows)
+            assert ms and any(m["client_definition"] == b for m in ms), (a, b)
+            n += 1
+    assert n >= 12
+    inp = wb["Inputs"]
+    by_name = {}
+    for x in rows:
+        by_name.setdefault(x["analyst_name"], []).append(x)
+    n = 0
+    for r in range(1, inp.max_row + 1):
+        a, setting = inp.cell(r, 1).value, inp.cell(r, 2).value
+        if isinstance(a, str) and isinstance(setting, str) and inp.cell(r, 2).font.color is not None \
+                and str(inp.cell(r, 2).font.color.rgb).upper().endswith("7F7F7F"):
+            n += 1
+            cands = by_name.get(setting, []) + [x for x in rows if setting in x["excel_location"]]
+            assert any(a in (x["client_label"], x["plain_name"]) for x in cands), (setting, a)
+    assert n >= 60, n
+    lv = wb["Levers"]
+    for f, rid_, _ in wbmod.LEVER_FIELDS:
+        rr = next(r for r in range(1, 40) if lv.cell(r, 2).value == f)
+        assert lv.cell(rr, 1).value == DD.label(rid_), f
+    plain = list(printed) + list(defs) + list(defs.values())
+    plain += [ov.cell(r, c).value for r in range(1, ov.max_row + 1) for c in (1, 2)
+              if isinstance(ov.cell(r, c).value, str)]
+    plain += [m["title"] for m in builds["live_info"]["layout"]["chart_meta"]]
+    bad = [(t, B.code_hits(t), B.rid_hits(t), B.key_hits(t, tokens)) for t in plain
+           if B.code_hits(t) or B.rid_hits(t) or B.key_hits(t, tokens)]
+    assert not bad, bad[:10]
 
 
 def check_labels(wb):
@@ -279,7 +353,7 @@ def test_contract_names(rows, builds):
         if name not in names:
             bad.append(name)
     assert not bad, f"contract names without a row: {bad}"
-    defined = {n for b in builds.values() for n in b.defined_names}
+    defined = {n for b in (builds['live'], builds['repro']) for n in b.defined_names}
     cited = set(re.findall(r"named range ([A-Z][A-Z0-9_]+)", locs))
     assert not cited - defined, f"rows citing named ranges that do not exist: {sorted(cited - defined)}"
 
@@ -310,7 +384,7 @@ def test_strip_columns_exist(rows):
 def test_names_exist(rows, builds):
     src = " ".join(open(p).read() for p in glob.glob(os.path.join(ROOT, "sw", "*.py")))
     built = set()
-    for b in builds.values():
+    for b in (builds['live'], builds['repro']):
         for ws in b.worksheets:
             built |= set(texts(ws))
     tokens = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", src))
@@ -368,3 +442,60 @@ def test_no_fixture_number(rows):
 def test_markdown_is_current(rows):
     with open(B.MD_PATH) as fh:
         assert fh.read() == B.render_markdown(rows), "Data_Dictionary.md is stale: run build_dictionary.py"
+
+
+def test_summary_order_by_tier(rows, builds):
+    """CP-3: within sections A to G the headline rows come first, then the standard rows (in dictionary order); no
+    technical row prints before section H; every technical row of A to G prints in H. Read from the built Summary
+    (LibreOffice-free), each label matched to its dictionary rows."""
+    wb = builds["live"]
+    ws = wb["Summary"]
+    out_rows = [x for x in rows if x["layer"] in ("output", "input_scenario")]
+    rank = {"headline": 0, "standard": 1, "technical": 2}
+    cfg = builds["live_info"]["run"].cfg
+    seg = cfg["segments"][0]["members_label"] if cfg["segments"] else ""
+    titles = {}
+    for x in "ABCDEFGH":
+        titles[DD.lab("sec_title_" + x, measure=cfg["score"]["measure"], segment=seg)] = x
+    stop = _print_stop(ws, DD.lab("narratives_title"))
+    sec, last, in_table, seen_tech_in_h = None, -1, False, 0
+    for r in range(1, ws.max_row + 1):
+        v = ws.cell(r, 1).value
+        if v in titles:
+            sec, last, in_table = titles[v], -1, False
+            continue
+        if isinstance(v, str) and v.startswith("F. "):
+            sec, in_table = "F", False
+            continue
+        if v == "figure":
+            in_table = True
+            continue
+        if not in_table or not isinstance(v, str) or not v or ws.cell(r, 1).font.i:
+            continue
+        ms = [x for x in out_rows if template_re(x["client_label"]).match(v)]
+        if not ms:
+            continue
+        tiers = {x["client_tier"] for x in ms}
+        if sec == "H":
+            seen_tech_in_h += "technical" in tiers
+            continue
+        if r < stop and sec in "ABCDEG":
+            assert "technical" not in tiers or tiers != {"technical"}, (sec, v)
+            t = min(rank[x["client_tier"]] for x in ms)
+            assert t >= last, (sec, v, "headline rows come first")
+            last = t
+    assert seen_tech_in_h >= 10
+
+
+def test_tier_outranks_order(monkeypatch):
+    """CP-3: the tier decides first (headline, standard, technical), the dictionary order second: a headline row with
+    a larger order still sorts before a standard row (the CSV numbers headline rows below standard rows, so the
+    built Summary alone cannot show this)."""
+    import copy
+    rows_ = DD._load()
+    patched = copy.deepcopy(rows_)
+    patched["OUT-008"]["client_order"] = "999"            # headline: Expected class
+    patched["OUT-002"]["client_order"] = "1"              # standard: Applications
+    monkeypatch.setitem(DD._cache, os.path.abspath(DD.CSV_PATH), patched)
+    keys = sorted(["OUT-002", "OUT-008", "OUT-021"], key=lambda r: DD.sort_key(r))
+    assert keys == ["OUT-008", "OUT-002", "OUT-021"], keys

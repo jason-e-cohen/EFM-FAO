@@ -714,7 +714,7 @@ def test_award_changes_exclude_ignored_entries():
     assert (v["awards_changed"], v["awards_ignored"]) == (2, 1)
     ctx = {"shock_source": "illustrative"}
     assert narrative.text(narrative.changes_parts(True), v, ctx).endswith(
-        "Awards changed in 2 cells; admit rates changed in 0 cells. " + labels.AWARDS_IGNORED_ONE)
+        "Awards changed in 2 applicant groups; admit rates changed in 0 groups. " + labels.AWARDS_IGNORED_ONE)
     assert narrative.text(narrative.changes_parts(False), dict(v, awards_ignored=0), ctx) == \
         "Baseline: no parent scenario."
     assert narrative.text(narrative.changes_parts(False), dict(v, awards_ignored=3), ctx) == \

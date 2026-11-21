@@ -29,7 +29,7 @@ def test_label_text():
     assert labels.ASSUMPTION_LABEL == "Includes client-input assumptions (yield shift, application lift)"
     assert labels.shock_label(0.1) == "Year-to-year variation assumed (s = 0.1), not yet calibrated"
     assert labels.SEGMENT_SHARE_LABEL == "Segment share assumed, not from client data"
-    assert labels.RANGE_OUTCOME == "90% outcome range"
+    assert labels.RANGE_OUTCOME == "Likely range (90%)"                      # spec v0.6.4 CP-2
     assert labels.RANGE_CASES == "Low and High price-response cases"
     assert labels.fmt_prob(0.03, "illustrative") == "under 5%"
     assert labels.fmt_prob(0.97, "illustrative") == "over 95%"

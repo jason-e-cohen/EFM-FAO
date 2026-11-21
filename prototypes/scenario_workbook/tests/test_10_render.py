@@ -152,10 +152,11 @@ def test_layout_check_catches_cut_text(main_wb, lo_profile, tmp_path):
         render(main_wb, lo_profile, "Summary_render")
     wb = openpyxl.load_workbook(keep)
     from copy import copy
-    ws = wb.worksheets[1]
+    # Phase 5: figure rows leave column B empty (units are in the label), so the sample is a long label in section C
+    ws = next(w for w in wb.worksheets if w.oddHeader.center.text.startswith("C. "))
     top, _ = lo._merged_at(ws)
     r = next(r for r in range(2, ws.max_row + 1) if isinstance(ws.cell(r, 1).value, str)
-             and len(ws.cell(r, 1).value) > 80 and (r, 1) not in top and ws.cell(r, 2).value)
+             and len(ws.cell(r, 1).value) > 80 and (r, 1) not in top and ws.cell(r, 3).value is not None)
     al = copy(ws.cell(r, 1).alignment)
     al.wrap_text = False
     ws.cell(r, 1).alignment = al
@@ -214,20 +215,30 @@ def test_section_layout_without_libreoffice(py_sections):
                            if any(ws.cell(r, c).value not in (None, "") for r in range(1, ws.max_row + 1)))
                 cov = lo._merged_at(ws)[1]
                 assert all(lo.is_title(ws.cell(1, c)) for c in range(1, maxc + 1) if (1, c) not in cov), t
+        # Phase 4.2 (E141): the header's shock label is merged across the scenario columns, in the workbook and in
+        # the first section, so it reads on one line (unmerged, the wrap pass stacks it in column C)
+        first = openpyxl.load_workbook(p).worksheets[0]
+        r_sh = next(r for r in range(1, 6) if first.cell(r, 1).value == labels.RESPONSE_LABEL)
+        span = lo._merged_at(first)[0].get((r_sh, 3))
+        assert span and span[1] - span[0] >= 3, (hold, span)
+        assert any(m.min_row == r_sh and m.min_col == 3 and m.max_col >= 6 for m in src.merged_cells.ranges)
         # the workbook's own title rows carry the fill across the scenario columns
         trows = [r for r in range(1, src.max_row + 1) if lo.is_title(src.cell(r, 1))]
         assert len(trows) >= 10 and all(lo.is_title(src.cell(r, 4)) for r in trows)
-        ct = next(ws for t, ws in secs.items() if t.startswith("Class-size table"))
+        from sw import dictionary as DD
+        ct = next(ws for t, ws in secs.items() if t == "F. " + DD.label("OUT-115"))
         hr = next(r for r in range(2, ct.max_row + 1) if lo._is_header(ct.cell(r, 1)))
-        sc = next(c for c in range(1, ct.max_column + 1) if ct.cell(hr, c).value == "status")
+        sc = next(c for c in range(1, ct.max_column + 1) if ct.cell(hr, c).value == DD.label("OUT-128"))
         assert all(ct.cell(r, sc).alignment.indent == 1 for r in range(hr + 1, ct.max_row + 1)
                    if isinstance(ct.cell(r, sc).value, str) and ct.cell(r, sc).value)
+    from sw import dictionary as DD
     u, h = _by_title(py_sections[False][0]), _by_title(py_sections[True][0])
-    for t in u:
-        if t.startswith(("Pool strip", "Yield what-if", "Class-size table", "Break-even")):
-            heads_h = [c.value for row in h[t].iter_rows() for c in row if lo._is_header(c)]
-            assert labels.HELD_COLUMNS in heads_h, t
-    t = next(t for t in u if t.startswith("Pool strip"))
+    held_secs = ["F. " + DD.label(x) for x in ("OUT-099", "OUT-087", "OUT-115", "OUT-111")]
+    assert set(held_secs) <= set(u)
+    for t in held_secs:
+        heads_h = [c.value for row in h[t].iter_rows() for c in row if lo._is_header(c)]
+        assert labels.HELD_COLUMNS in heads_h, t
+    t = "F. " + DD.label("OUT-099")
 
     def width(ws):
         maxc = max(c for c in range(1, ws.max_column + 1)
@@ -268,7 +279,7 @@ def test_layout_check_catches_figure_column_run_on(main_wb, lo_profile, tmp_path
     from copy import copy
     from sw import labels
     wb = openpyxl.load_workbook(_sections(main_wb, lo_profile))
-    ws = next(w for w in wb.worksheets if w.oddHeader.center.text.startswith("Main results"))
+    ws = next(w for w in wb.worksheets if w.oddHeader.center.text.startswith("B. "))
     hits = [(r, c) for r in range(2, ws.max_row + 1) for c in range(3, ws.max_column + 1)
             if ws.cell(r, c).value == labels.NOT_USED_ENTERING and ws.cell(r, c + 1).value in (None, "")]
     assert hits
@@ -288,11 +299,13 @@ def test_layout_check_catches_crowded_header(main_wb, lo_profile, tmp_path):
     """Phase 4.2, section 7: a header that fits its column only to within less than a space of the next header's text
     (the Nov 20 "mean ntr_y1" beside "P(ntr_y1 at or above target)") is a layout problem."""
     wb = openpyxl.load_workbook(_sections(main_wb, lo_profile))
-    ws = next(w for w in wb.worksheets if w.oddHeader.center.text.startswith("Yield what-if"))
+    from sw import dictionary as DD
+    ws = next(w for w in wb.worksheets if w.oddHeader.center.text == "F. " + DD.label("OUT-087"))
     hr = next(r for r in range(2, ws.max_row + 1) if lo._is_header(ws.cell(r, 1)))
-    c = next(c for c in range(2, ws.max_column) if ws.cell(hr, c).value == "mean ntr_y1")
+    head = DD.label("OUT-088")                                   # Phase 5: "Expected class"
+    c = next(c for c in range(2, ws.max_column) if ws.cell(hr, c).value == head)
     assert isinstance(ws.cell(hr, c + 1).value, str)
-    t = lo.text_pt("mean ntr_y1", True, 9.0)
+    t = lo.text_pt(head, True, 9.0)
     # LibreOffice keeps it on one line (it fits the cell less its margins) but leaves under a space before the next
     ws.column_dimensions[get_column_letter(c)].width = round(lo.width_for_pt(t + CHECK_PAD_PT + 0.5), 2)
     p = str(tmp_path / "crowded.xlsx")
@@ -307,3 +320,59 @@ def test_libreoffice_is_the_acceptance_version(soffice):
     pinned = lo.acceptance_version()
     assert pinned, "config/tools.yaml has no libreoffice_acceptance_version"
     assert lo.installed_version(soffice) == pinned
+
+
+import re  # noqa: E402
+
+
+def _pdf_pages(path):
+    """Pages in a LibreOffice PDF: its page objects (LibreOffice writes no object streams, so they are plain text)."""
+    import re
+    with open(path, "rb") as fh:
+        return len(re.findall(rb"/Type\s*/Page[^s]", fh.read()))
+
+
+def test_render_overview_and_charts(main_wb, lo_profile, tmp_path):
+    """Spec v0.6.4 CP-4 to CP-6: the PDF opens with the Overview, then the charts, then the Summary sections. The
+    render workbook (output/phase4/Summary_render_book.xlsx) has Overview and Charts as its first two sheets, both
+    visible, the section sheets after them, and the value sheets the charts read hidden; it carries the nine charts.
+    The Overview prints on at most two pages (counted in a PDF of the Overview alone); its probabilities beyond 5% and
+    95% read 'under 5%' and 'over 95%' while the variation is illustrative. The charts print at lo.MIN_SCALE or larger
+    and fit the page width at LibreOffice's column widths."""
+    import zipfile
+    from sw import labels
+    os.makedirs(PHASE4, exist_ok=True)
+    book = os.path.join(PHASE4, "Summary_render_book.xlsx")
+    pdf = lo.render_summary_pdf(main_wb["path"], str(tmp_path / "pdf"), profile=lo_profile, keep_render=book)
+    assert os.path.getsize(pdf) > 10_000
+    wb = openpyxl.load_workbook(book)
+    names = wb.sheetnames
+    assert names[:2] == ["Overview", "Charts"] and names[2] == "S01", names[:3]
+    assert [wb[n].sheet_state for n in names[:2]] == ["visible", "visible"]
+    assert wb["Summary"].sheet_state == "hidden" and wb["Distribution"].sheet_state == "hidden"
+    assert all(wb[n].sheet_state == "visible" for n in names if re.match(r"^S\d+$", n))
+    with zipfile.ZipFile(book) as z:
+        assert len([n for n in z.namelist() if n.startswith("xl/charts/chart")]) == 9
+    ch = wb["Charts"]
+    assert ch.page_setup.scale is not None and ch.page_setup.scale >= 100 * lo.MIN_SCALE
+    from openpyxl.utils import range_boundaries
+    area = ch.print_area[0] if isinstance(ch.print_area, (list, tuple)) else ch.print_area
+    _, _, used, _ = range_boundaries(str(area).split("!")[-1].replace("$", ""))
+    widths = lo._col_widths(ch)                     # grouped <col min max> entries, expanded per column
+    total = sum(lo.col_pt(widths.get(c, 8.43)) for c in range(1, used + 1))
+    assert total * ch.page_setup.scale / 100 <= lo.PAGE_WIDTH_PT, (total, ch.page_setup.scale)
+    ov = wb["Overview"]
+    texts = [ov.cell(r, c).value for r in range(1, ov.max_row + 1) for c in range(3, ov.max_column + 1)]
+    assert labels.PROB_UNDER in texts                                 # the synthetic GPA median is under 5%
+    probs = [ov.cell(r, c) for r in range(1, ov.max_row + 1) for c in range(3, ov.max_column + 1)
+             if ov.cell(r, c).number_format == "0%" and isinstance(ov.cell(r, c).value, (int, float))]
+    assert probs and all(0.05 <= x.value <= 0.95 for x in probs)       # the rest are clamped to text
+    # the Overview alone, through LibreOffice: at most two pages
+    only = openpyxl.load_workbook(book)
+    for n in list(only.sheetnames):
+        if n != "Overview":
+            del only[n]
+    p = str(tmp_path / "overview_only.xlsx")
+    only.save(p)
+    out = lo._convert(p, str(tmp_path / "ov"), "pdf:calc_pdf_Export", profile=lo_profile)
+    assert 1 <= _pdf_pages(out) <= 2, _pdf_pages(out)
