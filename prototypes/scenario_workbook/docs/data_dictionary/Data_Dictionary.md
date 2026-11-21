@@ -8,7 +8,7 @@ Columns: `role` follows Methods_Reference section 8 (primary, derived, display; 
 
 | Layer | Rows | Core | Supporting | Internal |
 |---|---:|---:|---:|---:|
-| [Inputs: client config](#layer-input-config) | 88 | 53 | 33 | 2 |
+| [Inputs: client config](#layer-input-config) | 87 | 53 | 32 | 2 |
 | [Inputs: scenario levers](#layer-input-scenario) | 26 | 22 | 4 | 0 |
 | [Inputs: cell data](#layer-input-data) | 10 | 10 | 0 | 0 |
 | [Inputs: other workbook cells](#layer-input-workbook) | 10 | 0 | 10 | 0 |
@@ -16,7 +16,7 @@ Columns: `role` follows Methods_Reference section 8 (primary, derived, display; 
 | [Outputs](#layer-output) | 247 | 113 | 114 | 20 |
 | [Checks](#layer-check) | 47 | 0 | 47 | 0 |
 | [Internals](#layer-internal) | 63 | 0 | 0 | 63 |
-| Total | 531 | 216 | 228 | 87 |
+| Total | 530 | 216 | 227 | 87 |
 
 - [Index by analyst name](#index-by-analyst-name)
 
@@ -60,7 +60,7 @@ Client name shown on Inputs for reference. No figure reads it.
 
 #### IN-003 `client.vertical`: Vertical
 
-Law or undergraduate. Shown on Inputs; no figure reads it in the prototype.
+Label: law or ug. Shown on Inputs; no calculation reads it.
 
 - Client label: "client.vertical"
 - Excel: Inputs!B8 (in_vertical)
@@ -1301,21 +1301,6 @@ Build setting. When true, every median and percentile figure on the Summary read
 - Role: input; response: N; shock: N; detail: core; client-safe: N; status: live
 - References: R4-06; F-1; sw/contract.py is_held; tests: 10; 21; 27
 
-<a id="IN-086"></a>
-
-#### IN-086 `small_cell_suppression`: Small-cell suppression (unused key)
-
-Present in one client config and in spec section 2, but no code reads it; client.small_cell_policy is the key the loader requires.
-
-- Client label: "small cell suppression" (proposed)
-- Excel: Python only
-- Unit: text; dimensions: scalar
-- Formula: input
-- Fed by: none
-- Feeds: none
-- Role: input; response: N; shock: N; detail: supporting; client-safe: N; status: display only
-- References: spec 2; one client config under config/; tests: 28
-
 <a id="IN-087"></a>
 
 #### IN-087 `generator`: Synthetic generator parameters
@@ -1401,7 +1386,7 @@ Free text describing the scenario. Text only.
 
 #### IN-092 `plan_year`: Plan year
 
-Label only in the prototype: tuition comes from the scenario's tuition increase. Part of the incentive validity comparison.
+Label. Shown on Levers and checked in the incentive validity list (a scenario that differs from its parent in plan year is not a valid incentive comparison); no calculation reads it. The Baseline tuition increase is set from cycle.plan_cycle at build time.
 
 - Client label: "plan_year (label)"
 - Excel: Levers!A7 row, one column per scenario
@@ -3420,7 +3405,7 @@ Discount target minus the discount rate; blank without a target.
 
 #### OUT-051 `evidence_extrapolated_share`: Evidence share
 
-Expected enrolled in cells whose award lies outside the observed range, over the expected class. Says how much of the class rests on extrapolated yields.
+Expected enrolled in cells whose award lies outside the observed range, over the expected class. Says how much of the class rests on extrapolated yields. The response slope enters through the enrolled weights: the observed or extrapolated label does not depend on it, but each cell's expected enrolled does.
 
 - Client label: "Share of enrolled in cells where the yield is extrapolated"
 - Excel: Summary main block (Middle case) row 'Share of enrolled in cells where the yield is extrapolated'; named range SUM_EVIDENCE_EXTRAPOLATED_SHARE
@@ -3428,7 +3413,7 @@ Expected enrolled in cells whose award lies outside the observed range, over the
 - Formula: SUMPRODUCT((evidence = extrapolated) x mu) / M
 - Fed by: [LG-033](#LG-033), [LG-034](#LG-034)
 - Feeds: [OUT-131](#OUT-131)
-- Role: derived; response: N; shock: N; detail: core; client-safe: Y; status: live
+- Role: derived; response: Y; shock: N; detail: core; client-safe: Y; status: live
 - References: spec 4; App F 24; MR 5.3; sw/response.py evidence; tests: 3; 9; 19
 
 <a id="OUT-052"></a>
@@ -8477,7 +8462,6 @@ Fraction of a position's enrolled inside the top quartile (the straddling positi
 | `shift_pts` | [OUT-095](#OUT-095) |
 | `shock source` | [OUT-169](#OUT-169) |
 | `SHOCK_LABEL` | [OUT-177](#OUT-177) |
-| `small_cell_suppression` | [IN-086](#IN-086) |
 | `specialty` | [OUT-036](#OUT-036) |
 | `specialty_usd` | [IN-096](#IN-096) |
 | `Spend against budget_total (Middle case; budget_basis: total aid, or merit only)` | [CK-029](#CK-029) |

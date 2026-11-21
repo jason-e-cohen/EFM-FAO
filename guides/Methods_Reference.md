@@ -277,9 +277,10 @@ Identity checked in test 13: dSpend = Σ e_s(a_s − a_p) + Σ (e_s − e_p) a_p
 | Full-tuition, no-merit-award counts; barbell index | Derived | Spec 3 | Yes | No |
 | Price of the target (Baseline ntr_y1 − scenario ntr_y1) | Derived | Spec 3 | Yes | No |
 | Incentive cost, paid-anyway share, aid per additional enrollee [F19 to F21] | Derived | 7 | Yes | No |
-| Top-quartile merit share; step sizes [F25] | Derived (Distribution sheet) | Spec Phase 4 | Yes | No |
+| Top-quartile merit share | Derived (Distribution sheet) | Spec Phase 4 | Yes | No |
+| Step sizes [F25] | Derived (Distribution sheet; award differences, no enrollment) | Spec 6 | No | No |
 | Strips, class-size table, break-evens | Derived (exact functions of primaries) | 7 | Yes | Probabilities: yes |
-| Evidence share [F24] | Derived | 5.3 | No | No |
+| Evidence share [F24] | Derived | 5.3 | Yes (through the enrolled weights; the observed/extrapolated label itself does not) | No |
 | History 509 reconciliation | Data check (report only) | Spec 0A-B7 | No | No |
 | Labels, held rows, "under 5%" | Display | Spec 4; R4-06 | — | — |
 
@@ -317,7 +318,7 @@ Full one-line descriptions: `prototypes/scenario_workbook/README.md`, "What each
 | Reproduce | 6 | 57 of 57 derivable criteria against the client workbook (Phase 3, Nov 18) |
 | Display rules and rendering | 10, 27 | Summary layout checks (scale, repeated headers, no text overrunning its cell) and the PDF for human review; the hold replaces every median and percentile figure, printed or in the working values, and changes nothing else |
 
-Current count (Phase 4.2, Nov 20): with the fixture 338 passed and 3 skipped; without it 269 passed and 72 skipped. Test 27 covers the hold, the one-margin rule, the tie-rule text and the revenue-target rows; test 10 checks the Summary layout (scale, repeated headers, text that overruns its cell).
+Current count (Nov 21, with test 28): without the fixture 285 passed and 73 skipped; with it about 355 passed and 3 skipped. Test 27 covers the hold, the one-margin rule, the tie-rule text and the revenue-target rows; test 10 checks the Summary layout (scale, repeated headers, text that overruns its cell).
 
 ### 9.2 Excel parity, and why the sentinel matters
 A workbook written by Python stores cached values. A naïve test that opens it and reads values would read Python's own numbers back. So:

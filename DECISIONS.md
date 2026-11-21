@@ -4,6 +4,16 @@
 
 ## 1. Decisions by date
 
+### November 21, 2026 (advisor, on the data dictionary report): documents aligned with the build
+
+| Change | Source |
+|---|---|
+| Spec section 6: the evidence label is the Ledger column `evidence`, not a Response-sheet column. Spec section 2 and methodology F22: pool growth to date is against the same week of the prior cycle (0A item A6, Brandon) rather than the mean of the prior two. F25: step sizes are within residency x segment x GPA class, as built. Spec section 3: the pool strip shows the median at every score median threshold (Phase 4.2). The stray `small_cell_suppression` key is removed from the spec (the loader uses `client.small_cell_policy`); its removal from `richmond.yaml` and the dictionary goes with the dictionary commit | Data dictionary report, mismatches 1, 2, 6, 7, 8 |
+| Methods reference: step sizes do not depend on the response slope; the evidence share does, through its enrolled weights; test counts updated | Mismatches 3, 4, 9 |
+| `client.vertical` (law or ug) and a scenario's `plan_year` are labels in the prototype: shown on Inputs and in the incentive validity list, read by no calculation | Dictionary, purposes not found |
+
+**Added to the Richmond pre-delivery pass:** no review or decision IDs in client-visible text (the hold text drops "(OD-14)"; the Checks labels "(P1.1-1)" and "(R3-3)" go), finishing Phase 4.2 item 5; and, recommended Nov 21 for Jason to confirm, client labels on the Inputs and Summary sheets in plain words taken from the dictionary's `plain_name`, with the code names kept in named ranges and the dictionary (the Inputs sheet now shows config keys, and about 18 client-safe Summary labels contain `ntr_y1`, `gross_y1` or `all_jd`).
+
 ### November 20, 2026 (Jason): Phase 4.2 (fix pass 2) and the hold's scope
 
 | Decision | IDs |
