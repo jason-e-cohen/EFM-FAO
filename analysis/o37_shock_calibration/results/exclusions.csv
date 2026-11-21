@@ -1,0 +1,7 @@
+vertical,rule,unit_years_removed
+law,closures,4
+law,consolidation,1
+law,offers under 50 or enrollees under 10 (zero-offer rows),1
+law,implausible (log yield more than 0.5 from the school's median),3
+ug,offers under 100 or enrolled under 50,1913
+ug,implausible (log yield more than 0.5 from the institution's median),701

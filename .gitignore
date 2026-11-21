@@ -11,3 +11,6 @@ ya_workbook_support/
 Richmond_YA_Scenario_Workbook_Assessment.md
 prototypes/scenario_workbook/fixtures/
 prototypes/scenario_workbook/output/
+
+# O37 shock calibration: public-data panels and downloads (regenerable)
+analysis/o37_shock_calibration/data/

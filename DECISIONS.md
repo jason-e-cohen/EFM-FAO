@@ -4,6 +4,13 @@
 
 ## 1. Decisions by date
 
+### November 21, 2026 (Jason): year-to-year variation, two-part form (O37)
+
+| Decision | IDs |
+|---|---|
+| s = √(s_year² + s_base²). s_year from public data on the forecast-error basis: law 0.10 (ABA 509, fall 2021 to 2025), undergraduate 0.14 provisional (IPEDS). s_base computed at build from the client's own history admits and yields (the uncertainty in a base built from H cohorts; about 0.045 for a law school with about 600 admits, yield near 0.2 and three cohorts). `shock_source: public`; new plain label; tail display kept. Methodology section 6 and O37 revised; spec 0C; built in Phase 5.1 | O37, option B |
+| Phase 5 built (build `2d11a9ffb19e`; with the fixture 372 passed, 3 skipped; mutation 194 Python and 165 Excel, all caught after fixes; LibreOffice parity 0 mismatches). Accepted for a checkpoint commit; acceptance after Jason's label review, Phase 5.1 and the desktop Excel check | Phase 5 |
+
 ### November 21, 2026 (Jason): client presentation and shock calibration
 
 | Decision | IDs |
@@ -203,3 +210,5 @@ Net-price yield response; goal-seek helper and schedule authoring layer; dashboa
 | O36 | Screen re-run without the guardrail (frozen until a client considers a price test) | Later |
 | O37 | Year-shock calibration from public data | Phase 2 or before the live build |
 | O40 | Record of the small-cell sign-off in the SOW and the alignment-gate packet | Jason |
+| O44 | Download the ABA First Year Class compilations for 2011 to 2020 into `aba-509-saas/data/` (the ABA download service was blocked from Claude Code); rerun the O37 calibration and extend the 509 dashboard's history | Jason |
+| O45 | 509 dashboard: at 45 schools the scraped 2025 `enrollees_from_pool` is higher than the ABA's published rates imply; check the scraper before the yield and conversion pages are relied on | Jason (509 project) |
