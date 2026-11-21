@@ -343,8 +343,10 @@ def test_no_fixture_number(rows):
     """With the fixture: no distinctive number from it (three or more significant digits) appears in any text column.
     Without it, test_client_safe_rows already limits client-safe text to product-rule numbers."""
     p = os.environ.get("YA_FIXTURE_PATH")
-    if not p or not os.path.exists(p):
+    if not p:
         pytest.skip("YA_FIXTURE_PATH not set: fixture-number scan skipped")
+    if not os.path.isfile(p):
+        pytest.skip(f"YA_FIXTURE_PATH does not point at a file: {p}")
     wb = openpyxl.load_workbook(p, read_only=True, data_only=True)
     fx = set()
     for ws in wb.worksheets:
