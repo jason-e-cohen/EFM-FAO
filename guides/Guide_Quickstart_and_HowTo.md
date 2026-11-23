@@ -47,8 +47,9 @@ Top level (`~/projects/EFA_FAO`):
 | `Prototype_Spec_Scenario_Workbook_v0.6.md` | The build specification. **Section 0A governs** where it differs from later sections | When building or changing the workbook |
 | `02_methodology_v2.8.md` | The full method, including the unbuilt pipeline; Appendix F defines every metric | When you need a definition or the bigger design |
 | `01_executive_read_v2.8.md`, `03_technical_roadmap_v2.8.md` | Short summary; build plan, annual cycle (5B), reproducibility (5C) | Planning |
-| `S1_Requirements_and_User_Stories.md` | Functional requirements (FR-n) | Checking scope |
-| `Review_*.md`, `Audit_*.md` | Independent reviews of each phase, with findings and verdicts | Understanding why a rule exists |
+| `Reviews, Audits, and Specs/S1_Requirements_and_User_Stories.md` | Functional requirements (FR-n) | Checking scope |
+| `Reviews, Audits, and Specs/` | Independent reviews of each phase and the audits, with findings and verdicts; the S1 requirements; the Richmond call notes (the Yellow Arrows assessment there is git-ignored) | Understanding why a rule exists |
+| `Report_O37_Shock_Calibration.md`, `analysis/`, `aba509data/` | Calibration of year-to-year variation from public ABA 509 data (2011 to 2025) | Revisiting s |
 | `guides/` | This guide and the methods reference | Start here |
 | `prototypes/scenario_workbook/` | **The code.** See below | Running anything |
 | `efa_fao/` | The earlier pipeline mockup (undergraduate, synthetic) and the data request generator (`efa_fao/docs/data_request_v3/`) | Data requests; later pipeline work |
@@ -150,7 +151,7 @@ Copy `config/richmond.yaml` to `config/<client>.yaml` and edit every value; ther
 | `score.bands`, `pool_threshold`, `floor`, `percentile_targets` | The client's own bands; the score above which pool growth applies; the floor; targets as `{q, t}` with each `t` a band bound | A target `t` that is not a band bound (the loader rejects it) |
 | `class.cap`, `target`, `what_if` | Hard cap; planned class; sizes for the class-size table | Target above cap |
 | `need.total`, `reference_class` | Need aid and the class it was budgeted for | |
-| `risk.common_shock_sd` | Year-to-year variation; 0.10 is an illustrative placeholder | Presenting probabilities as calibrated |
+| `risk.common_shock_sd`, `shock_source` | The public part of year-to-year variation (law 0.11; undergraduate 0.14, provisional) and its source (`public`); the build adds the client's own part from its history | Using the law value for an undergraduate client |
 | `segments` | Optional priority segment (one per scenario) | Defining a segment the cell data does not carry |
 | `aba_509_by_cohort` | Public ABA 509 figures (law) for the History reconciliation | Leaving it out: you lose the cheapest data check |
 | `hold_position_rows` | True while the score basis is unconfirmed: every median and percentile figure reads "held pending confirmation" | Forgetting to set it back to false once the basis is confirmed |
@@ -246,7 +247,7 @@ Rules that matter in every session: the spec is the brief (section 0A governs); 
 | Percentile target `{q, t}` | "At most a share q of scored enrollees below score t" (median: q = 0.5) |
 | Shrink path | The rule that cuts admits from the lowest bands first to reach a smaller class |
 | Pool strip, yield strip | Tables of outcomes across pool multipliers and yield shifts |
-| Year-to-year variation (s) | A common shock to all yields in a cycle; 0.10 is illustrative |
+| Year-to-year variation (s) | A common shock to all yields in a cycle: a public part (law 0.11) plus the uncertainty in the client's own starting point |
 | Reproduce mode | Running the client's own workbook scenarios through our ledger to prove we match it |
 | Sentinel copy | A workbook whose stored values are all -999, so an Excel check cannot pass without recalculation |
 | Mutation check | Deliberately breaking one formula at a time to prove the tests notice |

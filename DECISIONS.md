@@ -4,6 +4,15 @@
 
 ## 1. Decisions by date
 
+### November 23, 2026 (Jason): client label conventions
+
+| Decision | IDs |
+|---|---|
+| `client_labels_review_v2.xlsx` approved: Total on summed figures; (mean) on counts and dollar figures that vary over likely outcomes, (projected) on applications and admits; averages named (mean, median); (optional) on blank-able inputs; comparisons name their reference; "base-year" throughout. Applied in Phase 5.1 (spec 0C) | P5-1 |
+| The Baseline comparison is shown as scenario minus Baseline ("Change in total first-year net tuition revenue compared with Baseline"; positive = more revenue), replacing Baseline minus scenario | P5-1 |
+| ABA 509 history 2011 to 2020 added in `aba509data/` (public; committed for reproducibility). O44 closed | O44 |
+| O37 rerun on fall 2011 to 2025 (212 schools): s_year for law is **0.11** (plausible 0.10 to 0.12), up from 0.10. 2021 to 2025 was a calm stretch; persistence holds (autocorrelation −0.30); school trends near zero. The outlier rule now compares each year with the median of the school's five nearest years (the old rule removed genuine lasting shifts; both results reported). Report section R | O37 |
+
 ### November 21, 2026 (Jason): year-to-year variation, two-part form (O37)
 
 | Decision | IDs |
@@ -40,7 +49,7 @@
 
 **Richmond pre-delivery pass (before the first Richmond workbook).** Inputs first: 2026-27 tuition (OD-09), Brandon's answers (OD-10, 11, 13, 14, 15, 16), Richmond cell data with state counts, continuing NTR if `all_jd`. Build work: narrow `hold_position_rows` to LSAT figures (or lift it if OD-14 is answered); the remaining Summary cosmetics in `Review_Phase4_FixPass.md` section 7 and the Phase 4.2 report (narratives page prints small; "OK" sits low; long scenario names wrap; "Baseline" close to "incentive"); `mutation_check.py` rerun reports under their own names so they do not overwrite full-run reports; the live Scenario 4 build, an independent pre-delivery review, desktop Excel on Mac and Windows, and Jason's review before anything is sent.
 
-### November 19, 2026 (Jason): Phase 4 review (`Review_Phase4_Build.md`)
+### November 19, 2026 (Jason): Phase 4 review (`Reviews, Audits, and Specs/Review_Phase4_Build.md`)
 
 | Decision | IDs |
 |---|---|
@@ -63,7 +72,7 @@
 
 ### November 18, 2026 (Jason): spec v0.6.3
 
-Applied as section 0A of `Prototype_Spec_Scenario_Workbook_v0.6.md`: Brandon's points BM-1 to BM-6 as designed in `Review_Phase2_2_Plan.md` section 3 (for Phase 2.2), the Phase 3 reproduce rules (R3), and the Scenario 4 deliverable scope. Methodology Appendix F gains item 26 (score percentiles). Phase 2.2 runs from the `phase3-accepted` commit; reproduce-mode need-aid rounding per enrollee is added to it.
+Applied as section 0A of `Prototype_Spec_Scenario_Workbook_v0.6.md`: Brandon's points BM-1 to BM-6 as designed in `Reviews, Audits, and Specs/Review_Phase2_2_Plan.md` section 3 (for Phase 2.2), the Phase 3 reproduce rules (R3), and the Scenario 4 deliverable scope. Methodology Appendix F gains item 26 (score percentiles). Phase 2.2 runs from the `phase3-accepted` commit; reproduce-mode need-aid rounding per enrollee is added to it.
 
 ### November 18, 2026 (Jason): Phase 3 accepted
 
@@ -78,7 +87,7 @@ Reproduce mode meets its criteria: 57 of 57 derivable criteria pass (3 Baseline 
 | Percentile placeholder: 25th percentile at LSAT 158 (the nearest band to Richmond's published 158 and 159) until Brandon confirms the target | BM-1, OD-13 |
 | The three R3-4 additions are adopted: a 509 reconciliation check on the History sheet (report only), a data-request line asking for bands by highest LSAT, and the LSAT-basis question to Brandon | R3-4 |
 
-### November 18, 2026 (Jason): Phase 3 reproduce mode (`Review_Phase3_Build.md`)
+### November 18, 2026 (Jason): Phase 3 reproduce mode (`Reviews, Audits, and Specs/Review_Phase3_Build.md`)
 
 | Decision | IDs |
 |---|---|
@@ -88,13 +97,13 @@ Reproduce mode meets its criteria: 57 of 57 derivable criteria pass (3 Baseline 
 | Ledger rounding at 15 significant digits kept; confirmed in LibreOffice, to be confirmed in desktop Excel on the reproduce sentinel copy | R3 decision 4, R3-3 |
 | Richmond's public ABA 509 figures for 2024 and 2025 entered in `config/richmond.yaml` for the History sheet's 509 reconciliation (report only) | R3-4 |
 
-### November 18, 2026 (Jason): Scenario 4 in a Richmond deliverable (`Review_Phase3_Build.md` R3-2)
+### November 18, 2026 (Jason): Scenario 4 in a Richmond deliverable (`Reviews, Audits, and Specs/Review_Phase3_Build.md` R3-2)
 
 | Decision | IDs |
 |---|---|
 | Exception to the fixture rule: Scenario 4's levers from the Yellow Arrows workbook may be entered in a live build on Richmond's own cell data, and that workbook may go to Richmond's named roles through the secure channel, because it is Richmond's own scenario returned to Richmond. The Scenario 4 scenario file is generated at run time into a git-ignored path, never committed. All other fixture limits stand (no git, Supabase, dashboard, public or marketing use, or other clients' work); Scenarios 1 to 3 are not covered. Recorded in `CLAUDE.md` (rules). | BM-7, R3-2 |
 
-### November 17, 2026 (Jason): Brandon Metheny's reply (`Review_Points_Brandon_Nov17.md`)
+### November 17, 2026 (Jason): Brandon Metheny's reply (`Reviews, Audits, and Specs/Review_Points_Brandon_Nov17.md`)
 
 | Decision | IDs |
 |---|---|
@@ -106,7 +115,7 @@ Reproduce mode meets its criteria: 57 of 57 derivable criteria pass (3 Baseline 
 
 Desktop Excel parity measured: the sentinel build (every cached value -999), recalculated and saved by desktop Excel, matched Python on every formula cell of every sheet with 0 mismatches (`tests/compare_excel_saved.py`). Phase 2 is accepted. Re-run after the P21 follow-up on build `a5d46aca1735` (synthetic world 101), saved by Microsoft Excel 16 for Mac: all 57,483 formula cells match Python, none still holds -999, and no formula differs from the build (`output/phase2/excel_compare_report.json`). Windows Excel is not yet checked; check it before the first workbook goes to Richmond.
 
-### November 17, 2026 (Jason): Phase 2 review (`Review_Phase2_Build.md`)
+### November 17, 2026 (Jason): Phase 2 review (`Reviews, Audits, and Specs/Review_Phase2_Build.md`)
 
 Applied as spec v0.6.2 (tags **[v0.6.2, P2-n]** and **[v0.6.2, Q-n]**). Fixes P2-01 to P2-07 go to the Phase 2.1 fix pass.
 
@@ -121,9 +130,9 @@ Applied as spec v0.6.2 (tags **[v0.6.2, P2-n]** and **[v0.6.2, Q-n]**). Fixes P2
 | Budget check compares total aid by default, merit only by setting; Brandon to say which (OD-10) | Q-8e |
 | Optional inputs `bonus_pool_usd` and `merit_actual_by_cohort` | Q-8d, Q-8f |
 | Blank segment on Levers defaults to the only configured segment; the empty-segment scope error is a Check | P2-07 |
-| Phase 2.1 review (`Review_Phase2_1_Fix_Pass.md`): the Excel comparison runs on the sentinel build and refuses anything else; the build id includes a hash of the generator code; one edge scenario sets a non-zero global shift with an in-state override; builder calls 1 to 4 and 6 accepted, call 5 changed | P21-01 to P21-03 |
+| Phase 2.1 review (`Reviews, Audits, and Specs/Review_Phase2_1_Fix_Pass.md`): the Excel comparison runs on the sentinel build and refuses anything else; the build id includes a hash of the generator code; one edge scenario sets a non-zero global shift with an in-state override; builder calls 1 to 4 and 6 accepted, call 5 changed | P21-01 to P21-03 |
 
-### November 17, 2026 (Jason): Phase 1 review (`Review_Phase1_Build.md`)
+### November 17, 2026 (Jason): Phase 1 review (`Reviews, Audits, and Specs/Review_Phase1_Build.md`)
 
 Applied as spec v0.6.1 (tags **[v0.6.1, R-n]** and **[v0.6.1, OP-n]** for the builder's open points).
 
@@ -140,7 +149,7 @@ Applied as spec v0.6.1 (tags **[v0.6.1, R-n]** and **[v0.6.1, OP-n]** for the bu
 
 ### November 16, 2026 (Jason): Session B design audit accepted in full
 
-Source: `Audit_Session_B_Design_Report.md`. Applied in `Prototype_Spec_Scenario_Workbook_v0.6.md`, `02_methodology_v2.8.md`, `S1_Requirements_and_User_Stories.md` v1.3, `03_technical_roadmap_v2.8.md`, `01_executive_read_v2.8.md`, `Handoff_Prototype_Phase1.md`, `CLAUDE.md` and the data request v3 source. Tags: **[v0.6, Bn-m]**, **[v2.8, Bn-m]**, **[v1.3, Bn-m]**.
+Source: `Reviews, Audits, and Specs/Audit_Session_B_Design_Report.md`. Applied in `Prototype_Spec_Scenario_Workbook_v0.6.md`, `02_methodology_v2.8.md`, `Reviews, Audits, and Specs/S1_Requirements_and_User_Stories.md` v1.3, `03_technical_roadmap_v2.8.md`, `01_executive_read_v2.8.md`, `Handoff_Prototype_Phase1.md`, `CLAUDE.md` and the data request v3 source. Tags: **[v0.6, Bn-m]**, **[v2.8, Bn-m]**, **[v1.3, Bn-m]**.
 
 | Decision | Finding IDs |
 |---|---|
@@ -210,5 +219,4 @@ Net-price yield response; goal-seek helper and schedule authoring layer; dashboa
 | O36 | Screen re-run without the guardrail (frozen until a client considers a price test) | Later |
 | O37 | Year-shock calibration from public data | Phase 2 or before the live build |
 | O40 | Record of the small-cell sign-off in the SOW and the alignment-gate packet | Jason |
-| O44 | Download the ABA First Year Class compilations for 2011 to 2020 into `aba-509-saas/data/` (the ABA download service was blocked from Claude Code); rerun the O37 calibration and extend the 509 dashboard's history | Jason |
 | O45 | 509 dashboard: at 45 schools the scraped 2025 `enrollees_from_pool` is higher than the ABA's published rates imply; check the scraper before the yield and conversion pages are relied on | Jason (509 project) |

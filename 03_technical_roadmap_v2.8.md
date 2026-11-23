@@ -6,7 +6,7 @@ This is preparation for the spec phase, not the spec. It lists what the spec mus
 
 **[v2.7, V27A] Addendum (November 13, 2026).** The evaluator gains a combined target-state market tier (NY and PA by default) with its own incentive scope and an optional application lift, class sizes from 100 to 140 under a hard cap of 140 this cycle with a shrink-path rule, pool tripwires and net-price readouts (V27A-01 to V27A-07; `_superseded/CHANGELOG_v2.7.md`). The prototype spec is v0.5; the market tier is part of the Phase 1 data model.
 
-**[v2.8] Session B reconciliation (November 16, 2026).** Jason accepted the Session B design audit (`Audit_Session_B_Design_Report.md`) in full. For this roadmap: the **Excel workbook ships first** and dashboard views 2 and 3 become an add-on after the workbook's core computation is accepted; the target-state tier becomes a general **priority segment**; the tripwires become a **pool strip**; the net-price readouts become two lines; goal-seek, the schedule layer, the simulation sheet and the multi-year stubs are deferred; the prototype spec is **v0.6**. Richmond's first award decisions are for the class entering in fall 2027, so the workbook's must-have list lands by February 2027 (section 5A). Richmond data handling is Jason's and outside the spec.
+**[v2.8] Session B reconciliation (November 16, 2026).** Jason accepted the Session B design audit (`Reviews, Audits, and Specs/Audit_Session_B_Design_Report.md`) in full. For this roadmap: the **Excel workbook ships first** and dashboard views 2 and 3 become an add-on after the workbook's core computation is accepted; the target-state tier becomes a general **priority segment**; the tripwires become a **pool strip**; the net-price readouts become two lines; goal-seek, the schedule layer, the simulation sheet and the multi-year stubs are deferred; the prototype spec is **v0.6**. Richmond's first award decisions are for the class entering in fall 2027, so the workbook's must-have list lands by February 2027 (section 5A). Richmond data handling is Jason's and outside the spec.
 
 **Guiding rule:** a feature is added only if it changes a recommendation or a client decision, and the lean Monte Carlo study shows it does so reliably. Deferred features and their triggers are listed in methodology section 11.
 
@@ -225,16 +225,16 @@ Award decisions for the 2027 entering class: the Must items land by February 202
 3. Is the -0.41 targeting correlation the same in every segment of the synthetic generator?
 4. Does the generator's true retention match the constant-hazard model used to score it?
 
-**[v2.5]** The "7 passing" claim was verified on October 22, 2026: all seven guardrail tests pass, and the v2 pipeline reproduces the quoted anchor, backtest, and recovery numbers (`Verification_Report_Oct22.md`). Still not verified by a reviewer: the generator code, and the `equity_audit` and `funnel_cells` outputs (proxy fairness and disclosure). The audit also left open: a run of the HiGHS-based pipeline on the production screen, Richmond's actual grant distribution by class, and whether staff can be blind to test membership at a law school.
+**[v2.5]** The "7 passing" claim was verified on October 22, 2026: all seven guardrail tests pass, and the v2 pipeline reproduces the quoted anchor, backtest, and recovery numbers (`Reviews, Audits, and Specs/Verification_Report_Oct22.md`). Still not verified by a reviewer: the generator code, and the `equity_audit` and `funnel_cells` outputs (proxy fairness and disclosure). The audit also left open: a run of the HiGHS-based pipeline on the production screen, Richmond's actual grant distribution by class, and whether staff can be blind to test membership at a law school.
 
 **Review log [v2.5]**
 
 | Date | Review | Result |
 |------|--------|--------|
 | Oct 15, 2026 | First independent review (R1 to R12) | v2 simplified to v2.1 |
-| Oct 21, 2026 | S4 and S5 re-review, Claude Opus 5.5 (`S4_S5_Rereview_v2.4.md`) | 20 findings (F1 to F20), 24 required edits merged into v2.5. Errata added Oct 22 |
-| Oct 21, 2026 | Audit of the re-review, Claude Fable 5.1 (`Audit_S4_S5_Rereview_v2.4.md`) | Holds with minor revisions. Both Critical findings stand. 14 edits (E1 to E14) merged Oct 22 |
-| Oct 22, 2026 | Verification run, real scipy and HiGHS (`Verification_Report_Oct22.md`) | Seven guardrail tests pass; stub and real-solver results agree within 1% |
+| Oct 21, 2026 | S4 and S5 re-review, Claude Opus 5.5 (`Reviews, Audits, and Specs/S4_S5_Rereview_v2.4.md`) | 20 findings (F1 to F20), 24 required edits merged into v2.5. Errata added Oct 22 |
+| Oct 21, 2026 | Audit of the re-review, Claude Fable 5.1 (`Reviews, Audits, and Specs/Audit_S4_S5_Rereview_v2.4.md`) | Holds with minor revisions. Both Critical findings stand. 14 edits (E1 to E14) merged Oct 22 |
+| Oct 22, 2026 | Verification run, real scipy and HiGHS (`Reviews, Audits, and Specs/Verification_Report_Oct22.md`) | Seven guardrail tests pass; stub and real-solver results agree within 1% |
 | Oct 22, 2026 | Consumer ZIP amendment adopted by Jason (D1 to D5); five issues resolved in `_superseded/02_methodology_v2.6.md` | **Not audited.** Scoped audit advised before S4 and S5 sign-off; counsel review before first grid use |
 
 ## 10. Author responses to the review questions [v2.2]
@@ -280,7 +280,7 @@ These describe the v2 prototype as designed, from my reading of its design. Veri
 | **[v2.5]** Award mode | `supplement` (UG) or `total` (law); ladder to tuition; law cap 100% | S5-2 |
 | **[v2.5]** Horizon | Equals the award commitment length; mismatches rejected | S5-3, S5-10 |
 | **[v2.5]** Primary estimator | All-eligible ITT only if staff are blind to test membership; otherwise test-only at dose 0 | Audit A22, E1 |
-| **[v2.5]** Audit | Completed October 21 to 22, 2026; E1 to E14 merged | `Audit_S4_S5_Rereview_v2.4.md` |
+| **[v2.5]** Audit | Completed October 21 to 22, 2026; E1 to E14 merged | `Reviews, Audits, and Specs/Audit_S4_S5_Rereview_v2.4.md` |
 | **[v2.7]** Per-cell guardrail | Removed; step-size table instead; segment floors stay | Jason, Nov 5, 2026 (V27-01) |
 | **[v2.7]** Threshold freeze | Dropped for client-declared bands | Jason, Nov 5, 2026 (V27-06) |
 | **[v2.7]** Policy of record | The client's fine matrix; optimizer decision layer of at most floor(admits ÷ 30) parameters | Jason, Nov 5, 2026 (V27-07) |

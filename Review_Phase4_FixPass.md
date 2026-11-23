@@ -1,6 +1,6 @@
 # Review: Phase 4 fix pass (scenario-workbook prototype)
 
-Independent review of the uncommitted changes in `prototypes/scenario_workbook/` since `4d59750`, against `Review_Phase4_Build.md` (R4-01 to R4-18) and the Nov 19 entries in `DECISIONS.md`. Reviewer: Claude Code on Jason's Mac, Nov 20, 2026. No code, spec or config was edited and nothing was committed. Every figure below comes from synthetic data. No Yellow Arrows cell value appears in this file.
+Independent review of the uncommitted changes in `prototypes/scenario_workbook/` since `4d59750`, against `Reviews, Audits, and Specs/Review_Phase4_Build.md` (R4-01 to R4-18) and the Nov 19 entries in `DECISIONS.md`. Reviewer: Claude Code on Jason's Mac, Nov 20, 2026. No code, spec or config was edited and nothing was committed. Every figure below comes from synthetic data. No Yellow Arrows cell value appears in this file.
 
 ## 1. Verdict
 

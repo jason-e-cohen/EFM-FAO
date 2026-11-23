@@ -5,6 +5,10 @@ Each world: 195 schools x 5 years, offers drawn around the law panel's spread (m
 enrollment ~ Binomial(offers, yield). Shocks are either iid each year around the school's
 level (the workbook's model) or a random walk (persistent). 200 worlds each.
 
+Second block (Nov 23, 2026; results/validation_15yr.csv): 15-year panels like the 2011-2025
+law panel, 100 worlds each, to check that the lag autocovariances separate school trends from
+random-walk shocks (estimators.persistence_lags) and to see the forecast errors under each.
+
   .venv/bin/python -I analysis/o37_shock_calibration/validate_estimators.py
 """
 from __future__ import annotations
@@ -19,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import estimators as E  # noqa: E402
 
 
-def world(rng, s_u, s_n, kind, n=195, years=range(2021, 2026)):
+def world(rng, s_u, s_n, kind, n=195, years=range(2021, 2026), trend_sd=0.01, s_rw=0.0, phi=0.6):
     years = list(years)
     T = len(years)
     nat = rng.normal(0, s_n, T)
@@ -27,11 +31,18 @@ def world(rng, s_u, s_n, kind, n=195, years=range(2021, 2026)):
     for i in range(n):
         offers = np.maximum(80, rng.lognormal(np.log(600), 0.5) * np.exp(rng.normal(0, 0.08, T))).round()
         base = np.log(rng.uniform(0.2, 0.5))
-        trend = rng.normal(0, 0.01)
+        trend = rng.normal(0, trend_sd)
         if kind == "iid":
             u = rng.normal(0, s_u, T)
+        elif kind == "ar":
+            u = np.zeros(T)
+            u[0] = rng.normal(0, s_u / np.sqrt(1 - phi**2))
+            for t in range(1, T):
+                u[t] = phi * u[t - 1] + rng.normal(0, s_u)
         else:
             u = np.cumsum(rng.normal(0, s_u, T))
+        if s_rw:
+            u = u + np.cumsum(rng.normal(0, s_rw, T))
         p = np.clip(np.exp(base + trend * np.arange(T) + nat + u), 0.01, 0.95)
         enr = rng.binomial(offers.astype(int), p)
         apps = (offers / rng.uniform(0.2, 0.6)).round()
@@ -61,6 +72,33 @@ def main() -> int:
     print(df.round(4).T.to_string())
     (Path(__file__).resolve().parent / "results").mkdir(exist_ok=True)
     df.to_csv(Path(__file__).resolve().parent / "results" / "validation.csv")
+
+    out = []
+    worlds = [  # (label, kind, s_u, trend_sd, s_rw)
+        ("iid 0.06, no trend", "iid", 0.06, 0.0, 0.0),
+        ("random walk 0.06, no trend", "rw", 0.06, 0.0, 0.0),
+        ("iid 0.04 + trends sd 0.02/yr", "iid", 0.04, 0.02, 0.0),
+        ("iid 0.03 + random walk 0.06 + trends sd 0.01/yr", "iid", 0.03, 0.01, 0.06),
+        ("AR(1) phi 0.6, innovation 0.06", "ar", 0.06, 0.0, 0.0),
+    ]
+    for lab, kind, s_u, tsd, srw in worlds:
+        res = []
+        for _ in range(100):
+            d = E.prep(world(rng, s_u, 0.03, kind, years=range(2011, 2026), trend_sd=tsd, s_rw=srw))
+            st = E.Prepared(d, sorted(d["year"].unique())).stats(d["unit"].unique())
+            p2 = st["persist2"]
+            res.append({"trend": p2["s2_trend"], "iid": p2["s2_iid"], "rw": p2["s2_rw"],
+                        "gamma_2_x1000": 1000 * p2["gamma_2"], "gamma_3_x1000": 1000 * p2["gamma_3"],
+                        "a_total": st["a"]["s2_total"], "fe1_total": st["fe1"]["s2_total"],
+                        "fe3_total": st["fe3"]["s2_total"], "fet5_total": st["fet5"]["s2_total"]})
+        r = pd.DataFrame(res)
+        summ = {k: (float(np.sqrt(max(r[k].mean(), 0))) if not k.startswith("gamma") else float(r[k].mean())) for k in r}
+        summ["trend_signed_mean"] = float(r["trend"].mean())
+        summ.update({"world": lab, "true_trend_sd": tsd})
+        out.append(summ)
+    df = pd.DataFrame(out).set_index("world")
+    print(df.round(4).T.to_string())
+    df.to_csv(Path(__file__).resolve().parent / "results" / "validation_15yr.csv")
     return 0
 
 

@@ -1,6 +1,6 @@
 # Data request v3: sources, gap log and judgment calls
 
-Prepared October 22, 2026. Inputs: `../04_data_request_v2.md` (v2.1 text, "04"), the reference request (`Enrollment Funnel and Student Financial Data Request.docx`, "REF"), `CDS-PDF-2025-2026-Excel_Template.xlsx` ("CDS"), `02_methodology_v2.6.md` ("M"), `Verification_Report_Oct22.md` section 5, and `config/data_dictionary_v2.csv`. Shown versus suspected is marked where it matters.
+Prepared October 22, 2026. Inputs: `../04_data_request_v2.md` (v2.1 text, "04"), the reference request (`Enrollment Funnel and Student Financial Data Request.docx`, "REF"), `CDS-PDF-2025-2026-Excel_Template.xlsx` ("CDS"), `02_methodology_v2.6.md` ("M"), `Reviews, Audits, and Specs/Verification_Report_Oct22.md` section 5, and `config/data_dictionary_v2.csv`. Shown versus suspected is marked where it matters.
 
 ## 1. What the reference request adds to 04
 
@@ -42,7 +42,7 @@ Where v3 departs from the CDS on purpose: (a) CDS counts non-need aid used to me
 
 Law has no CDS equivalent. The law reference set is the ABA Standard 509 report (M section 2, Appendix D). The audit read the ABA report form but not the ABA's definitions document, so v3 law definitions defer to "as defined in your ABA 509 report" and do not restate ABA wording.
 
-## 3. Spec gaps closed (from `Verification_Report_Oct22.md` section 5)
+## 3. Spec gaps closed (from `Reviews, Audits, and Specs/Verification_Report_Oct22.md` section 5)
 
 | Gap | Where it is in v3 |
 |---|---|
@@ -119,7 +119,7 @@ Tests: `test_spec.py` has 8 tests; all pass (run through a plain Python loop bec
 
 ## 8. Session B reconciliation (November 16, 2026)
 
-Applied on Jason's acceptance of `Audit_Session_B_Design_Report.md`:
+Applied on Jason's acceptance of `Reviews, Audits, and Specs/Audit_Session_B_Design_Report.md`:
 - **B2-11:** `aid_policy.guardrail_max_cut_pct` (the removed 5% guardrail) replaced by `client_max_cut_pct`: any limit the client's own policy sets, reported against, never imposed.
 - **B3-4:** `early_funnel_by_state.deposits` is labeled net of withdrawals by census; `early_pacing.deposits_cumulative` is labeled gross; `early_pacing.applications_cumulative` counts complete applications (the Applicant definition); `early_pacing.lsat_band` added (conditional) so growth in high-LSAT applications can be computed at the same week of the cycle.
 - Law and undergraduate outputs regenerated; `test_spec.py` 8 of 8 pass (plain Python loop).

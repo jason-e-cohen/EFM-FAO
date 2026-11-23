@@ -12,8 +12,8 @@
 1. `CLAUDE.md` (rules, the Nov 4 exceptions, the evaluator working rules, deferred features).
 2. `Prototype_Spec_Scenario_Workbook_v0.6.md`: sections 2 to 5 and 10 to 12 matter most for Phase 1.
 3. `02_methodology_v2.8.md` Appendix F (metric definitions) and section 5, Scenario evaluator.
-4. `DECISIONS.md` (decisions not to reopen) and, only if a rule is unclear, `Audit_Session_B_Design_Report.md` (the finding IDs tagged in the spec).
-5. `Richmond_YA_Scenario_Workbook_Assessment.md` sections 3, 4, 11 and 12 and `ya_workbook_support/analysis.py` (git-ignored; background only; never copy values).
+4. `DECISIONS.md` (decisions not to reopen) and, only if a rule is unclear, `Reviews, Audits, and Specs/Audit_Session_B_Design_Report.md` (the finding IDs tagged in the spec).
+5. `Reviews, Audits, and Specs/Richmond_YA_Scenario_Workbook_Assessment.md` sections 3, 4, 11 and 12 and `ya_workbook_support/analysis.py` (git-ignored; background only; never copy values).
 
 ## Decisions already made (do not reopen)
 - Admit-rate levers are scenario inputs; yield is constant when admit rates move; the shrink path writes rates and is not an optimizer (D1, D14).

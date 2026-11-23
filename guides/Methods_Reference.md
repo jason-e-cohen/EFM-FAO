@@ -95,7 +95,7 @@ Per cell and historical cohort the data are applications, admits, award (dollars
 | y_c | Yield in cell c (case implicit) |
 | μ_c = A_c y_c | Expected enrolled |
 | v_c = A_c y_c (1 − y_c) | Binomial variance of enrolled |
-| s (in risk formulas) | SD of the common year shock, `common_shock_sd` (0.10 illustrative) |
+| s (in risk formulas) | SD of the common year shock: s = √(s_year² + s_base²); s_year = `common_shock_sd` (law 0.11, public), s_base from the client's history |
 | ρ | Correlation of shocks between cells at/above and below a threshold |
 | Φ | Standard normal CDF |
 | t, q | Score threshold; percentile share (median q = 0.5) |
@@ -191,7 +191,7 @@ Given admits A_c and yields y_c:
 - the shock is multiplicative on yield: e ~ N(1, s²), cell yield = clip(e · y_c, 0, 1);
 - for score-threshold events, cells at or above t and below t may receive shocks with correlation ρ (default 1, sensitivity at 0.5).
 
-s = 0.10 is **illustrative** (register A6). It is the single most influential uncalibrated number in the workbook: at a class of 140, the shock contributes about s·M = 14 students of SD against about √Σv ≈ 10 from binomial noise. Calibration from public ABA 509 and IPEDS yield series is open issue O37; until then every probability carries SHOCK_LABEL and values beyond 5% / 95% display as "under 5%" / "over 95%".
+s is the most influential single number behind the probabilities: at a class of 140, the shock contributes about s·M ≈ 16 students of SD against about √Σv ≈ 10 from binomial noise. It has two parts (methodology section 6; O37, calibrated Nov 21 and 23; Phase 5.1). **s_year** is the error of a forecast built from a mean of recent cohorts, beyond binomial noise, from public ABA 509 data for fall 2011 to 2025 (212 schools): law 0.11, plausible 0.10 to 0.12. It is a forecast error rather than a pure year shock because yield shocks persist (autocorrelation of yield changes −0.30, against −0.5 if they reverted), so a base averaged over past cohorts is stale by the plan year. **s_base** is the binomial uncertainty of the client's own base, s_base² = (1/H²) Σ_h (1 − y_h)/(A_h y_h) over its H history cohorts (about 0.045 at about 600 admits, yield 0.2, three cohorts). Both enter as one multiplicative shock. ρ and cell-level shocks cannot be calibrated from public data, so values beyond 5% / 95% still display as "under 5%" / "over 95%" (`Report_O37_Shock_Calibration.md`).
 
 ### 6.2 Class
 M = Σ μ_c, V = Σ v_c + s² M².
@@ -345,7 +345,7 @@ Each assumption, where it enters, how much it matters, and what would test it. "
 | A3 | Sticker price does not move applications or yield (D10) | 4.4 | Tuition what-if overstates revenue gain from increases | Net-price response deferred; analyst can add a shift (ASSUMPTION_LABEL) |
 | A4 | One slope for all cells | 5.2 | Heterogeneous response by score or residency is averaged | Moderator discovery in the pipeline (methodology 4) |
 | A5 | Base yield shrinks toward pool with fixed κ = 20; pools need ≥ 30 admits | 5.1 | Small cells' base yields | Cross-validate κ on more cohorts; test 11 checks the pooling arithmetic |
-| A6 | Common year shock, SD s = 0.10, multiplicative, normal | 6.1 | Every probability and range | Calibrate from public 509/IPEDS yield series (O37); synthetic world W22 |
+| A6 | Common multiplicative, normal shock with s = √(s_year² + s_base²); s_year 0.11 (law) from public 509 forecast errors, s_base from the client's history | 6.1 | Every probability and range | Calibrated (O37, 2011 to 2025); replace with the client's own out-of-time errors after five cycles; synthetic world W22 |
 | A7 | ρ = 1 between high- and low-score shocks | 6.3 | Median and percentile probabilities | ρ = 0.5 sensitivity line shown |
 | A8 | Cell enrollments independent given the shock | 6.1 | Variance (understated if peer effects or cross-admit correlation) | Compare predicted vs realized ranges over cycles (annual cycle, roadmap 5B) |
 | A9 | Normal approximation with continuity correction | 6.2 to 6.5 | Small expected counts | Tests 2, 4, 22; approximation flags below 20 or 30 expected |
@@ -361,11 +361,11 @@ Each assumption, where it enters, how much it matters, and what would test it. "
 
 **What the workbook does not claim.**
 - It does not estimate the effect of aid on enrollment. Scenario differences that involve awards are consequences of A1.
-- Probabilities are model-based under A6 to A9 with an uncalibrated shock. They are comparative (scenario vs scenario) more than absolute until O37 closes.
+- Probabilities are model-based under A6 to A9. The shock is calibrated to public data across law schools, not to the client, and ρ is not calibrated; read probabilities as comparative (scenario against scenario) first.
 - It does not optimize. The shrink path is a rule; the incentive block is accounting.
 - It models one entering class for one year. Multi-year revenue (`ntr_horizon`, persistence, renewals) is a year-2 build.
 
-**Open items that change numbers** (`DECISIONS.md`, open table): OD-14 LSAT basis (holds Richmond's score rows); OD-13 percentile target; OD-16 need departure rule; OD-09 base-year tuition (blocks the live Richmond build); O37 shock calibration; continuing-student NTR for `all_jd`.
+**Open items that change numbers** (`DECISIONS.md`, open table): OD-14 LSAT basis (holds Richmond's score rows); OD-13 percentile target; OD-16 need departure rule; OD-09 base-year tuition (blocks the live Richmond build); continuing-student NTR for `all_jd`.
 
 ---
 

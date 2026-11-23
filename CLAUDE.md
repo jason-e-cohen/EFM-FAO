@@ -9,14 +9,14 @@ Enrollment funnel analysis (EFA) and financial aid optimization (FAO) for higher
 | `02_methodology_v2.8.md` | The method (S4 statistics, S5 optimization and scenario evaluator, consumer ZIP layer, small-cell disclosure in section 9, metric definitions in Appendix F). Source of truth. Earlier versions are in `_superseded/` |
 | `Prototype_Spec_Scenario_Workbook_v0.6.md`, `Handoff_Prototype_Phase1.md` | Spec for Claude Code: Python-generated, formula-driven scenario workbook prototype; handoff for the Phase 1 build session. Earlier spec versions are in `_superseded/` |
 | `DECISIONS.md` | Decision log: every decision by date with its IDs, closed decisions, deferred features, open decisions. Replaces the change lists and changelogs (now in `_superseded/`) |
-| `S1_Requirements_and_User_Stories.md` | S1 functional requirements v1.3 (edits in place, tagged [v2.7], [v1.3, Bn-m]) |
+| `Reviews, Audits, and Specs/S1_Requirements_and_User_Stories.md` | S1 functional requirements v1.3 (edits in place, tagged [v2.7], [v1.3, Bn-m]) |
 | `01_executive_read_v2.8.md`, `03_technical_roadmap_v2.8.md` | Executive read; spec steps S1 to S11, architecture, Richmond critical path (5A), annual cycle (5B), reproducibility (5C), decision log |
-| `Audit_Session_B_Design_Report.md`, `Audit_Session_A_Report.md` | Nov 16 audits. Session B finding IDs (B1-n to B7) are the change IDs for v2.8 and spec v0.6. Session A holds the Richmond email-figure audit (contains client-confidential figures) |
-| `S4_S5_Rereview_v2.4.md`, `Audit_S4_S5_Rereview_v2.4.md`, `Audit_S1_Requirements_v1.0.md` | Earlier reviews (E1 to E14 are in the S4/S5 audit, section 4) |
+| `Reviews, Audits, and Specs/Audit_Session_B_Design_Report.md`, `Reviews, Audits, and Specs/Audit_Session_A_Report.md` | Nov 16 audits. Session B finding IDs (B1-n to B7) are the change IDs for v2.8 and spec v0.6. Session A holds the Richmond email-figure audit (contains client-confidential figures) |
+| `Reviews, Audits, and Specs/S4_S5_Rereview_v2.4.md`, `Reviews, Audits, and Specs/Audit_S4_S5_Rereview_v2.4.md`, `Reviews, Audits, and Specs/Audit_S1_Requirements_v1.0.md` | Earlier reviews (E1 to E14 are in the S4/S5 audit, section 4) |
 | `review_support_v2.4/`, `audit_support_v2.4/`, `review_support_v0.5/` | Analysis and check scripts. v2.4 paths point at `/tmp/work`; edit to rerun |
-| `Verification_Report_Oct22.md` | Test and re-run results with the real solver; data-request law gaps |
-| `Handoff_S1_Kickoff.md`, `Richmond_Call_Capture_Sheet.md` | S1 inputs |
-| `Richmond_YA_Scenario_Workbook_Assessment.md`, `ya_workbook_support/` | Reverse-engineering of the Yellow Arrows scenario workbook (git-ignored; confidential) |
+| `Reviews, Audits, and Specs/Verification_Report_Oct22.md` | Test and re-run results with the real solver; data-request law gaps |
+| `Reviews, Audits, and Specs/Handoff_S1_Kickoff.md`, `Reviews, Audits, and Specs/Richmond_Call_Capture_Sheet.md` | S1 inputs |
+| `Reviews, Audits, and Specs/Richmond_YA_Scenario_Workbook_Assessment.md`, `ya_workbook_support/` | Reverse-engineering of the Yellow Arrows scenario workbook (git-ignored; confidential) |
 | `guides/` | `Guide_Quickstart_and_HowTo.md` (setup, first build, new client, next cycle, delivery checklist) and `Methods_Reference.md` (equations, primary and derived metrics, tests, assumption register) for a new analyst or an auditor. Refresh at each accepted phase |
 | `efa_fao/` | The v2 build: `src/`, `config/`, `sql/`, `tests/`, `docs/` (v2 docs, data request), `outputs/` |
 | `efa_fao/docs/data_request_v3/` | Data request v3 (draft): `spec/` is the source, `build_request.py` generates the law and undergraduate documents, Excel templates and dictionaries into `output/`; `GAP_LOG.md` has sources and judgment calls. The v2.1 request stays in `docs/04_data_request_v2.md` until S2 signs off |
